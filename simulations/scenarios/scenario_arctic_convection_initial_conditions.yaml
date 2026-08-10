@@ -1,0 +1,24 @@
+metadata:
+  name: scenario_arctic_convection_ic
+  description: 'Initial conditions for extreme scenario ''arctic_convection'': Extreme
+    radiative cooling (polynya / cold-air outbreak). Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: arctic_convection
+  conventions:
+    depth_sign: negative_downward_cell_centers
+    velocity_units: m_s
+    salinity_units: psu
+    grid: MITgcm 1D_ocean_ice_column delZ profile
+    initial_mld_m: null
+initial_conditions:
+  drF: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.01, 10.03, 10.11, 10.32, 10.8,
+    11.76, 13.42, 16.04, 19.82, 24.85, 31.1, 38.42, 46.5, 55.0, 63.5, 71.58]
+  theta: [-1.93, -1.931, -1.932, -1.2854, -0.6, -0.6, -0.9, -1.2, -1.2, -1.3, -1.4,
+    -1.4, -1.5, -1.5, -1.5, -1.5, -1.3, -0.9, -0.3, 0.2, 0.5, 0.5, 0.5]
+  salt: [29.0079, 29.008, 29.0086, 29.0775, 30.7, 31.6, 31.9, 32.1, 32.3, 32.4, 32.5,
+    32.7, 32.8, 32.9, 33.1, 33.4, 33.8, 34.2, 34.5, 34.7, 34.8, 34.8, 34.8]
+  u_vel: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  v_vel: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  coriol: 0.0001

@@ -1,0 +1,12 @@
+metadata:
+  name: scenario_arctic_convection_time_integration
+  description: 'Time-integration controls for extreme scenario ''arctic_convection'':
+    Extreme radiative cooling (polynya / cold-air outbreak). Shared by KPP_PY and
+    GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: arctic_convection
+
+time_integration:
+  dt_seconds: 600.0
+  n_steps: 5000
+  output_frequency_steps: 100 

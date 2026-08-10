@@ -1,0 +1,18 @@
+metadata:
+  name: scenario_calm_baseline_forcing
+  description: 'Atmospheric forcing for extreme scenario ''calm_baseline'': Calm baseline
+    (control case). Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: calm_baseline
+  time_dependence: invariant
+  provenance:
+    U10_m_s: 3.0
+    duration_hours: 48.0
+    wind_stress_formula: tau/rho = rho_air*cd*U10^2/rho_water, cd=1.3e-3, rho_air=1.225
+atmospheric_forcing:
+  tau_x: 1.393e-05
+  tau_y: 0.0
+  q_net: -20.0
+  q_sw: 100.0
+  fw_flux: 0.0
+  rho_water: 1029.0

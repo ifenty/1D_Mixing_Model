@@ -1,0 +1,13 @@
+metadata:
+  name: scenario_calm_baseline_time_integration
+  description: 'Time-integration controls for extreme scenario ''calm_baseline'':
+    Calm baseline (control case). Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: calm_baseline
+  provenance:
+    duration_hours: 48.0
+    n_steps_formula: round(duration_hours*3600/dt_seconds)
+time_integration:
+  dt_seconds: 600.0
+  n_steps: 288
+  output_frequency_steps: 6

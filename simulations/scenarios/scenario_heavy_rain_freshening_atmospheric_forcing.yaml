@@ -1,0 +1,18 @@
+metadata:
+  name: scenario_heavy_rain_freshening_forcing
+  description: 'Atmospheric forcing for extreme scenario ''heavy_rain_freshening'':
+    Tropical downpour under moderate wind. Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: heavy_rain_freshening
+  time_dependence: invariant
+  provenance:
+    U10_m_s: 10.0
+    duration_hours: 24.0
+    wind_stress_formula: tau/rho = rho_air*cd*U10^2/rho_water, cd=1.3e-3, rho_air=1.225
+atmospheric_forcing:
+  tau_x: 0.00015476
+  tau_y: 0.0
+  q_net: -10.0
+  q_sw: 50.0
+  fw_flux: 5.0e-05
+  rho_water: 1029.0

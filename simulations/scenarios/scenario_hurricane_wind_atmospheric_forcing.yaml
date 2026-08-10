@@ -1,0 +1,18 @@
+metadata:
+  name: scenario_hurricane_wind_forcing
+  description: 'Atmospheric forcing for extreme scenario ''hurricane_wind'': Category-5
+    hurricane winds, overcast. Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: hurricane_wind
+  time_dependence: invariant
+  provenance:
+    U10_m_s: 55.0
+    duration_hours: 24.0
+    wind_stress_formula: tau/rho = rho_air*cd*U10^2/rho_water, cd=1.3e-3, rho_air=1.225
+atmospheric_forcing:
+  tau_x: 0.00468155
+  tau_y: 0.0
+  q_net: -80.0
+  q_sw: 0.0
+  fw_flux: 0.0
+  rho_water: 1029.0

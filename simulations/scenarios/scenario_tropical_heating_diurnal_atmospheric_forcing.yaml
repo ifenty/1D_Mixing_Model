@@ -1,0 +1,18 @@
+metadata:
+  name: scenario_tropical_heating_diurnal_forcing
+  description: 'Atmospheric forcing for extreme scenario ''tropical_heating_diurnal'':
+    Intense daytime solar heating, light wind. Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: tropical_heating_diurnal
+  time_dependence: invariant
+  provenance:
+    U10_m_s: 2.0
+    duration_hours: 24.0
+    wind_stress_formula: tau/rho = rho_air*cd*U10^2/rho_water, cd=1.3e-3, rho_air=1.225
+atmospheric_forcing:
+  tau_x: 6.19e-06
+  tau_y: 0.0
+  q_net: 300.0
+  q_sw: 250.0
+  fw_flux: 0.0
+  rho_water: 1029.0

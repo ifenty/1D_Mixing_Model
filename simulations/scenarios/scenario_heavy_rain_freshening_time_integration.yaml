@@ -1,0 +1,13 @@
+metadata:
+  name: scenario_heavy_rain_freshening_time_integration
+  description: 'Time-integration controls for extreme scenario ''heavy_rain_freshening'':
+    Tropical downpour under moderate wind. Shared by KPP_PY and GGL90_PY.'
+  source: generated from KPP_PY/extreme_scenarios.py
+  scenario: heavy_rain_freshening
+  provenance:
+    duration_hours: 24.0
+    n_steps_formula: round(duration_hours*3600/dt_seconds)
+time_integration:
+  dt_seconds: 600.0
+  n_steps: 144
+  output_frequency_steps: 6
