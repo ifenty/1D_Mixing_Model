@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../../../../../../../../git_repo_others/MITgcm"
+        },
+        {
+            "path": "../GGL90_ML"
+        }
+    ],
+    "settings": {
+        "fortran.fortls.disabled": true
+    }
+}

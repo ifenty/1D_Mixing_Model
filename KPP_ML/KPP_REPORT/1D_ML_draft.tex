@@ -1,0 +1,899 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{color}
+\usepackage{cite}
+\usepackage{microtype}
+
+\geometry{
+    a4paper,
+    left=25mm,
+    right=25mm,
+    top=25mm,
+    bottom=25mm
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={CNN Emulation of MITgcm KPP in PyTorch and Fortran 77},
+    pdfauthor={Machine Learning and Oceanography Research Division}
+}
+
+\title{\textbf{First-Pass Implementation Guide: \\ CNN Emulation of MITgcm KPP in PyTorch with Fortran 77 Inference}}
+\author{Machine Learning \& Oceanography Research Division}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document is a first-pass, implementation-oriented guide for building a 1D CNN surrogate of the MITgcm KPP diagnostic mixing scheme. It is written for a PhD student who needs an end-to-end path from scientific framing to deployable inference inside legacy Fortran 77 code. The workflow is to define the target and data protocol, generate training pairs from KPP diagnostics, train a physically constrained PyTorch CNN, export weights and normalization parameters, and reproduce CNN inference in Fortran 77 for validation against baseline KPP.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Problem Definition and Scope}
+
+\subsection{What is being emulated?}
+
+The MITgcm K-Profile Parameterization (KPP) is a boundary layer mixing scheme based on Large et al. (1994) that computes vertical mixing coefficients at each ocean column and time step. The main KPP driver (\texttt{KPP\_CALC} in \texttt{kpp\_calc.F}) outputs three primary diagnostic fields:
+
+\begin{itemize}
+    \item \texttt{KPPviscAz}: Vertical eddy viscosity coefficient for momentum $K_M(z)$ [m$^2$/s]
+    \item \texttt{KPPdiffKzT}: Vertical diffusion coefficient for temperature $K_T(z)$ [m$^2$/s]
+    \item \texttt{KPPdiffKzS}: Vertical diffusion coefficient for salinity/tracers $K_S(z)$ [m$^2$/s]
+    \item \texttt{KPPghat}: Nonlocal transport coefficient $\gamma(z)$ [s/m$^2$]
+    \item \texttt{KPPhbl}: Boundary layer depth $h_{bl}$ [m]
+    \item \texttt{KPPfrac}: Fraction of shortwave radiation heating the mixing layer
+\end{itemize}
+
+This guide initially focuses on emulating one target profile, denoted $K_v(z)$ (e.g., \texttt{KPPdiffKzS}), with $N_z$ vertical levels. Extensions to multiple outputs ($K_M, K_T, K_S, \gamma$) are discussed in Section~\ref{sec:multi_output}.
+
+\subsection{KPP Physics Overview}
+
+The KPP scheme divides the water column into two regimes:
+
+\paragraph{Interior Mixing (everywhere):} Computed by \texttt{Ri\_iwmix} subroutine in \texttt{kpp\_routines.F}:
+\begin{itemize}
+    \item Constant background internal wave activity (base diffusivity)
+    \item Enhanced mixing from static instability (local Richardson number $Ri < 0$)
+    \item Shear instability dependent on $Ri = N^2 / (\partial u/\partial z)^2$ where:
+    \begin{itemize}
+        \item $N^2$ is buoyancy frequency squared
+        \item Maximum shear mixing occurs when $Ri < Ri_\infty$ (default 0.7)
+        \item Parameterized as: $K = K_{bg} + f(Ri) \cdot K_0$ where $f(Ri) = (1 - \min(Ri/Ri_\infty, 1))^3$
+    \end{itemize}
+    \item Optional double-diffusive contributions (\texttt{KPP\_DOUBLEDIFF}):
+    \begin{itemize}
+        \item Salt fingering when $\alpha \partial T/\partial z > \beta \partial S/\partial z > 0$
+        \item Diffusive convection when temperature destabilizes
+    \end{itemize}
+\end{itemize}
+
+\paragraph{Boundary Layer Mixing (above $h_{bl}$):} Computed through coordinated calls to \texttt{bldepth}, \texttt{wscale}, \texttt{blmix}, and \texttt{enhance}:
+\begin{itemize}
+    \item Boundary layer depth $h_{bl}$ determined by bulk Richardson number criterion:
+    \begin{equation}
+    Ri_b(z) = \frac{(z_{ref} - z) \Delta b(z)}{\Delta V^2(z) + V_t^2(z)} > Ri_{cr}
+    \end{equation}
+    where $Ri_{cr} = 0.3$ (critical value), $\Delta b$ is buoyancy difference from surface, $\Delta V$ is velocity shear from surface, and $V_t$ is turbulent velocity scale.
+
+    \item Surface forcing determines mixing via:
+    \begin{itemize}
+        \item Friction velocity: $u_* = \sqrt[4]{(\tau_x^2 + \tau_y^2)/\rho}$
+        \item Buoyancy forcing: $B_0 = -g(\alpha Q_T + \beta Q_S)/\rho c_p$
+        \item Turbulent velocity scales $w_m$ (momentum) and $w_s$ (scalars) from lookup tables or direct computation
+    \end{itemize}
+
+    \item Mixing profile shape functions: $K(z) = h_{bl} \cdot w \cdot \sigma \cdot (1 + \sigma \cdot G(\sigma))$
+    \begin{itemize}
+        \item $\sigma = z/h_{bl}$ is normalized depth (0 at surface, 1 at $h_{bl}$)
+        \item $G(\sigma)$ is cubic polynomial shape function matching interior mixing at base
+    \end{itemize}
+
+    \item Nonlocal transport $\gamma(z)$ for tracers: accounts for large eddies transporting properties without local gradients (only for unstable stratification)
+\end{itemize}
+
+\subsection{Mapping to learn}
+For one column snapshot, the emulator learns
+\begin{equation}
+\mathbf{x} \in \mathbb{R}^{C_{in} \times N_z} \to \hat{\mathbf{K}}_v \in \mathbb{R}^{N_z}
+\end{equation}
+where $\mathbf{x}$ includes local state and forcing features used by KPP (or approximations of them). The physics-based features computed internally by KPP that should inform the emulator architecture include:
+\begin{itemize}
+    \item Buoyancy stratification $N^2(z)$ from temperature and salinity gradients
+    \item Velocity shear squared $(\partial u/\partial z)^2 + (\partial v/\partial z)^2$
+    \item Surface boundary layer depth $h_{bl}$ (implicit in data patterns)
+    \item Surface forcing: wind stress magnitude and buoyancy flux
+    \item Distance from surface and bottom boundaries
+\end{itemize}
+
+\subsection{Why a 1D CNN?}
+\begin{itemize}
+    \item Vertical physics is structured and local-to-nonlocal in depth (KPP explicitly uses depth-dependent shape functions and long-range surface influence).
+    \item Dilated convolutions grow receptive field without very deep networks, mimicking how surface forcing penetrates to depth through $h_{bl}$ and turbulent eddies.
+    \item 1D CNNs are substantially easier to port to Fortran 77 than transformer-style models.
+    \item Convolutional structure naturally handles variable boundary layer depths across columns.
+\end{itemize}
+
+\subsection{Suggested project stages}
+\begin{enumerate}
+    \item Offline imitation of KPP diagnostics only (frozen state).
+    \item Frozen-emulator online insertion in MITgcm (replacing diagnostic KPP call).
+    \item Stability and climate-drift assessment in longer runs.
+    \item Extension to multiple outputs ($K_M, K_T, K_S, \gamma$) if single-output successful.
+\end{enumerate}
+
+\section{Data Protocol for KPP Emulation}
+
+\subsection{Training sample definition}
+A single sample is one $(\text{column}, \text{time})$ pair with profile and scalar-forcing inputs and a KPP-computed label $K_v(z)$ on the same vertical grid.
+
+\subsection{MITgcm diagnostic variables to extract}
+
+Based on the KPP implementation (\texttt{pkg/kpp}), the following fields are required or strongly recommended:
+
+\paragraph{State variables (3D fields):}
+\begin{itemize}
+    \item \texttt{THETA}: Potential temperature [°C]
+    \item \texttt{SALT}: Salinity [psu or g/kg]
+    \item \texttt{UVEL}, \texttt{VVEL}: Velocity components [m/s]
+\end{itemize}
+
+\paragraph{KPP diagnostic outputs (targets and optional inputs):}
+\begin{itemize}
+    \item \texttt{KPPdiffKzS}: Vertical diffusivity for salt (primary target) [m$^2$/s]
+    \item \texttt{KPPdiffKzT}: Vertical diffusivity for temperature [m$^2$/s]
+    \item \texttt{KPPviscAz}: Vertical viscosity for momentum [m$^2$/s]
+    \item \texttt{KPPhbl}: Boundary layer depth [m] — useful auxiliary target or input feature
+    \item \texttt{KPPghat}: Nonlocal transport coefficient [s/m$^2$] — relevant for tracers
+\end{itemize}
+
+\paragraph{KPP intermediate diagnostics (optional, useful for physical validation):}
+\begin{itemize}
+    \item \texttt{KPPshsq}: Local velocity shear squared at interfaces [m$^2$/s$^2$]
+    \item \texttt{KPPdVsq}: Velocity shear squared relative to surface [m$^2$/s$^2$]
+    \item \texttt{KPPRi}: Bulk Richardson number (computed in \texttt{bldepth})
+    \item \texttt{KPPbfsfc}: Surface buoyancy forcing (Bo + radiative contribution) [m$^2$/s$^3$]
+    \item \texttt{KPPdbsfc}: Buoyancy difference relative to surface [m/s$^2$]
+    \item \texttt{KPPdbloc}: Local buoyancy gradient at interfaces [m/s$^2$]
+\end{itemize}
+
+\paragraph{Surface forcing:}
+\begin{itemize}
+    \item \texttt{oceTAUX}, \texttt{oceTAUY}: Surface wind stress components [N/m$^2$]
+    \item \texttt{oceQnet}: Net surface heat flux [W/m$^2$]
+    \item \texttt{oceQsw}: Shortwave radiation (penetrative) [W/m$^2$]
+    \item \texttt{oceFWflx}: Freshwater flux (E-P-R) [m/s or kg/m$^2$/s]
+\end{itemize}
+
+\paragraph{Grid information:}
+\begin{itemize}
+    \item \texttt{Z} or \texttt{RC}: Cell center depths [m]
+    \item \texttt{RF}: Cell face depths [m]
+    \item \texttt{drF}: Cell thickness [m]
+    \item \texttt{hFacC}: Partial cell factors (for masking)
+\end{itemize}
+
+\subsection{Derived features for input channels}
+
+Compute these from primary fields to match KPP's internal calculations:
+
+\begin{itemize}
+    \item \textbf{Vertical gradients} (centered finite differences):
+    \begin{itemize}
+        \item $\partial T/\partial z, \partial S/\partial z$ — used by KPP to compute buoyancy gradients
+        \item $\partial u/\partial z, \partial v/\partial z$ — used by KPP to compute shear
+    \end{itemize}
+
+    \item \textbf{Shear squared}: $Sh^2(z) = (\partial u/\partial z)^2 + (\partial v/\partial z)^2$
+    \begin{itemize}
+        \item KPP computes this in \texttt{KPP\_CALC} as \texttt{shsq} array
+        \item Used in Richardson number and interior shear mixing
+    \end{itemize}
+
+    \item \textbf{Buoyancy frequency squared} (optional, directly physical):
+    \begin{equation}
+    N^2(z) = -\frac{g}{\rho_0}\frac{\partial \rho}{\partial z} \approx g(\alpha \frac{\partial T}{\partial z} - \beta \frac{\partial S}{\partial z})
+    \end{equation}
+    where $\alpha \approx 2 \times 10^{-4}$ K$^{-1}$ (thermal expansion), $\beta \approx 8 \times 10^{-4}$ (g/kg)$^{-1}$ (haline contraction).
+    Note: KPP computes exact $\alpha(T,S,z)$ and $\beta(T,S,z)$ via equation of state.
+
+    \item \textbf{Surface forcing scalar features} (broadcast to all depths):
+    \begin{itemize}
+        \item Wind stress magnitude: $\tau = \sqrt{\tau_x^2 + \tau_y^2}$
+        \item Friction velocity: $u_* = (\tau/\rho_0)^{1/2}$ [m/s] — KPP computes this in \texttt{KPP\_FORCING\_SURF}
+        \item Buoyancy flux: $B_0 = -g(\alpha Q_{net}/(\rho_0 c_p) + \beta S_0 (E-P-R))$ [m$^2$/s$^3$]
+    \end{itemize}
+
+    \item \textbf{Depth coordinate}: Normalized depth $z/H$ or distance from surface $-z$ to encode surface-to-depth coupling
+\end{itemize}
+
+\subsection{Recommended input channel configuration}
+
+\textbf{Minimal configuration (11 channels):}
+\begin{itemize}
+    \item $T(z), S(z), u(z), v(z)$ — state variables (4)
+    \item $\partial_z T, \partial_z S, \partial_z u, \partial_z v$ — gradients (4)
+    \item $Sh^2(z)$ — shear squared (1)
+    \item $\tau$ (broadcast), $B_0$ (broadcast) — surface forcing (2)
+\end{itemize}
+
+\textbf{Extended configuration (adds physical diagnostics):}
+\begin{itemize}
+    \item $N^2(z)$ — buoyancy frequency squared
+    \item $h_{bl}$ (broadcast) — boundary layer depth from KPP output
+    \item $z$ or $z/H$ — depth coordinate
+    \item Distance to bottom
+\end{itemize}
+
+\subsection{Data splits}
+Avoid random leakage between correlated nearby samples.
+\begin{itemize}
+    \item Split by time chunks and/or geographic regions.
+    \item Keep a dedicated out-of-regime test set (winter convection, weak stratification, strong shear).
+    \item Stratify splits by $h_{bl}$ ranges: shallow BL ($<$ 20m), moderate (20-100m), deep ($>$ 100m)
+    \item Include rare events: strong wind forcing ($\tau > 0.2$ N/m$^2$), convective events ($B_0 < -10^{-7}$ m$^2$/s$^3$)
+\end{itemize}
+
+\subsection{Feature scaling}
+Fit statistics on train split only:
+\begin{equation}
+\tilde{x}_{c,z} = \frac{x_{c,z} - \mu_c}{\sigma_c + \epsilon}
+\end{equation}
+Store $\mu_c, \sigma_c$ for Fortran inference.
+
+\textbf{Special considerations:}
+\begin{itemize}
+    \item KPP mixing coefficients span 4-6 orders of magnitude ($10^{-6}$ to $10^{-1}$ m$^2$/s)
+    \item Consider log-space targets: $\log(K_v + \epsilon)$ for more uniform error distribution
+    \item Surface forcing can be near-zero or highly intermittent — use robust scaling (e.g., quantile-based)
+\end{itemize}
+
+\section{Generating Training Data from MITgcm/KPP}
+
+\subsection{Enabling KPP diagnostics in MITgcm}
+
+To generate training data, you must run MITgcm with KPP package enabled and relevant diagnostics output configured.
+
+\paragraph{Compilation:} In your build directory, ensure \texttt{packages.conf} includes:
+\begin{verbatim}
+kpp
+\end{verbatim}
+
+\paragraph{Runtime configuration (\texttt{data.pkg}):}
+\begin{verbatim}
+&PACKAGES
+  useKPP = .TRUE.,
+&
+\end{verbatim}
+
+\paragraph{KPP parameters (\texttt{data.kpp}):}
+Key namelist parameters in \texttt{KPP\_PARM01} you may want to check or modify:
+\begin{itemize}
+    \item \texttt{KPPwriteState = .TRUE.} — enables detailed KPP field output
+    \item \texttt{kpp\_freq} — frequency of KPP computations (default: every timestep)
+    \item \texttt{minKPPhbl} — minimum boundary layer depth [m] (default: surface grid spacing)
+    \item \texttt{Ricr = 0.3} — critical bulk Richardson number
+    \item \texttt{Riinfty = 0.7} — local Richardson number limit for shear mixing
+\end{itemize}
+
+\paragraph{Diagnostic configuration (\texttt{data.diagnostics}):}
+
+Define a diagnostics list to output KPP fields. Example frequency: daily or higher for ML training.
+
+\begin{verbatim}
+&DIAGNOSTICS_LIST
+  fields(1:8,1) = 'THETA   ','SALT    ','UVEL    ','VVEL    ',
+                  'KPPdiffS','KPPdiffT','KPPviscA','KPPhbl  ',
+  filename(1) = 'kpp_diag',
+  frequency(1) = 86400.0,
+  timePhase(1) = 0.0,
+&
+\end{verbatim}
+
+Additional useful diagnostics:
+\begin{verbatim}
+  'KPPshsq ','KPPdVsq ','KPPRi   ','KPPbfsfc',
+  'KPPghat ','KPPfrac ','oceQnet ','oceTAUX ',
+  'oceTAUY ','oceQsw  ','oceFWflx',
+\end{verbatim}
+
+\paragraph{Recommended run strategy:}
+\begin{itemize}
+    \item Use a well-spun-up equilibrium simulation or reanalysis-forced run
+    \item Output duration: at least one full seasonal cycle; ideally 2-5 years
+    \item Temporal resolution: daily average or snapshots sufficient for training
+    \item Spatial coverage: include diverse regimes (subtropical, subpolar, equatorial, convective regions)
+\end{itemize}
+
+\subsection{Python skeleton for dataset generation}
+
+\begin{verbatim}
+import numpy as np
+import xarray as xr
+
+def ddz_centered(arr, z):
+    out = np.zeros_like(arr)
+    dz = np.diff(z)
+    out[..., 1:-1] = (arr[..., 2:] - arr[..., :-2]) / (z[2:] - z[:-2])
+    out[..., 0] = (arr[..., 1] - arr[..., 0]) / dz[0]
+    out[..., -1] = (arr[..., -1] - arr[..., -2]) / dz[-1]
+    return out
+
+def build_dataset(nc_path, out_npz):
+    ds = xr.open_dataset(nc_path)
+    T = ds['THETA'].values
+    S = ds['SALT'].values
+    U = ds['UVEL'].values
+    V = ds['VVEL'].values
+    Kv = ds['KPPDIFFS'].values
+    z = ds['Z'].values
+
+    tau = np.sqrt(ds['oceTAUX'].values**2 + ds['oceTAUY'].values**2)
+    bflux = ds['oceQnet'].values
+
+    dTdz = ddz_centered(T, z)
+    dSdz = ddz_centered(S, z)
+    dUdz = ddz_centered(U, z)
+    dVdz = ddz_centered(V, z)
+    shear2 = dUdz**2 + dVdz**2
+
+    tau3d = np.repeat(tau[..., None], len(z), axis=-1)
+    bfx3d = np.repeat(bflux[..., None], len(z), axis=-1)
+
+    X = np.stack([T, S, U, V, dTdz, dSdz, dUdz, dVdz, shear2,
+                  tau3d, bfx3d], axis=-2)
+    ntime, ny, nx, cin, nz = X.shape
+    X = X.reshape(ntime * ny * nx, cin, nz)
+    Y = Kv.reshape(ntime * ny * nx, nz)
+
+    valid = np.isfinite(X).all(axis=(1, 2)) & np.isfinite(Y).all(axis=1)
+    X = X[valid]
+    Y = np.maximum(Y[valid], 0.0)
+
+    np.savez_compressed(out_npz,
+                        X=X.astype(np.float32),
+                        Y=Y.astype(np.float32),
+                        z=z.astype(np.float32))
+\end{verbatim}
+
+\section{CNN Architecture in PyTorch}
+
+\subsection{Design goals}
+\begin{itemize}
+    \item Preserve profile length $N_z$.
+    \item Capture surface-to-depth coupling through dilation.
+    \item Enforce non-negative diffusivity.
+\end{itemize}
+
+\subsection{Reference model}
+
+\begin{verbatim}
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class DilatedBlock(nn.Module):
+    def __init__(self, c_in, c_out, dilation, groups=8):
+        super().__init__()
+        self.pad = dilation
+        self.conv = nn.Conv1d(c_in, c_out, kernel_size=3, dilation=dilation)
+        self.gn = nn.GroupNorm(num_groups=min(groups, c_out), num_channels=c_out)
+        self.act = nn.GELU()
+        self.skip = nn.Conv1d(c_in, c_out, 1) if c_in != c_out else nn.Identity()
+
+    def forward(self, x):
+        y = F.pad(x, (self.pad, self.pad), mode='replicate')
+        y = self.conv(y)
+        y = self.gn(y)
+        y = self.act(y)
+        return y + self.skip(x)
+
+class KppCnn(nn.Module):
+    def __init__(self, c_in, c_hidden=64, dilations=(1,2,4,8,16)):
+        super().__init__()
+        blocks = []
+        c_prev = c_in
+        for d in dilations:
+            blocks.append(DilatedBlock(c_prev, c_hidden, d))
+            c_prev = c_hidden
+        self.backbone = nn.Sequential(*blocks)
+        self.shape_head = nn.Conv1d(c_hidden, 1, 1)
+        self.mag_head = nn.Sequential(nn.AdaptiveAvgPool1d(1),
+                                      nn.Flatten(),
+                                      nn.Linear(c_hidden, 1))
+
+    def forward(self, x):
+        h = self.backbone(x)
+        shape = torch.sigmoid(self.shape_head(h)).squeeze(1)
+        mag = F.softplus(self.mag_head(h)).squeeze(-1)
+        kv = shape * mag[:, None]
+        return kv, shape, mag
+\end{verbatim}
+
+\section{Training and Optimization Setup}
+
+\subsection{Loss design}
+Use profile error plus integral constraint:
+\begin{equation}
+\mathcal{L} = \lambda_p\,\text{MSE}(\hat{K}_v, K_v) +
+\lambda_i\,\text{MSE}\left(\sum_z \hat{K}_v\Delta z, \sum_z K_v\Delta z\right)
+\end{equation}
+
+Optional additions include log-space error for dynamic range and a smoothness penalty on vertical gradients.
+
+\subsection{Minimal training loop}
+
+\begin{verbatim}
+def train_one_epoch(model, loader, opt, dz, device, lam_p=1.0, lam_i=0.2):
+    model.train()
+    mse = torch.nn.MSELoss()
+    total = 0.0
+    for xb, yb in loader:
+        xb, yb = xb.to(device), yb.to(device)
+        pred, _, _ = model(xb)
+
+        prof = mse(pred, yb)
+        int_pred = (pred * dz).sum(dim=1)
+        int_true = (yb * dz).sum(dim=1)
+        integ = mse(int_pred, int_true)
+        loss = lam_p * prof + lam_i * integ
+
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        total += loss.item() * xb.size(0)
+    return total / len(loader.dataset)
+\end{verbatim}
+
+\subsection{Recommended optimizer setup}
+\begin{itemize}
+    \item Optimizer: AdamW with initial learning rate $10^{-3}$.
+    \item Scheduler: cosine decay or ReduceLROnPlateau.
+    \item Batch size: tune by GPU memory (128 to 1024 columns is common).
+    \item Early stopping: monitor both validation profile and integral errors.
+\end{itemize}
+
+\section{Exporting Parameters for Fortran 77}
+
+Fortran 77 cannot read native PyTorch objects directly. A robust workflow is to freeze architecture, export all learned arrays and normalization constants, then implement the same forward equations in Fortran 77.
+
+\subsection{Python export example (ASCII)}
+
+\begin{verbatim}
+import numpy as np
+
+def write_array(f, name, arr):
+    flat = arr.reshape(-1)
+    f.write(f"{name} {arr.ndim} " + " ".join(str(s) for s in arr.shape) + "\n")
+    for v in flat:
+        f.write(f"{float(v):.16e}\n")
+
+def export_for_fortran(model, x_mean, x_std, path='cnn_kpp_weights.txt'):
+    sd = {k: v.detach().cpu().numpy().astype(np.float64)
+          for k, v in model.state_dict().items()}
+    with open(path, 'w') as f:
+        f.write("KPP_CNN_V1\n")
+        write_array(f, 'x_mean', x_mean.astype(np.float64))
+        write_array(f, 'x_std', x_std.astype(np.float64))
+        for k in sorted(sd.keys()):
+            write_array(f, k, sd[k])
+\end{verbatim}
+
+\subsection{Fortran 77 sketch for inference}
+
+\begin{verbatim}
+      SUBROUTINE CNN_FORWARD(NZ, CIN, XIN, KVOUT)
+      INTEGER NZ, CIN
+      REAL*8 XIN(CIN,NZ), KVOUT(NZ)
+      REAL*8 H1(64,NZ), SHAPE(NZ), MAG
+C     Weight arrays live in COMMON blocks after READ_WEIGHTS.
+
+      CALL DILATED_CONV_REPL(CIN, 64, NZ, 1, XIN, W1, B1, H1)
+      CALL GROUPNORM_GELU(64, NZ, GN1_GAMMA, GN1_BETA, H1)
+C     Repeat for dilation 2,4,8,16
+      CALL CONV1X1_SIGMOID(64, NZ, H1, WSHAPE, BSHAPE, SHAPE)
+      CALL MAG_HEAD_SOFTPLUS(64, NZ, H1, WMAG, BMAG, MAG)
+
+      DO K = 1, NZ
+         KVOUT(K) = SHAPE(K) * MAG
+      END DO
+      RETURN
+      END
+\end{verbatim}
+
+Implementation note: because Fortran arrays are column-major, define and lock one canonical flattening order in both exporter and reader.
+
+\section{Validation Plan Against Original KPP}
+
+Validation should be done in two phases.
+
+\subsection{Offline validation}
+Compare emulator output to KPP targets on held-out data using:
+\begin{itemize}
+    \item Profile RMSE
+    \item Relative integral error
+    \item Shape correlation
+    \item Regime-conditioned errors (stratification, shear, forcing bins)
+\end{itemize}
+
+\subsection{Online validation in MITgcm}
+Run paired experiments:
+\begin{itemize}
+    \item Control: original KPP
+    \item ML: CNN emulator replacing diagnostic KPP call
+\end{itemize}
+Check runtime stability, mean tendency bias, mixed layer depth statistics, budget closure, and performance overhead.
+Acceptance criteria should be explicit before tuning.
+
+\section{Common KPP Regimes and Training Challenges}
+
+Understanding the physics regimes KPP encounters helps guide dataset sampling and model validation.
+
+\subsection{Mixing regimes to represent}
+
+\begin{enumerate}
+    \item \textbf{Wind-driven turbulence} (subtropical gyres, trade wind regions):
+    \begin{itemize}
+        \item Moderate $\tau$ (0.05-0.15 N/m$^2$), weak-to-moderate stratification
+        \item $h_{bl} \sim 20-80$ m, driven by mechanical mixing
+        \item Challenge: gradual transitions, smooth profiles
+    \end{itemize}
+
+    \item \textbf{Convective mixing} (high-latitude winter, preconditioning sites):
+    \begin{itemize}
+        \item Strong surface cooling $B_0 < -10^{-7}$ m$^2$/s$^3$
+        \item Deep $h_{bl} > 200$ m, can reach 1000m+ in convective chimneys
+        \item Large $K_v$ ($>10^{-2}$ m$^2$/s), nearly uniform profiles in BL
+        \item Nonlocal transport $\gamma$ becomes significant
+        \item Challenge: rare events, extreme values, rapid deepening
+    \end{itemize}
+
+    \item \textbf{Shear-driven interior mixing} (equatorial undercurrent, boundary currents):
+    \begin{itemize}
+        \item Strong velocity shear $Sh^2 > 10^{-5}$ s$^{-2}$
+        \item Low $Ri$ even with stable stratification
+        \item Localized peaks in $K_v$ below surface boundary layer
+        \item Challenge: subsurface features, multiple length scales
+    \end{itemize}
+
+    \item \textbf{Stable restratification} (spring bloom shutdown, diurnal cycling):
+    \begin{itemize}
+        \item Warming surface, shoaling $h_{bl}$
+        \item Transition from convective to wind-driven regime
+        \item Small $K_v$ near surface ($\sim 10^{-5}$ m$^2$/s)
+        \item Challenge: regime transitions, strong stratification gradients
+    \end{itemize}
+
+    \item \textbf{Double-diffusive layers} (subtropical thermocline, Mediterranean outflow):
+    \begin{itemize}
+        \item Salt fingering: warm, salty over cool, fresh ($R_\rho = \alpha \Delta T/\beta \Delta S \in (1, 1.9)$)
+        \item Diffusive convection: cool, fresh over warm, salty ($R_\rho < 1$)
+        \item Enhanced $K_S/K_T$ ratio
+        \item Challenge: rare, spatially localized, small-scale structure
+    \end{itemize}
+
+    \item \textbf{Ice-ocean boundary layer} (polar regions with sea ice):
+    \begin{itemize}
+        \item Stabilizing freshwater flux from melting, destabilizing salt rejection from freezing
+        \item Brine rejection drives dense plumes (\texttt{KPPplumefrac} term)
+        \item Very shallow stable layer ($h_{bl} < 10$ m) under ice
+        \item Challenge: extreme stratification, coupling to sea ice thermodynamics
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Known KPP limitations to consider}
+
+The ML emulator will inherit some limitations of the target scheme:
+
+\begin{itemize}
+    \item \textbf{No explicit Langmuir turbulence}: KPP does not parameterize wave-driven mixing (Langmuir cells). Some regions may have wind-wave misalignment effects not captured.
+
+    \item \textbf{Single boundary layer assumption}: KPP assumes one coherent surface boundary layer. Multiple mixed layers (e.g., barrier layers in tropics) are not handled.
+
+    \item \textbf{Instantaneous adjustment}: KPP is diagnostic (no prognostic turbulent kinetic energy). Transient spin-up/spin-down dynamics are simplified.
+
+    \item \textbf{1D columnar assumption}: Lateral processes (submesoscale restratification, frontal mixing) are not represented in vertical diffusivity.
+\end{itemize}
+
+These are features, not bugs — KPP is designed as a pragmatic 1D scheme. The emulator should not be expected to "fix" these limitations unless explicitly trained on data that includes such physics (e.g., from LES runs).
+
+\section{Practical Risks and Mitigations}
+
+\begin{itemize}
+    \item \textbf{Distribution shift}: Include multi-season and multi-region training data. Ensure convective, tropical, and subpolar regimes represented.
+
+    \item \textbf{Rare extremes}: Oversample convective events ($B_0 < -5 \times 10^{-8}$ m$^2$/s$^3$), high wind ($\tau > 0.2$ N/m$^2$), and deep $h_{bl} > 300$ m cases. Use stratified sampling or weighted loss.
+
+    \item \textbf{Extrapolation risk}: Test on climate change scenarios (warming, freshening) or configurations not in training (different resolution, domain). Monitor for unphysical outputs.
+
+    \item \textbf{Online instability}:
+    \begin{itemize}
+        \item Clamp outputs to physically admissible bounds: $10^{-6} \leq K_v \leq 10^{-1}$ m$^2$/s
+        \item Smooth temporal transitions if KPP frequency $>$ model timestep
+        \item Test with shorter timesteps first (more forgiving numerics)
+    \end{itemize}
+
+    \item \textbf{Reproducibility}: Lock random seeds, archive split indices, version control data preprocessing pipeline, and track MITgcm commit hash for baseline KPP.
+
+    \item \textbf{Interpretability}: Use gradient-based attribution (Integrated Gradients, GradCAM) to verify emulator is using physically relevant features (shear, stratification, surface forcing) rather than spurious correlations (e.g., geographic location artifacts).
+\end{itemize}
+
+\section{Suggested Repository Layout}
+
+\begin{verbatim}
+project/
+  data/
+    raw/
+    processed/
+  src/
+    build_dataset.py
+    model.py
+    train.py
+    evaluate.py
+    export_fortran.py
+  fortran/
+    cnn_inference_kpp.F
+    read_weights.F
+  configs/
+    base.yaml
+  notebooks/
+    diagnostics.ipynb
+\end{verbatim}
+
+\section{Physics-Based Architecture Considerations}
+
+Based on the KPP implementation analysis, several design choices can be informed by the underlying physics:
+
+\subsection{Receptive field requirements}
+
+The boundary layer depth $h_{bl}$ can extend from $\sim$10m (strong stratification, weak wind) to $>$500m (deep winter convection). The CNN receptive field must be large enough to:
+\begin{itemize}
+    \item Capture surface forcing influence through the full range of $h_{bl}$
+    \item Allow surface momentum/buoyancy flux to modulate mixing at depth
+    \item Detect bottom boundary effects in shallow regions
+\end{itemize}
+
+For a 50-level model with 10m surface resolution and exponential stretching to 5000m depth, a receptive field spanning at least 30-40 levels is recommended. With dilations (1, 2, 4, 8, 16), the effective receptive field reaches:
+\begin{equation}
+\text{RF} = 1 + \sum_{d} 2 \cdot d \cdot (k-1)
+\end{equation}
+where $k=3$ is kernel size. This gives RF $\approx$ 93 grid points, sufficient for typical $h_{bl}$ ranges.
+
+\subsection{Physical constraints to enforce}
+
+\begin{itemize}
+    \item \textbf{Non-negativity}: All mixing coefficients must be $K_v(z) \geq 0$. Use activation functions like softplus, exponential, or sigmoid scaling.
+
+    \item \textbf{Vertical smoothness}: KPP produces relatively smooth profiles (no sharp spikes). Consider penalizing $\|\nabla_z K_v\|^2$ in loss function.
+
+    \item \textbf{Surface boundary condition}: Mixing at the surface ($z=0$) should respond strongly to surface forcing. Consider:
+    \begin{itemize}
+        \item Separate surface layer pathway in CNN architecture
+        \item Attention mechanism to surface forcing broadcast
+    \end{itemize}
+
+    \item \textbf{Bottom boundary}: Mixing at ocean bottom should decay to background values. Mask or condition on distance-to-bottom feature.
+
+    \item \textbf{Magnitude ordering}: Typically $K_M > K_T > K_S$ in convective regions, but $K_T \approx K_S$ in shear-driven mixing. If predicting multiple targets, consider correlation structure.
+\end{itemize}
+
+\subsection{Multi-output extension}
+\label{sec:multi_output}
+
+If extending to predict $\{K_M, K_T, K_S, \gamma\}$ simultaneously:
+
+\begin{itemize}
+    \item \textbf{Shared backbone + task heads}: Use common feature extraction with separate output heads
+    \item \textbf{Physical consistency loss}: Enforce known relationships, e.g.:
+    \begin{itemize}
+        \item Turbulent Prandtl number constraint: $K_M/K_T \approx 1$ in shear mixing
+        \item Salt-heat diffusivity ratio: $K_S/K_T \approx 1$ except in double-diffusion regimes
+        \item Nonlocal transport $\gamma$ only active when $h_{bl}$ exists and $B_0 < 0$ (unstable)
+    \end{itemize}
+    \item \textbf{Auxiliary tasks}: Predict $h_{bl}$ as auxiliary output to guide profile shape learning
+\end{itemize}
+
+\section{Next Technical Milestones}
+
+\begin{enumerate}
+    \item \textbf{Confirm MITgcm setup}: Verify KPP diagnostics are enabled and output frequency sufficient
+    \item \textbf{Extract pilot dataset}: 1-2 months of output from representative region (e.g., North Atlantic)
+    \item \textbf{Exploratory data analysis}:
+    \begin{itemize}
+        \item Distribution of $K_v$ values (log-scale histograms)
+        \item Correlation between $K_v$ and input features ($Sh^2, N^2, \tau, B_0, h_{bl}$)
+        \item Profile shape clustering (PCA or k-means on normalized profiles)
+        \item Regime separation: stable vs. unstable stratification, shallow vs. deep $h_{bl}$
+    \end{itemize}
+    \item \textbf{Build first offline dataset} with train/val/test splits by time and/or region
+    \item \textbf{Train baseline CNN} and generate held-out diagnostics:
+    \begin{itemize}
+        \item Profile RMSE vs. depth
+        \item Error stratified by $h_{bl}$, $\tau$, $N^2$ regimes
+        \item Shape correlation and integrated mixing error
+    \end{itemize}
+    \item \textbf{Implement Fortran reader and forward pass} for frozen architecture
+    \item \textbf{Parity test}: Python vs. Fortran inference on 1000 random samples (tolerance $<10^{-10}$)
+    \item \textbf{First online A/B experiment}: 10-day MITgcm runs with KPP vs. CNN emulator
+    \begin{itemize}
+        \item Check for numerical stability (no NaNs, blowups)
+        \item Compare SST, mixed layer depth, meridional overturning
+        \item Quantify computational speedup (if any)
+    \end{itemize}
+\end{enumerate}
+
+\section*{Appendix A: KPP Implementation Details}
+
+This appendix provides technical details of the MITgcm KPP implementation to inform ML emulator design.
+
+\subsection*{A.1 KPP Call Structure}
+
+The main entry point is \texttt{KPP\_CALC} in \texttt{pkg/kpp/kpp\_calc.F}:
+
+\begin{enumerate}
+    \item \textbf{Compute density and buoyancy} (\texttt{STATEKPP}):
+    \begin{itemize}
+        \item Potential density $\rho(T,S,z)$ using equation of state
+        \item Thermal expansion coefficient $\alpha = -\frac{1}{\rho}\frac{\partial \rho}{\partial T}$
+        \item Haline contraction coefficient $\beta = \frac{1}{\rho}\frac{\partial \rho}{\partial S}$
+        \item Local buoyancy gradient: $\text{dbloc}(k) = \frac{g}{\rho_{k+1}}[\rho_k - \rho_{k+1}]$
+        \item Surface buoyancy difference: $\text{dbsfc}(k) = g[\rho_k/\rho_k - \rho_1/\rho_1]$
+    \end{itemize}
+
+    \item \textbf{Compute surface forcing} (\texttt{KPP\_FORCING\_SURF}):
+    \begin{itemize}
+        \item Friction velocity: $u_* = \sqrt[4]{(\tau_x^2 + \tau_y^2)/\rho}$
+        \item Turbulent buoyancy forcing: $B_0 = -g(\alpha Q_T + \beta Q_S)/\rho$
+        \item Radiative buoyancy forcing: $B_{sol} = -g \alpha Q_{sw}/(\rho c_p)$
+        \item Velocity shear squared relative to surface: $\text{dVsq}(k) = [u_{ref}-u_k]^2 + [v_{ref}-v_k]^2$
+    \end{itemize}
+
+    \item \textbf{Compute velocity shear at interfaces}:
+    \begin{equation}
+    \text{shsq}(k) = \frac{1}{2}\left[(u_k-u_{k+1})^2 + (v_k-v_{k+1})^2\right]_{\text{averaged to T-grid}}
+    \end{equation}
+    Optional: horizontal 121 smoothing if \texttt{KPP\_SMOOTH\_SHSQ} defined.
+
+    \item \textbf{Call main mixing routine} (\texttt{KPPMIX}):
+    \begin{itemize}
+        \item Compute interior mixing (\texttt{Ri\_iwmix})
+        \item Diagnose boundary layer depth (\texttt{bldepth})
+        \item Compute BL mixing coefficients (\texttt{blmix})
+        \item Enhance diffusivity at BL base (\texttt{enhance})
+        \item Combine interior and BL profiles
+    \end{itemize}
+\end{enumerate}
+
+\subsection*{A.2 Richardson Number Computations}
+
+\paragraph{Bulk Richardson Number (for $h_{bl}$ diagnosis):}
+\begin{equation}
+Ri_b(z) = \frac{(z_{ref} - z) \cdot \text{dbsfc}(z)}{\text{dVsq}(z) + V_t^2(z)}
+\end{equation}
+where $V_t^2 = -z \cdot w_s \cdot \sqrt{|N^2|} \cdot V_{tc}$ is turbulent velocity contribution.
+
+Boundary layer depth $h_{bl}$ is found by linear interpolation where $Ri_b$ first exceeds $Ri_{cr} = 0.3$.
+
+\paragraph{Local Richardson Number (for interior mixing):}
+\begin{equation}
+Ri(z) = \frac{\text{dbloc}(z) \cdot \Delta z}{\max(\text{shsq}(z), \phi_{\epsilon})}
+\end{equation}
+where $\phi_{\epsilon} = 10^{-10}$ is regularization parameter.
+
+Shear mixing diffusivity:
+\begin{equation}
+K_{shear} = K_0 \cdot f(Ri), \quad f(Ri) = \left[1 - \min\left(\frac{Ri}{Ri_\infty}, 1\right)\right]^3
+\end{equation}
+with $K_0 = 5 \times 10^{-3}$ m$^2$/s, $Ri_\infty = 0.7$.
+
+\subsection*{A.3 Turbulent Velocity Scales}
+
+For unstable stratification ($B_0 < 0$), turbulent velocity scales are computed from lookup tables:
+
+\begin{equation}
+\zeta = \frac{\kappa \sigma h_{bl} B_0}{u_*^3}, \quad w_m = w_m(\zeta, u_*), \quad w_s = w_s(\zeta, u_*)
+\end{equation}
+
+For stable stratification ($B_0 > 0$), direct formula:
+\begin{equation}
+w_m = w_s = \frac{\kappa u_* \cdot u_*^3}{u_*^3 + c_1 \zeta}
+\end{equation}
+
+These scales drive the boundary layer mixing profile shape.
+
+\subsection*{A.4 Boundary Layer Mixing Profile}
+
+Within the boundary layer ($z > -h_{bl}$), mixing coefficients follow:
+
+\begin{equation}
+K(z) = h_{bl} \cdot w \cdot \sigma \cdot [1 + \sigma \cdot G(\sigma)]
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $\sigma = -z/h_{bl}$ is normalized depth (0 at surface, 1 at $h_{bl}$)
+    \item $w = w_m$ (for momentum) or $w_s$ (for scalars)
+    \item $G(\sigma)$ is cubic shape function:
+    \begin{equation}
+    G(\sigma) = (\sigma - 2) + (3 - 2\sigma) G_1 + (\sigma - 1) \frac{\partial G}{\partial \sigma}\bigg|_{\sigma=1}
+    \end{equation}
+    where $G_1$ and $\partial G/\partial \sigma|_{\sigma=1}$ are matched to interior mixing at $z = -h_{bl}$ (computed in \texttt{blmix}).
+\end{itemize}
+
+\subsection*{A.5 Key Parameters Summary}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Default Value} & \textbf{Description} \\
+\midrule
+$Ri_{cr}$ & 0.3 & Critical bulk Richardson number \\
+$Ri_\infty$ & 0.7 & Local Ri limit for shear mixing \\
+$\kappa$ (vonk) & 0.4 & von Karman constant \\
+$\epsilon$ & 0.1 & Surface layer extent (d/hbl) \\
+$c_{ekman}$ & 0.7 & Ekman depth coefficient \\
+$c_{monob}$ & 1.0 & Monin-Obukhov depth coefficient \\
+$K_0$ (difm0) & $5 \times 10^{-3}$ m$^2$/s & Max shear instability diffusivity \\
+$K_{conv}$ (difmcon) & $0.1$ m$^2$/s & Convective instability diffusivity \\
+$c_*$ (cstar) & 10 & Nonlocal transport coefficient \\
+$R_{\rho 0}$ (Rrho0) & 1.9 & Density ratio limit (double-diff) \\
+$K_{sf,max}$ (dsfmax) & $10 \times 10^{-3}$ m$^2$/s & Max salt fingering diffusivity \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{A.6 Optional CPP Flags}
+
+Relevant compile-time options in \texttt{KPP\_OPTIONS.h}:
+
+\begin{itemize}
+    \item \texttt{KPP\_GHAT}: Include nonlocal transport term $\gamma$ (default: ON)
+    \item \texttt{KPP\_SMOOTH\_SHSQ}: Horizontal smoothing of shear (default: ON)
+    \item \texttt{EXCLUDE\_KPP\_SHEAR\_MIX}: Turn off interior shear mixing (default: OFF)
+    \item \texttt{EXCLUDE\_KPP\_DOUBLEDIFF}: Turn off double diffusion (default: OFF)
+    \item \texttt{KPP\_ESTIMATE\_UREF}: Use resolution-independent surface velocity (default: OFF)
+\end{itemize}
+
+\section*{Appendix B: End-to-End Pseudocode}
+
+\begin{verbatim}
+# 1) Build dataset
+python src/build_dataset.py --in mitgcm_diag.nc --out data/processed/kpp_train_data.npz
+
+# 2) Train model
+python src/train.py --config configs/base.yaml
+
+# 3) Offline evaluation
+python src/evaluate.py --ckpt checkpoints/best.pt --split test
+
+# 4) Export for Fortran
+python src/export_fortran.py --ckpt checkpoints/best.pt --out fortran/cnn_kpp_weights.txt
+
+# 5) Compile MITgcm + Fortran inference and run A/B experiments
+\end{verbatim}
+
+\section*{Appendix C: Unit Tests You Should Implement Early}
+
+\begin{itemize}
+    \item Python versus Fortran parity test on 100 random columns (max absolute difference tolerance, e.g., $10^{-10}$ in float64 debug mode).
+    \item Boundary padding tests at surface and bottom.
+    \item Normalization/de-normalization round-trip tests.
+    \item Monotonicity and sanity tests: non-negative $K_v$ and bounded magnitudes.
+\end{itemize}
+
+\end{document}

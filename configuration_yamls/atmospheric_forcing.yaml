@@ -1,0 +1,20 @@
+metadata:
+  name: shared_atmos_forcing
+  description: Time-invariant atmospheric forcing shared by KPP_PY and GGL90_PY
+  time_dependence: invariant
+
+atmospheric_forcing:
+  # KPP-compatible surface momentum forcing components (tau/rho_water) [m^2/s^2]
+  tau_x: 0.10
+  tau_y: 0.04
+
+  # Surface heat fluxes [W/m^2]; sign convention: positive into ocean.
+  q_net: -120.0
+  q_sw: 45.0
+
+  # Freshwater flux [m/s]; positive means freshwater into ocean.
+  fw_flux: 0.0
+
+  # Reference density for converting tau components to wind stress [N/m^2]
+  # in GGL90 when wind_stress is not supplied explicitly.
+  rho_water: 1025.0

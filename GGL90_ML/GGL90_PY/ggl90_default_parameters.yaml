@@ -1,0 +1,40 @@
+# Default GGL90 Configuration
+# Parameters correspond to defaults in GGL90Parameters dataclass.
+
+# ========== Physical Parameters ==========
+ck: 0.1                 # Viscosity coefficient
+ceps: 0.7               # Dissipation coefficient
+alpha: 1.0              # TKE diffusivity multiplier (KappaE/KappaM)
+m2: 3.75                # Wind stress to TKE surface BC ratio
+
+# ========== TKE Limits ==========
+tke_min: 1.0e-11        # Minimum TKE [m^2/s^2]
+tke_surf_min: 1.0e-4    # Minimum surface TKE [m^2/s^2]
+tke_bottom: null        # If null, set to tke_min
+
+# ========== Mixing Length ==========
+mixing_length_min: 1.0e-8
+mxl_max_flag: 0         # 0, 1, 2, or 3
+mxl_surf_flag: false
+
+# ========== Viscosity / Diffusivity Limits ==========
+visc_max: 100.0         # [m^2/s]
+diff_max: 100.0         # [m^2/s]
+diff_tke_h: 0.0         # [m^2/s]
+
+# ========== Boundary Conditions ==========
+use_dirichlet: true
+calc_mean_vert_shear: false
+
+# ========== Optional Features ==========
+use_idemix: false
+use_langmuir: false
+use_smooth: false
+
+# ========== Numerical ==========
+impl_diss_fac: 1.0
+expl_diss_fac: 0.0
+
+# ========== Constants ==========
+sqrt_two: 1.4142135623730951
+ggl90_eps: 2.23e-16

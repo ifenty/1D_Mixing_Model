@@ -1,0 +1,791 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf-8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{color}
+\usepackage{cite}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{longtable}
+
+\geometry{
+    a4paper,
+    left=25mm,
+    right=25mm,
+    top=25mm,
+    bottom=25mm
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={GGL90 Vertical Mixing Parameterization: Comprehensive Technical Report},
+    pdfauthor={Ocean Physics Research Division}
+}
+
+\title{\textbf{GGL90 Vertical Mixing Parameterization} \\ \large Comprehensive Technical Report}
+\author{Ocean Physics Research Division}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report provides a comprehensive technical analysis of the GGL90 vertical mixing parameterization as implemented in MITgcm and ECCOv4 Release 4. GGL90 is a turbulent kinetic energy (TKE) closure scheme that computes vertical mixing coefficients based on local shear production, stratification, dissipation, and diffusion. The report documents the scientific foundation, package structure, complete computational sequence, parameter definitions, inputs and outputs, integration with the ocean model, and comparison with the alternative KPP (K-Profile Parameterization) scheme. This documentation serves both as a reference for model users and as a guide for implementation in research and operational systems.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Purpose and Scope}
+
+\subsection{What is GGL90?}
+
+GGL90 is a diagnostic vertical mixing parameterization based on turbulent kinetic energy (TKE) closure, developed by Gaspar et al.\ (1990). It computes vertical mixing coefficients at each ocean column and model time step by solving a prognostic equation for TKE that includes:
+
+\begin{itemize}
+    \item \textbf{Production:} Shear production from vertical velocity gradients, driving TKE growth
+    \item \textbf{Dissipation:} Buoyancy forcing and viscous dissipation, damping TKE
+    \item \textbf{Mixing length:} Local stratification limiting the size of turbulent eddies
+\end{itemize}
+
+The scheme outputs three primary diagnostic fields per column:
+
+\begin{itemize}
+    \item \texttt{GGL90viscAz}: Vertical eddy viscosity coefficient for momentum $K_M(z)$ [m$^2$/s]
+    \item \texttt{GGL90diffKzT}: Vertical diffusion coefficient for temperature $K_T(z)$ [m$^2$/s]
+    \item \texttt{GGL90diffKzS}: Vertical diffusion coefficient for salinity/tracers $K_S(z)$ [m$^2$/s]
+\end{itemize}
+
+Unlike diagnostic schemes (e.g., KPP), GGL90 maintains a prognostic TKE field that evolves over time, making it sensitive to model history and transient dynamics.
+
+\subsection{Key Physics Features}
+
+\begin{description}
+    \item[TKE Closure] Mixes based on resolved shear and stratification, with explicit dissipation length scale
+    \item[Depth-Dependent] Mixing coefficients computed at every depth level, responding to local conditions
+    \item[Stratification Sensitive] Strong damping in stable regions; enhanced mixing in unstable layers
+    \item[Shear Responsive] Mixing increases with vertical velocity shear magnitude
+    \item[Background Activity] Includes constant internal-wave baseline and deepest-level enhancement
+    \item[Optional Enhancements] IDEMIX internal wave model, Langmuir circulation, convective adjustment
+\end{description}
+
+\subsection{Applications}
+
+GGL90 is used in:
+
+\begin{itemize}
+    \item ECCOv4 Release 4 global ocean state estimates
+    \item Long-term climate simulations where transient TKE dynamics matter
+    \item Research exploring wind-driven and convective mixing
+    \item Coupled Earth system models requiring energy-consistent vertical mixing
+\end{itemize}
+
+\section{Scientific Background and Core Equations}
+
+\subsection{Turbulent Kinetic Energy (TKE) Evolution}
+
+The fundamental prognostic equation solved by GGL90 is:
+
+\begin{equation}
+\frac{\partial \text{TKE}}{\partial t} = \underbrace{K_M S^2}_{\text{Shear production}} - \underbrace{K_H N^2}_{\text{Buoyancy damping}} - \underbrace{\epsilon}_{\text{Dissipation}} + \underbrace{\frac{\partial}{\partial z}\left(K_E \frac{\partial \text{TKE}}{\partial z}\right)}_{\text{Vertical diffusion}}
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $\text{TKE}(z,t)$ — Turbulent kinetic energy [m$^2$/s$^2$]
+    \item $K_M(z,t)$ — Eddy viscosity for momentum [m$^2$/s]
+    \item $K_H(z,t)$ — Eddy diffusivity for tracers [m$^2$/s]
+    \item $S^2(z) = \left(\frac{\partial u}{\partial z}\right)^2 + \left(\frac{\partial v}{\partial z}\right)^2$ — Shear squared [s$^{-2}$]
+    \item $N^2(z) = -\frac{g}{\rho_0}\frac{\partial \rho}{\partial z}$ — Buoyancy frequency squared [s$^{-2}$]
+    \item $\epsilon$ — TKE dissipation rate [m$^2$/s$^3$]
+    \item $K_E(z,t)$ — Diffusivity for TKE transport [m$^2$/s]
+\end{itemize}
+
+\subsection{Viscosity and Diffusivity Relationships}
+
+The eddy viscosity and diffusivity are derived from the TKE closure:
+
+\begin{equation}
+K_M(z) = c_k L(z) \sqrt{\text{TKE}(z)}
+\end{equation}
+
+\begin{equation}
+K_H(z) = \frac{K_M(z)}{\alpha}
+\end{equation}
+
+\begin{equation}
+K_E(z) = K_M(z)
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $c_k = 0.1$ — Dimensionless closure constant
+    \item $L(z)$ — Mixing length (typical value: $\sqrt{2}\sqrt{\text{TKE}}/\sqrt{N^2}$ where stable)
+    \item $\alpha$ — Prandtl number ratio (default 1.0, ECCOv4r4: 30.0)
+\end{itemize}
+
+The Prandtl number ratio $\alpha$ is crucial: it controls the ratio of momentum to scalar diffusivity. ECCOv4r4 uses $\alpha = 30$, making scalar diffusivity much weaker than momentum diffusivity to preserve water mass properties while allowing vigorous momentum mixing.
+
+\subsection{Mixing Length Computation}
+
+The mixing length $L(z)$ determines the scale of turbulent eddies and is central to GGL90. Multiple formulations exist:
+
+\subsubsection{Unstable Stratification ($N^2 < 0$)}
+
+In unstable layers (density inversion), mixing length grows without limit from stratification:
+
+\begin{equation}
+L(z) = \sqrt{\frac{2\text{TKE}}{|N^2|}}
+\end{equation}
+
+This allows vigorous mixing to overturn the unstable configuration.
+
+\subsubsection{Stable Stratification ($N^2 > 0$)}
+
+In stable layers, stratification limits eddy size:
+
+\begin{equation}
+L(z) = \sqrt{2} \frac{\sqrt{\text{TKE}}}{\sqrt{N^2}}
+\end{equation}
+
+with hard depth-based limits:
+
+\begin{equation}
+L(z) = \min\left(\max\left(\sqrt{2}\frac{\sqrt{\text{TKE}}}{\sqrt{N^2}}, L_{\min}\right), \kappa |z|\right)
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $\kappa = 0.4$ — von Kármán constant
+    \item $L_{\min}$ — Minimum mixing length (typically $\sqrt{2} \times 10^{-6}$ m$^{1/2}$/s or similar)
+    \item $|z|$ — Distance from surface; limits growth away from boundaries
+\end{itemize}
+
+In ECCOv4r4, alternative mixing-length formulations are available (controlled by compile-time flags), including Neumann-style limiting and Blackford-style smoothing.
+
+\subsection{Dissipation}
+
+TKE dissipation is modeled as:
+
+\begin{equation}
+\epsilon = c_{\epsilon} \frac{\text{TKE}^{3/2}}{L}
+\end{equation}
+
+where $c_{\epsilon} = 0.7$ is a dimensionless dissipation constant. This balances production and dissipation in equilibrium conditions.
+
+\subsection{Buoyancy Frequency Squared}
+
+Buoyancy frequency squared is computed from the equation of state:
+
+\begin{equation}
+N^2(z) = -\frac{g}{\rho_0}\frac{\partial \rho}{\partial z} \approx g\left(\alpha \frac{\partial T}{\partial z} - \beta \frac{\partial S}{\partial z}\right)
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $\alpha(T,S,p)$ — Thermal expansion coefficient [K$^{-1}$]
+    \item $\beta(T,S,p)$ — Haline contraction coefficient [psu$^{-1}$]
+    \item In Python 1D implementation: $\alpha \approx 2 \times 10^{-4}$ K$^{-1}$, $\beta \approx 8 \times 10^{-4}$ psu$^{-1}$
+\end{itemize}
+
+The sign of $N^2$ is critical: positive $N^2$ indicates stable stratification (damping TKE), negative indicates convective instability (allowing TKE growth and overturning).
+
+\section{Package Structure}
+
+\subsection{Directory Organization}
+
+The GGL90 package is located in \texttt{pkg/ggl90/} of the MITgcm repository and contains approximately 4000 lines of Fortran code organized as:
+
+\subsubsection{Core Computation}
+
+\begin{itemize}
+    \item \texttt{ggl90\_calc.F} — Main time-stepping and TKE solver (1177 lines)
+    \item \texttt{ggl90\_calc\_diff.F} — Diffusivity coefficient computation (74 lines)
+    \item \texttt{ggl90\_calc\_visc.F} — Viscosity coefficient computation (64 lines)
+\end{itemize}
+
+\subsubsection{Supporting Physics}
+
+\begin{itemize}
+    \item \texttt{ggl90\_mixinglength.F} — Mixing length calculation with multiple methods (421 lines)
+    \item \texttt{ggl90\_idemix.F} — Optional IDEMIX internal wave model (598 lines)
+    \item \texttt{ggl90\_add\_stokesdrift.F} — Optional Langmuir circulation term (79 lines)
+\end{itemize}
+
+\subsubsection{Initialization and Configuration}
+
+\begin{itemize}
+    \item \texttt{ggl90\_readparms.F} — Read data.ggl90 namelist (451 lines)
+    \item \texttt{ggl90\_init\_fixed.F} — Fixed initialization (67 lines)
+    \item \texttt{ggl90\_init\_varia.F} — Variable initialization (156 lines)
+    \item \texttt{ggl90\_check.F} — Configuration validation (166 lines)
+\end{itemize}
+
+\subsubsection{I/O and Diagnostics}
+
+\begin{itemize}
+    \item \texttt{ggl90\_output.F} — Snapshot and pickup files (98 lines)
+    \item \texttt{ggl90\_read\_pickup.F} — Read restart files (69 lines)
+    \item \texttt{ggl90\_write\_pickup.F} — Write restart files (60 lines)
+    \item \texttt{ggl90\_diagnostics\_init.F} — Diagnostic field registration (202 lines)
+\end{itemize}
+
+\subsubsection{Parallel Support}
+
+\begin{itemize}
+    \item \texttt{ggl90\_exchanges.F} — MPI halo exchanges (48 lines)
+\end{itemize}
+
+\subsubsection{Configuration Headers}
+
+\begin{itemize}
+    \item \texttt{GGL90.h} — Package state declarations and common blocks (178 lines)
+    \item \texttt{GGL90\_OPTIONS.h} — Compile-time CPP options (42 lines)
+\end{itemize}
+
+\subsection{Key Compile-Time Options}
+
+The behavior of GGL90 is controlled at compile time through \texttt{GGL90\_OPTIONS.h}:
+
+\begin{description}
+    \item[ALLOW\_GGL90] Enable the package (default: ON if pkg/ggl90 is active)
+    \item[ALLOW\_GGL90\_SMOOTH] Apply spatial smoothing to reduce noise (default: ON in ECCOv4r4)
+    \item[ALLOW\_IDEMIX] Include internal wave energy model (default: OFF)
+    \item[ALLOW\_GGL90\_LANGMUIR] Include Langmuir circulation correction (default: OFF)
+    \item[GGL90\_ALLOW\_CONVECT] Apply convective adjustment (ivdc\_kappa, default: OFF)
+\end{description}
+
+\section{Key Parameters and Their Meanings}
+
+\subsection{Closure Constants}
+
+\begin{description}
+    \item[GGL90ck = 0.1] Proportionality constant in $K_M = c_k L \sqrt{\text{TKE}}$; controls viscosity magnitude
+    \item[GGL90ceps = 0.7] Dissipation coefficient in $\epsilon = c_{\epsilon} \text{TKE}^{3/2}/L$; controls energy loss rate
+    \item[GGL90alpha = 1.0] Default; Prandtl ratio $K_M/K_H$. ECCOv4r4 uses 30.0 to preserve stratification
+\end{description}
+
+\subsection{TKE Boundary Values}
+
+\begin{description}
+    \item[GGL90TKEmin = 1.0e-11] Minimum TKE allowed (default). ECCOv4r4: $1.0 \times 10^{-7}$. Prevents negative TKE
+    \item[GGL90TKEsurfMin = 1.0e-4] Surface layer TKE minimum; ensures wind forcing is effective
+    \item[GGL90TKEbottom = 1.0e-11] Deep ocean TKE minimum (default). ECCOv4r4: $1.0 \times 10^{-6}$. Maintains background mixing
+\end{description}
+
+\subsection{Viscosity/Diffusivity Limits}
+
+\begin{description}
+    \item[GGL90viscMax = 100.0] Maximum viscosity [m$^2$/s]; prevents numerical overflow
+    \item[GGL90diffMax = 100.0] Maximum diffusivity [m$^2$/s]; prevents numerical overflow
+\end{description}
+
+\subsection{Mixing Length Control}
+
+\begin{description}
+    \item[mxlMaxFlag = 0] Default: $L = \min(\sqrt{2}\sqrt{\text{TKE}}/\sqrt{N^2}, \kappa|z|)$
+    \item[mxlMaxFlag = 2] ECCOv4r4: Uses Neumann-style formulation with additional smoothing
+\end{description}
+
+\subsection{Background and Convective Activity}
+
+\begin{description}
+    \item[GGL90m2 = 3.75] Dimensionless parameter controlling background shear instability
+    \item[GGL90TKEsurfMin] Ensures vigorous near-surface mixing even in calm conditions
+\end{description}
+
+\section{Initialization Phase}
+
+\subsection{Step 1: ggl90\_readparms}
+
+Reads namelist \texttt{GGL90\_PARM01} from \texttt{data.ggl90}. Sets all runtime parameters and default values. Key actions:
+
+\begin{enumerate}
+    \item Open \texttt{data.ggl90}
+    \item Set defaults for all parameters listed in Section~\ref{sec:key_params}
+    \item Read user-supplied namelist values
+    \item Validate parameter consistency
+    \item Print diagnostics showing active configuration
+\end{enumerate}
+
+Output: All parameters written to common blocks in memory for later access.
+
+\subsection{Step 2: ggl90\_init\_fixed}
+
+Computes constants and lookup tables (one-time initialization). Key actions:
+
+\begin{enumerate}
+    \item Compute derived constants (e.g., $\sqrt{2}c_k$)
+    \item Initialize mixing-length limiting arrays if needed
+    \item Store vertical grid information from MITgcm grid (array $\text{drF}$)
+\end{enumerate}
+
+Output: Lookup tables and derived constants stored in common blocks.
+
+\subsection{Step 3: ggl90\_init\_varia}
+
+Initialize time-varying arrays at model start time. Key actions:
+
+\begin{enumerate}
+    \item Initialize \texttt{GGL90TKE} array to $\text{GGL90TKEmin}$ everywhere initially (or read from pickup file if restart)
+    \item Initialize \texttt{GGL90viscAz}, \texttt{GGL90diffKzT}, \texttt{GGL90diffKzS} to background values
+    \item Apply masks based on ocean bathymetry
+    \item If restarting, read TKE from pickup file instead of defaults
+\end{enumerate}
+
+Output: TKE and diffusivity/viscosity arrays populated and ready for time-stepping.
+
+\section{Main Runtime Computation: ggl90\_calc}
+
+The central routine is \texttt{ggl90\_calc(bi, bj, myTime, myIter, myThid)}, called once per tile per time step (or at \texttt{ggl90\_freq} if not every step).
+
+\subsection{Input Arguments and Implicit Inputs}
+
+\subsubsection{Explicit Arguments}
+
+\begin{itemize}
+    \item \texttt{bi, bj} — Tile indices
+    \item \texttt{myTime} — Current simulation time (seconds)
+    \item \texttt{myIter} — Current iteration number
+    \item \texttt{myThid} — Thread ID for parallel execution
+\end{itemize}
+
+\subsubsection{Implicit Inputs (via common blocks and module headers)}
+
+\begin{description}
+    \item[Ocean State] 
+    \begin{itemize}
+        \item \texttt{THETA}$(i,j,k)$ — Potential temperature [°C]
+        \item \texttt{SALT}$(i,j,k)$ — Salinity [psu or g/kg]
+        \item \texttt{UVEL}, \texttt{VVEL}$(i,j,k)$ — Velocity components [m/s]
+    \end{itemize}
+    
+    \item[Grid and Geometry]
+    \begin{itemize}
+        \item \texttt{rC}$(k)$ — Depth of cell centers (negative-downward) [m]
+        \item \texttt{drF}$(k)$ — Cell thickness [m]
+        \item \texttt{maskC}$(i,j,k)$ — 1 if wet, 0 if land; similarly for \texttt{maskW}, \texttt{maskS}
+        \item \texttt{kLowC}$(i,j)$ — Deepest wet level index per column
+    \end{itemize}
+    
+    \item[Masks and Land-Sea Distribution]
+    \begin{itemize}
+        \item \texttt{hFacC}$(i,j,k)$ — Fractional cell height (for partial cells)
+    \end{itemize}
+\end{description}
+
+\subsection{Detailed Computational Sequence}
+
+\subsubsection{Sequence 1: Compute Buoyancy Frequency and Shear}
+
+\begin{enumerate}
+    \item Compute in-situ density from THETA and SALT via equation of state (MITgcm routine \texttt{FIND\_RHO})
+    \item Compute vertical density gradient $\partial \rho/\partial z$ via centered differences
+    \item Compute buoyancy frequency squared:
+    \begin{equation}
+    N^2(z) = -\frac{g}{\rho_0}\frac{\partial \rho}{\partial z}
+    \end{equation}
+    \item Compute vertical velocity shear:
+    \begin{equation}
+    S^2(z) = (\partial u/\partial z)^2 + (\partial v/\partial z)^2
+    \end{equation}
+    using centered differences on the C-grid (averaging from U and V points)
+\end{enumerate}
+
+Output: Arrays \texttt{N2}, \texttt{shear2} with computed fields at every level.
+
+\subsubsection{Sequence 2: Update TKE with Time-Stepping}
+
+Integrate the TKE prognostic equation forward in time using an implicit vertical diffusion operator:
+
+\begin{equation}
+\frac{\text{TKE}^{new} - \text{TKE}^{old}}{\Delta t} = \underbrace{K_M S^2}_{\text{Shear prod.}} - \underbrace{K_H N^2}_{\text{Buoy. damp.}} - \underbrace{\epsilon}_{\text{Dissipation}} + \underbrace{\nabla_z(K_E \nabla_z \text{TKE})}_{\text{Implicit diff.}}
+\end{equation}
+
+where $\Delta t$ is the model time step. This is solved implicitly to avoid CFL restrictions from the vertical diffusion.
+
+\subsubsection{Sequence 3: Enforce Bounds on TKE}
+
+After integration:
+
+\begin{enumerate}
+    \item Clamp TKE to minimum values:
+    \begin{itemize}
+        \item At surface: \texttt{TKE} $\geq$ \texttt{GGL90TKEsurfMin}
+        \item In interior: \texttt{TKE} $\geq$ \texttt{GGL90TKEmin}
+        \item At bottom: \texttt{TKE} $\geq$ \texttt{GGL90TKEbottom}
+    \end{itemize}
+    \item Apply ocean mask (set TKE to zero in land cells)
+\end{enumerate}
+
+\subsubsection{Sequence 4: Compute Mixing Length}
+
+Call \texttt{ggl90\_mixinglength} to compute mixing length $L(z)$ at all levels:
+
+\begin{equation}
+L(z) = \begin{cases}
+\sqrt{2}\frac{\sqrt{\text{TKE}}}{\sqrt{|N^2|}} & \text{if } N^2 \neq 0 \\
+\kappa |z| & \text{if } N^2 \approx 0
+\end{cases}
+\end{equation}
+
+Then apply limiting:
+
+\begin{equation}
+L(z) \leftarrow \min\left(\max(L(z), L_{\min}), \kappa |z|\right)
+\end{equation}
+
+\subsubsection{Sequence 5: Compute Mixing Coefficients}
+
+Compute viscosity and diffusivity at all levels:
+
+\begin{equation}
+K_M(z) = c_k L(z) \sqrt{\text{TKE}(z)}
+\end{equation}
+
+\begin{equation}
+K_H(z) = \frac{K_M(z)}{\alpha}
+\end{equation}
+
+with bounds:
+
+\begin{equation}
+K_M(z), K_H(z) \in [0, \text{GGL90viscMax}]
+\end{equation}
+
+\subsubsection{Sequence 6: Optional Enhancements}
+
+Apply optional physics if compiled in:
+
+\begin{itemize}
+    \item \textbf{Convective Adjustment} (if \texttt{GGL90\_ALLOW\_CONVECT}):
+    \begin{itemize}
+        \item Detect statically unstable layers ($N^2 < 0$)
+        \item Apply enhanced diffusivity \texttt{ivdc\_kappa} in those layers
+    \end{itemize}
+    
+    \item \textbf{IDEMIX Internal Wave Model} (if \texttt{ALLOW\_IDEMIX}):
+    \begin{itemize}
+        \item Compute internal wave energy budget
+        \item Modify TKE and mixing length based on internal wave activity
+    \end{itemize}
+    
+    \item \textbf{Langmuir Circulation} (if \texttt{ALLOW\_GGL90\_LANGMUIR}):
+    \begin{itemize}
+        \item Add Stokes drift production term to TKE
+        \item Enhance near-surface shear mixing
+    \end{itemize}
+    
+    \item \textbf{Spatial Smoothing} (if \texttt{ALLOW\_GGL90\_SMOOTH}):
+    \begin{itemize}
+        \item Apply horizontal 1-2-1 filter to viscosity and diffusivity fields
+        \item Reduces small-scale noise for numerical stability
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Sequence 7: Store and Export}
+
+Store computed coefficients in package state arrays:
+
+\begin{itemize}
+    \item \texttt{GGL90viscAz}$(i,j,k)$ — Horizontal staggered to tracer points if needed
+    \item \texttt{GGL90diffKzT}$(i,j,k)$ — Temperature diffusivity
+    \item \texttt{GGL90diffKzS}$(i,j,k)$ — Salinity diffusivity
+\end{itemize}
+
+These arrays are later consumed by:
+
+\begin{itemize}
+    \item \texttt{ggl90\_calc\_visc.F} — Insert into model momentum equation
+    \item \texttt{ggl90\_calc\_diff.F} — Insert into model tracer equations
+\end{itemize}
+
+\subsection{Main Outputs from ggl90\_calc}
+
+\begin{description}
+    \item[GGL90viscAz] Vertical eddy viscosity at all levels [m$^2$/s]
+    \item[GGL90diffKzT] Vertical eddy diffusivity for temperature [m$^2$/s]
+    \item[GGL90diffKzS] Vertical eddy diffusivity for salinity [m$^2$/s]
+    \item[GGL90TKE] Updated prognostic turbulent kinetic energy [m$^2$/s$^2$]
+\end{description}
+
+All arrays have shape $(i,j,k,\text{bi},\text{bj})$ indexed over horizontal grid points $(i,j)$, vertical levels $k$, and tiles $(bi,bj)$.
+
+\section{Integration with the Ocean Model}
+
+\subsection{Where GGL90 Sits in Control Flow}
+
+The main call sequence is:
+
+\begin{enumerate}
+    \item \texttt{model/src/do\_oceanic\_phys.F} — Decides whether GGL90 should run
+    \item If active: calls \texttt{ggl90\_calc(bi,bj,myTime,myIter,myThid)} for each tile
+    \item After tile loops: \texttt{ggl90\_exchanges(myThid)} exchanges halo regions
+    \item Later: Model momentum and tracer solvers use \texttt{GGL90viscAz}, \texttt{GGL90diffKzT}, \texttt{GGL90diffKzS}
+    \item At output time: \texttt{ggl90\_output()} and diagnostics fill registered fields
+\end{enumerate}
+
+The critical division: \texttt{ggl90\_calc} computes and stores state, but does not directly update tracer or momentum tendencies. Those solvers read the stored coefficients.
+
+\subsection{Momentum Mixing: ggl90\_calc\_visc}
+
+Called from \texttt{model/src/calc\_viscosity.F} to insert GGL90 viscosity into momentum equation:
+
+\begin{description}
+    \item[Input] Tile indices, level $k$, existing momentum viscosity arrays \texttt{KappaRU}, \texttt{KappaRV}, \texttt{GGL90viscAz}
+    \item[Output] Updated \texttt{KappaRU}, \texttt{KappaRV}
+    \item[Operation] For each level $k$:
+    \begin{enumerate}
+        \item Copy \texttt{GGL90viscAz} from tracer points
+        \item Average or interpolate to U and V grid points
+        \item Insert into \texttt{KappaRU}, \texttt{KappaRV}
+    \end{enumerate}
+\end{description}
+
+\subsection{Tracer Mixing: ggl90\_calc\_diff}
+
+Called from \texttt{model/src/calc\_3d\_diffusivity.F}:
+
+\begin{description}
+    \item[Input] Tile indices, level $k$ (or all levels), \texttt{GGL90diffKzT} for temperature or \texttt{GGL90diffKzS} for salinity
+    \item[Output] Updated \texttt{KappaRT} (temperature) or \texttt{KappaRS} (salinity)
+    \item[Operation] Copy diffusivity to model arrays (no interpolation needed; already at tracer points)
+\end{description}
+
+\section{Diagnostics and Output}
+
+\subsection{Registered Diagnostics}
+
+The package registers the following diagnostic fields via \texttt{ggl90\_diagnostics\_init.F}:
+
+\begin{itemize}
+    \item \texttt{GGL90TKE} — Turbulent kinetic energy at all levels [m$^2$/s$^2$]
+    \item \texttt{GGL90viscA} — Vertical viscosity [m$^2$/s]
+    \item \texttt{GGL90diffT} — Temperature diffusivity [m$^2$/s]
+    \item \texttt{GGL90diffS} — Salinity diffusivity [m$^2$/s]
+    \item \texttt{GGL90Shear} — Shear squared $S^2$ [s$^{-2}$]
+    \item \texttt{GGL90N2} — Buoyancy frequency squared $N^2$ [s$^{-2}$]
+    \item \texttt{GGL90eps} — Dissipation rate [m$^2$/s$^3$]
+    \item \texttt{GGL90mixL} — Mixing length [m]
+\end{itemize}
+
+\subsection{Snapshot Output: ggl90\_output}
+
+Called from \texttt{model/src/do\_the\_model\_io.F} to write fields:
+
+\begin{description}
+    \item[Trigger] Every \texttt{ggl90\_dumpFreq} seconds if \texttt{GGL90writeState = .TRUE.}
+    \item[Format] MDSIO (MITgcm default binary) or MNC (netCDF)
+    \item[Fields] Full 3D fields for TKE, viscosity, diffusivity, mixing length, etc.
+    \item[Frequency Control] Separate from model output frequency for efficient selective archiving
+\end{description}
+
+\subsection{Restart (Pickup) Files}
+
+Critical for long integrations:
+
+\begin{description}
+    \item[ggl90\_write\_pickup] Writes TKE field to pickup file at end of run
+    \item[ggl90\_read\_pickup] Reads TKE from pickup file when restarting
+\end{description}
+
+This ensures TKE continuity across restart boundaries.
+
+\section{Comparison with KPP (K-Profile Parameterization)}
+
+\subsection{Fundamental Differences}
+
+\begin{table}[h]
+\centering
+\caption{GGL90 vs.\ KPP Comparison}
+\begin{tabular}{lll}
+\toprule
+\textbf{Aspect} & \textbf{GGL90} & \textbf{KPP} \\
+\midrule
+\textbf{Approach} & Prognostic TKE closure & Diagnostic boundary layer \\
+\textbf{Prognostic Variables} & TKE(z) at all levels & None (instantaneous diagnosis) \\
+\textbf{Time Dependence} & Evolves over time & Depends only on current state \\
+\textbf{History Sensitivity} & Yes (memory of TKE) & No (memoryless) \\
+\textbf{Mixing Profile Shape} & Smooth, depth-dependent & Polynomial within BL, interior outside \\
+\textbf{Boundary Layer Depth} & Implicit in TKE decay & Explicitly diagnosed from Richardson number \\
+\textbf{Transient Response} & Gradual TKE spin-up/down & Instantaneous adjustment \\
+\textbf{Interior Mixing} & Continuous $S^2, N^2$ dependence & Background + shear + static instability \\
+\textbf{Surface Forcing Coupling} & Via turbulent production/dissipation & Via mixed layer depth diagnosis \\
+\textbf{Nonlocal Transport} & Not included (optional via IDEMIX) & Included explicitly via $\gamma(z)$ \\
+\textbf{Computational Cost} & Higher (solves TKE PDE per column) & Lower (diagnostic, no PDE solve) \\
+\textbf{Restart Requirements} & Must store TKE state & None required \\
+\end{tabular}
+\end{table}
+
+\subsection{Physical Behavior Comparison}
+
+\subsubsection{Wind-Driven Mixing (Stable Stratification)}
+
+\begin{description}
+    \item[GGL90] 
+    \begin{itemize}
+        \item Wind stress generates shear production of TKE
+        \item TKE diffuses downward, decaying as $\text{TKE}^{3/2}/(L)$
+        \item Mixing length grows with depth (limited by $|z|$)
+        \item Mixing profile is approximately exponential in depth
+    \end{itemize}
+    
+    \item[KPP]
+    \begin{itemize}
+        \item Wind stress diagnoses boundary layer depth via bulk Richardson number
+        \item Boundary layer has polynomial mixing profile (strong at surface, cubic decay)
+        \item Interior mixing is weak and constant
+        \item Transition is discontinuous at boundary layer base
+    \end{itemize}
+\end{description}
+
+\subsubsection{Convective Mixing (Unstable Stratification)}
+
+\begin{description}
+    \item[GGL90]
+    \begin{itemize}
+        \item Negative $N^2$ allows TKE to grow without stratification limit
+        \item Buoyancy forcing directly reduces TKE (negative $-K_H N^2$ term)
+        \item Mixing extends to depth where TKE dissipates
+        \item Can produce very deep mixed layers naturally over days
+    \end{itemize}
+    
+    \item[KPP]
+    \begin{itemize}
+        \item Negative buoyancy flux directly increases boundary layer depth
+        \item Boundary layer deepens until bulk Richardson number exceeds $Ri_{cr}$
+        \item Strong nonlocal transport term $\gamma(z)$ acts in unstable layers
+        \item Mixed layer can deepen rapidly but is limited by available stratification
+    \end{itemize}
+\end{description}
+
+\subsubsection{Shear-Driven Interior Mixing}
+
+\begin{description}
+    \item[GGL90]
+    \begin{itemize}
+        \item Local Richardson number $Ri = N^2/S^2$ controls interior mixing
+        \item Regions with low $Ri$ (strong shear) have elevated TKE
+        \item Mixing is sensitive to local velocity shear
+        \item Can produce subsurface mixing peaks in high-shear regions (e.g., equatorial undercurrent)
+    \end{itemize}
+    
+    \item[KPP]
+    \begin{itemize}
+        \item Interior shear instability contributes to background diffusivity
+        \item Contribution is $f(Ri) \cdot K_0$ with $f(Ri) = [1 - \min(Ri/Ri_\infty, 1)]^3$
+        \item Smooth transition from enhanced mixing in low-$Ri$ zones
+        \item Less dramatic shear peaks than GGL90
+    \end{itemize}
+\end{description}
+
+\subsection{Validation and Tuning Considerations}
+
+\subsubsection{ECCOv4 R4 Tuning}
+
+GGL90 parameters in ECCOv4 R4 have been carefully tuned for global ocean state estimation:
+
+\begin{itemize}
+    \item $\alpha = 30$ (high Prandtl ratio) — Preserves sharp density gradients for stratification
+    \item Enhanced TKE minimums (\texttt{GGL90TKEmin}$= 1 \times 10^{-7}$) — Ensures background mixing
+    \item Deep-level TKE enhancement — Maintains abyssal circulation
+    \item Horizontal smoothing (mxlMaxFlag = 2) — Reduces grid-scale noise
+\end{itemize}
+
+\subsubsection{Comparison Against Observations}
+
+Both schemes fit observations differently:
+
+\begin{itemize}
+    \item \textbf{KPP} designed for mixed-layer dynamics (shallow water, subtropical gyres)
+    \item \textbf{GGL90} designed for full-depth energy balance (deep convection, internal wave coupling)
+    \item Global choice depends on application: basin-scale state estimation vs.\ regional process studies
+\end{itemize}
+
+\subsection{When to Use GGL90 vs.\ KPP}
+
+\begin{description}
+    \item[Use GGL90 for:]
+    \begin{itemize}
+        \item Long integrations where TKE history matters (climate simulations)
+        \item Global state estimation (ECCOv4 approach)
+        \item Coupled Earth system models
+        \item Deep convection events where interior mixing is important
+        \item Studies of internal wave interactions (with IDEMIX)
+    \end{itemize}
+    
+    \item[Use KPP for:]
+    \begin{itemize}
+        \item Process studies with rapid initialization
+        \item Applications requiring fast execution
+        \item Mixed-layer budgets (where boundary layer is well-defined)
+        \item Comparison with KPP-tuned observations
+        \item Research codes requiring diagnostic (no storage) mixing
+    \end{itemize}
+\end{description}
+
+\section{Python 1D Implementation Status}
+
+The GGL90 scheme has been faithfully ported to Python 1D for research and validation. All core physics is implemented with bug fixes validated through regression testing. See document file 05\_PYTHON\_IMPLEMENTATION\_NOTES.md for complete details on Python implementation, bug fixes, and validation status.
+
+\appendix
+
+\section{Parameter Table}
+
+\begin{longtable}{lp{6cm}ll}
+\caption{GGL90 Parameters: Names, Descriptions, Units, and Typical Values} \\
+\toprule
+\textbf{Parameter Name} & \textbf{Description} & \textbf{Units} & \textbf{Typical Value} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+GGL90ck & Viscosity closure constant (proportionality in $K_M = c_k L\sqrt{\text{TKE}}$) & — & 0.1 \\
+GGL90ceps & Dissipation constant (coefficient in $\epsilon = c_\epsilon \text{TKE}^{3/2}/L$) & — & 0.7 \\
+GGL90alpha & Prandtl ratio: $K_M/K_H$ & — & 1.0 (default), 30.0 (ECCOv4r4) \\
+GGL90m2 & Background shear instability parameter & — & 3.75 \\
+\midrule
+GGL90TKEmin & Minimum TKE in interior & m$^2$/s$^2$ & $1 \times 10^{-11}$ (default), $1 \times 10^{-7}$ (ECCOv4r4) \\
+GGL90TKEsurfMin & Minimum TKE near surface & m$^2$/s$^2$ & $1 \times 10^{-4}$ \\
+GGL90TKEbottom & Minimum TKE at ocean bottom & m$^2$/s$^2$ & $1 \times 10^{-11}$ (default), $1 \times 10^{-6}$ (ECCOv4r4) \\
+\midrule
+GGL90viscMax & Maximum viscosity (clipping limit) & m$^2$/s & 100.0 \\
+GGL90diffMax & Maximum diffusivity (clipping limit) & m$^2$/s & 100.0 \\
+\midrule
+mxlMaxFlag & Mixing length formula selector & — & 0 (default), 2 (ECCOv4r4) \\
+\midrule
+ivdc\_kappa & Convective adjustment diffusivity & m$^2$/s & 0.0 (default), 10.0 (ECCOv4r4, if compiled) \\
+\midrule
+von\_Karman & von Kármán constant (mixing length depth limit) & — & 0.4 \\
+
+\end{longtable}
+
+\section{References}
+
+\begin{itemize}
+    \item Gaspar, P., Y.\ Gregoris, and J.-M.\ Lefevre (1990). A simple eddy kinetic energy model for simulations of the oceanic vertical mixing: Tests at Station Papa and Long-Term Upper Ocean Study site. \textit{Journal of Geophysical Research}, 95(C9), 16179–16193.
+    
+    \item Blanke, B., and P.\ Delecluse (1993). Variability of the Tropical Atlantic Ocean Simulated by a General Circulation Model with Two Different Mixed-Layer Physics. \textit{Journal of Physical Oceanography}, 23, 1363–1388.
+    
+    \item Adcroft, A., C.\ Hill, and J.\ Marshall (1997). Representation of topography by shaved cells in a height coordinate ocean model. \textit{Monthly Weather Review}, 125, 2293–2315.
+    
+    \item Marshall, J., A.\ Adcroft, C.\ Hill, L.\ Perelman, and C.\ Heisey (1997). A finite-volume, incompressible Navier-Stokes model for studies of the ocean on parallel computers. \textit{Journal of Computational Physics}, 141, 1–37.
+\end{itemize}
+
+\end{document}

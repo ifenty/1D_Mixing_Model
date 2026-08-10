@@ -1,0 +1,115 @@
+# Default KPP Configuration
+# All parameters match MITgcm pkg/kpp defaults
+
+# ========== CPP Options (from KPP_OPTIONS.h) ==========
+# Horizontal smoothing
+smooth_shsq: true         # Smooth shear horizontally with 121 filter
+smooth_dvsq: false        # Smooth dVsq horizontally
+smooth_dbloc: true        # Smooth dbloc horizontally
+smooth_dens: false        # Smooth all density variables
+smooth_visc: false        # Smooth vertical viscosity
+smooth_diff: false        # Smooth vertical diffusivity
+
+# Velocity reference
+estimate_uref: false      # Use resolution-independent surface velocity
+
+# Matching options
+match_diffusivities: true   # Match diffusivities at BL base
+match_derivatives: true     # Match derivatives at BL base
+
+# Regularization
+smooth_regularisation: false  # Use smooth regularization (var+eps vs max(var,eps))
+
+# Shear mixing
+scale_shearmixing: false    # Scale shear mixing by Polzin (1996) formula
+
+# Nonlocal transport
+use_ghat: true             # Include nonlocal transport term
+
+# Interior mixing
+exclude_shear_mix: false   # Exclude interior shear mixing
+exclude_doublediff: false  # Exclude double diffusion
+
+# Vertical smoothing
+vertically_smooth_ri: false  # Vertically smooth Richardson number
+num_v_smooth_ri: 0          # Number of vertical smoothing passes
+
+# ========== Physical Parameters ==========
+# Boundary layer depth
+Ricr: 0.3                  # Critical bulk Richardson number
+cekman: 0.7                # Ekman depth coefficient
+cmonob: 1.0                # Monin-Obukhov depth coefficient
+concv: 1.8                 # Ratio of interior to entrainment buoyancy frequency
+hbf: 1.0                   # Fraction of hbl for absorbed solar radiation
+
+# Universal constants
+epsln: 1.0e-20             # Small number
+phepsi: 1.0e-10            # Small number for regularization
+epsilon: 0.1               # Nondimensional extent of surface layer
+vonk: 0.4                  # von Karman constant
+dB_dz: 5.2e-5              # Maximum dB/dz in mixed layer [s^-2]
+
+# Shape function coefficients
+conc1: 5.0
+conam: 1.257
+concm: 8.380
+conc2: 16.0
+zetam: -0.2
+conas: -28.86
+concs: 98.96
+conc3: 16.0
+zetas: -1.0
+
+# Lookup table limits
+zmin: -4.0e-7              # Minimum zehat [m^3/s^3]
+zmax: 0.0                  # Maximum zehat
+umin: 0.0                  # Minimum ustar [m/s]
+umax: 0.04                 # Maximum ustar [m/s]
+
+# Interior mixing
+Riinfty: 0.7               # Local Ri limit for shear instability
+BVSQcon: -2.0e-5           # Brunt-Vaisala squared for convection [1/s^2]
+difm0: 0.005               # Max viscosity from shear instability [m^2/s]
+difs0: 0.005               # Max salt diffusivity from shear instability [m^2/s]
+dift0: 0.005               # Max heat diffusivity from shear instability [m^2/s]
+difmcon: 0.1               # Viscosity from convective instability [m^2/s]
+difscon: 0.1               # Salt diffusivity from convective instability [m^2/s]
+diftcon: 0.1               # Heat diffusivity from convective instability [m^2/s]
+
+# Double diffusion
+Rrho0: 1.9                 # Density ratio limit for salt fingering
+dsfmax: 0.01               # Max salt fingering diffusivity [m^2/s]
+
+# Boundary layer mixing
+cstar: 10.0                # Proportionality coefficient for nonlocal transport
+
+# Flags
+use_doublediff: false      # Use double diffusion
+limit_hbl_stable: true     # Limit hbl by Ekman/Monin-Obukhov in stable conditions
+ghat_use_total_diffus: false  # Use total diffusivity for ghat computation
+kpp_write_state: false     # Diagnostic output flag (no-op in this port)
+
+# ========== Shortwave penetration ==========
+shortwave_heating: false   # Treat Qsw as a separate penetrating flux (Paulson & Simpson 1977)
+select_penetrating_sw: 0   # 0 = off, >=1 = on
+jerlov_water_type: "IB"    # One of I, IA, IB, II, III
+use_sw_frac_3d: false      # Spatially varying water type -- NOT IMPLEMENTED, must stay false
+
+# ========== Salt plume (NOT IMPLEMENTED -- must stay false) ==========
+allow_salt_plume: false
+use_salt_plume: false
+salt_plume_volume: false
+
+# ========== Shelf ice (NOT IMPLEMENTED -- must stay false) ==========
+allow_shelfice: false
+
+# Minimum boundary layer depth [m] (null = use surface grid spacing)
+min_kpp_hbl: null
+
+# Physical constants are loaded from shared_yaml/physical_parameters.yaml
+# to keep KPP and GGL90 consistent.
+
+# Lookup table dimensions
+nni: 890                   # Number of zehat values
+nnj: 480                   # Number of ustar values
+mdiff: 3                   # Number of diffusivities

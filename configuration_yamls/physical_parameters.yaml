@@ -1,0 +1,27 @@
+# Shared physical constants used by KPP_PY and GGL90_PY.
+#
+# This file is the SINGLE SOURCE OF TRUTH for these constants. Both codebases
+# read them from here (KPP via KPP_PY/constants.py -> KPPConfig defaults; GGL90
+# via load_physical_parameters_yaml). Do not hardcode these values in code.
+physical_parameters:
+  gravity: 9.81            # Gravitational acceleration [m/s^2]
+  rho_const: 1029.0        # Reference seawater density [kg/m^3] (ECCO/MITgcm standard)
+  heat_capacity_cp: 3994.0 # Seawater heat capacity [J/kg/K]
+
+  # Background (floor) vertical mixing coefficients, applied identically to
+  # both KPP and GGL90. In MITgcm these correspond to the model's background
+  # vertical viscosity/diffusivity profile (viscAr/diffKr, i.e. viscArNr(k)/
+  # diffKrNrS(k)), which acts as a MAX floor under the scheme-computed
+  # coefficients -- never zero, even where the turbulence closure predicts no
+  # mixing at all.
+  background_viscosity: 0.5e-4   # Background vertical viscosity [m^2/s]
+  background_diffusivity: 1.0e-5 # Background vertical diffusivity [m^2/s]
+
+  # Convective adjustment (MITgcm's ivdc_kappa, PARM01). Scheme-independent:
+  # applied on top of whatever KPP/GGL90 already computes, wherever the
+  # column is statically unstable (denser water directly overlying lighter
+  # water), adding this value to the TRACER (temperature/salt) diffusivity
+  # only -- not viscosity, matching MITgcm's calc_ivdc.F/calc_3d_diffusivity.F.
+  # Default 0.0 matches MITgcm's own default (off). ECCOv4 Release 4 sets
+  # ivdc_kappa=10. (see ECCOv4 Release 4/namelist/data) when running GGL90.
+  ivdc_kappa: 0.0                 # Convective-adjustment diffusivity [m^2/s]
