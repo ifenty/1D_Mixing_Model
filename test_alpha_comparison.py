@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 # Setup paths
 PKG_DIR = Path(__file__).resolve().parent
 REPO_DIR = PKG_DIR.parent
-SCENARIO_DIR = REPO_DIR / "simulations" / "scenarios"
+SCENARIO_DIR = PKG_DIR / "simulations" / "scenarios"
 CONFIG_DIR = PKG_DIR / "configuration_yamls"
 PHYSICAL_YAML = CONFIG_DIR / "physical_parameters.yaml"
 

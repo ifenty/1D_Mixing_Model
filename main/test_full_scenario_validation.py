@@ -31,7 +31,7 @@ from matplotlib.patches import Rectangle
 # Setup paths
 PKG_DIR = Path(__file__).resolve().parent.parent  # 1D_Mixing_Model/
 REPO_DIR = PKG_DIR.parent  # 1D_Mixing_Experiments/
-SCENARIO_DIR = REPO_DIR / "simulations" / "scenarios"
+SCENARIO_DIR = PKG_DIR / "simulations" / "scenarios"
 OUTPUT_DIR = REPO_DIR / "output"
 CONFIG_DIR = PKG_DIR / "configuration_yamls"
 PHYSICAL_YAML = CONFIG_DIR / "physical_parameters.yaml"

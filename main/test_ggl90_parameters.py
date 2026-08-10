@@ -9,7 +9,7 @@ import numpy as np
 
 PKG_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = PKG_DIR.parent
-SCENARIO_DIR = REPO_DIR / "simulations" / "scenarios"
+SCENARIO_DIR = PKG_DIR / "simulations" / "scenarios"
 CONFIG_DIR = PKG_DIR / "configuration_yamls"
 PHYSICAL_YAML = CONFIG_DIR / "physical_parameters.yaml"
 GGL90_ECCOV4R4_YAML = CONFIG_DIR / "ggl90_eccov4r4.yaml"
