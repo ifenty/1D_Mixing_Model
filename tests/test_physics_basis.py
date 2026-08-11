@@ -10,7 +10,7 @@ Tests:
 
 import pytest
 import numpy as np
-from physics_basis import (
+from main.physics_basis import (
     compute_buoyancy_frequency_squared,
     compute_vertical_shear_squared,
     compute_density_gradient,

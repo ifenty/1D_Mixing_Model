@@ -22,8 +22,8 @@ import json
 from pathlib import Path
 
 # Import from GGL90_PY as a package
-from .ggl90_parameters import GGL90Parameters
-from .ggl90_core_driver import GGL90Driver as GGL90Driver_NEW
+from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
+from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver as GGL90Driver_NEW
 
 
 def create_test_column(nz: int = 20):

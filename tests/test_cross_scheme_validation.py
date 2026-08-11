@@ -22,12 +22,12 @@ from typing import Dict, Tuple
 # Import both schemes and shared physics
 from GGL90_ML.GGL90_PY import GGL90Driver, GGL90Parameters
 from KPP_ML.KPP_PY import KPPDriver, KPPParameters
-from .physics_basis import (
+from main.physics_basis import (
     compute_buoyancy_frequency_squared,
     compute_vertical_shear_squared,
     compute_richardson_number,
 )
-from .eos import compute_buoyancy_gradients
+from main.eos import compute_buoyancy_gradients
 
 
 def create_stratified_column(nz: int = 20) -> Dict:

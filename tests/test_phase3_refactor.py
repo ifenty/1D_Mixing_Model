@@ -18,8 +18,8 @@ import numpy as np
 from pathlib import Path
 
 # Import from KPP_PY as a package
-from .kpp_parameters import KPPParameters
-from .kpp_core_driver import KPPDriver as KPPDriver_NEW
+from KPP_ML.KPP_PY.kpp_parameters import KPPParameters
+from KPP_ML.KPP_PY.kpp_core_driver import KPPDriver as KPPDriver_NEW
 
 
 def create_test_column(nz: int = 20):

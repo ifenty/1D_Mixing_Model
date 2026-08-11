@@ -11,8 +11,8 @@ Run:
 """
 
 import numpy as np
-from .eos import compute_ggl90_buoyancy_frequency_squared, jmd95_eos
-from .physics_basis import compute_buoyancy_frequency_squared
+from main.eos import compute_ggl90_buoyancy_frequency_squared, jmd95_eos
+from main.physics_basis import compute_buoyancy_frequency_squared
 
 
 def test_deep_water_potential_vs_insitu():

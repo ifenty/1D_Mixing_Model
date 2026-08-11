@@ -3824,6 +3824,77 @@ When \texttt{.TRUE.}, forces the mixing length between the surface and first mod
 
 \textbf{Physical justification:} In the actively mixing surface layer, the mixing length is geometrically constrained by the layer thickness. This flag prevents unphysical $\ell < \Delta z_1$ in the surface cell.
 
+\subsection{Minimum Alpha for Oscillation-Free Solutions}
+\label{sec:alpha_min_analysis}
+
+\subsubsection{Motivation: Why Alpha Matters for Numerical Accuracy}
+
+While GGL90 uses fully implicit time-stepping for TKE diffusion (ensuring unconditional numerical stability), the choice of $\alpha$ (turbulent Prandtl number) has a critical impact on the \textbf{accuracy} and \textbf{smoothness} of the solution. Small values of $\alpha$ can produce cell-to-cell oscillations in TKE and mixing coefficients, even though the simulation remains stable.
+
+The physical mechanism is:
+\begin{itemize}
+\item Small $\alpha$ $\Rightarrow$ small $\kappa_h = \kappa_m / \alpha$ $\Rightarrow$ weak TKE diffusion
+\item Weak TKE diffusion $\Rightarrow$ sharp, localized TKE gradients
+\item Sharp gradients on finite-difference grid $\Rightarrow$ under-resolved features and oscillations
+\end{itemize}
+
+This is a \textbf{resolution issue}, not a stability issue. The implicit treatment of diffusion eliminates CFL-like constraints, but cannot create information at scales finer than the grid spacing.
+
+\subsubsection{Oscillation Diagnosis Results}
+
+Systematic testing of the arctic convection scenario (strong cooling, ice formation, deep convection) across $\alpha = 1, 3, 5, 7.5, 10, 15, 20, 30, 50$ reveals:
+
+\begin{table}[ht]
+\centering
+\caption{TKE oscillation metrics vs.\ $\alpha$ for arctic convection scenario}
+\label{tab:alpha_oscillations}
+\small
+\begin{tabular}{ccccc}
+\toprule
+$\alpha$ & \textbf{TKE Roughness} & \textbf{Normalized} & \textbf{Oscillation} & \textbf{Status} \\
+ & $\sum |\partial^2 \TKE/\partial z^2|$ & \textbf{Roughness} & \textbf{Count} &  \\
+\midrule
+1.0  & $1.22 \times 10^{-2}$ & 1.961 & 11 & \textcolor{red}{OSCILLATORY} \\
+3.0  & $4.53 \times 10^{-3}$ & 0.959 & 9  & \textcolor{red}{OSCILLATORY} \\
+5.0  & $4.61 \times 10^{-4}$ & 0.128 & 3  & \textcolor{orange}{THRESHOLD} \\
+7.5  & $4.12 \times 10^{-4}$ & 0.112 & 3  & \textcolor{green!60!black}{SMOOTH} \\
+10.0 & $3.82 \times 10^{-4}$ & 0.103 & 3  & \textcolor{green!60!black}{SMOOTH} \\
+15.0 & $3.40 \times 10^{-4}$ & 0.090 & 3  & \textcolor{green!60!black}{SMOOTH} \\
+20.0 & $3.09 \times 10^{-4}$ & 0.081 & 1  & \textcolor{green!60!black}{SMOOTH} \\
+30.0 & $2.61 \times 10^{-4}$ & 0.068 & 1  & \textcolor{green!60!black}{SMOOTH} \\
+50.0 & $2.15 \times 10^{-4}$ & 0.055 & 1  & \textcolor{green!60!black}{SMOOTH} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key finding:} TKE roughness drops by factor of 27 from $\alpha=1$ to $\alpha=5$. The threshold for acceptable solution quality is \textbf{$\alpha \geq 5$} (roughness $< 10\%$ of maximum).
+
+\subsubsection{Why ECCOv4 Uses $\alpha = 30$}
+
+ECCOv4's choice of $\alpha = 30$ is well-justified:
+
+\begin{itemize}
+\item \textbf{Safety factor:} $30 / 5 = 6\times$ above the oscillation threshold
+\item \textbf{Physical realism:} Observational studies suggest $\alpha \sim 20$--$50$ in stratified ocean interior
+\item \textbf{Adjoint stability:} Smoother mixing fields reduce gradient noise in adjoint model
+\item \textbf{Thermocline preservation:} Reduced $\kappa_h$ prevents excessive erosion of seasonal thermocline
+\end{itemize}
+
+\subsubsection{Practical Recommendations}
+
+For new GGL90 applications:
+
+\begin{enumerate}
+\item \textbf{Minimum:} Use $\alpha \geq 5$ to avoid numerical oscillations
+\item \textbf{Standard:} Use $\alpha = 10$--$20$ for most regional/process studies
+\item \textbf{Global/adjoint:} Use $\alpha = 30$ (ECCOv4 value) for state estimation
+\item \textbf{High stratification:} Consider $\alpha = 50$ for strongly stratified regimes
+\end{enumerate}
+
+\textbf{Grid dependence:} The minimum $\alpha$ scales with grid Reynolds number. Coarser grids (larger $\Delta z$) may tolerate smaller $\alpha$, but testing is recommended.
+
+\textbf{Testing protocol:} When adapting GGL90 to a new configuration, plot TKE and $\kappa_m$ vertical profiles. If you observe cell-to-cell oscillations, increase $\alpha$ until profiles are smooth.
+
 \subsection{Complete ECCOv4 data.ggl90 File}
 
 \begin{lstlisting}[caption={Complete ECCOv4 Release 4 \texttt{data.ggl90} parameter file.},language=bash,basicstyle=\ttfamily\small]

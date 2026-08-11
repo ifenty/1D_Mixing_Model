@@ -24,56 +24,56 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
 | Mean [°C] |  -2.25 |  -2.24 |  +0.00 |
-| Max Diff [°C] | - | - |   2.28 |
-| RMSE [°C] | - | - |   0.75 |
+| Max Diff [°C] | - | - |   1.15 |
+| RMSE [°C] | - | - |   0.46 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
 | Mean [psu] | 32.440 | 32.441 | +0.001 |
-| Max Diff [psu] | - | - |  0.863 |
-| RMSE [psu] | - | - |  0.353 |
+| Max Diff [psu] | - | - |  0.843 |
+| RMSE [psu] | - | - |  0.276 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 1.82e-02 | 2.91e-02 |    6.1 |
-| Mean | 1.55e-03 | 4.18e-03 |    3.1 |
+| Max | 1.86e-02 | 2.91e-02 |    3.0 |
+| Mean | 2.54e-03 | 4.18e-03 |    1.6 |
 
 **Thermal Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 3.94e-03 | 3.24e-02 |  109.6 |
-| Mean | 7.11e-04 | 4.51e-03 |   17.2 |
+| Max | 1.86e-02 | 3.24e-02 |    3.4 |
+| Mean | 2.08e-03 | 4.51e-03 |    2.0 |
 
 **Haline Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 3.94e-03 | 3.24e-02 |  109.6 |
-| Mean | 7.11e-04 | 4.51e-03 |   17.2 |
+| Max | 1.86e-02 | 3.24e-02 |    3.4 |
+| Mean | 2.08e-03 | 4.51e-03 |    2.0 |
 
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
 |--------|-------|
-| GGL90 |   52.2 |
+| GGL90 |   58.7 |
 | KPP |   75.8 |
-| Difference |   23.5 |
+| Difference |   17.0 |
 
 #### Step 0050 (t 833.3h
 
 **Temperature:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [°C] |  -3.50 |  -3.41 |  +0.09 |
-| Max Diff [°C] | - | - |   3.01 |
-| RMSE [°C] | - | - |   1.09 |
+| Mean [°C] |  -3.47 |  -3.41 |  +0.06 |
+| Max Diff [°C] | - | - |   1.13 |
+| RMSE [°C] | - | - |   0.46 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 32.450 | 32.499 | +0.050 |
-| Max Diff [psu] | - | - |  0.854 |
-| RMSE [psu] | - | - |  0.363 |
+| Mean [psu] | 32.464 | 32.499 | +0.035 |
+| Max Diff [psu] | - | - |  0.660 |
+| RMSE [psu] | - | - |  0.212 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
@@ -96,9 +96,9 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
 |--------|-------|
-| GGL90 |  100.6 |
+| GGL90 |  120.0 |
 | KPP |  145.7 |
-| Difference |   45.1 |
+| Difference |   25.8 |
 
 ### CALM_BASELINE
 
@@ -112,41 +112,41 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Temperature:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [°C] |  12.90 |  12.90 |  +0.00 |
-| Max Diff [°C] | - | - |   0.08 |
+| Mean [°C] |  12.90 |  12.90 |  -0.00 |
+| Max Diff [°C] | - | - |   0.07 |
 | RMSE [°C] | - | - |   0.01 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
 | Mean [psu] | 34.988 | 34.988 | -0.000 |
-| Max Diff [psu] | - | - |  0.005 |
+| Max Diff [psu] | - | - |  0.004 |
 | RMSE [psu] | - | - |  0.001 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 1.76e-03 | 4.45e-03 |    5.0 |
-| Mean | 2.03e-04 | 5.70e-04 |    3.8 |
+| Max | 5.06e-03 | 4.45e-03 |    1.9 |
+| Mean | 5.66e-04 | 5.70e-04 |    1.0 |
 
 **Thermal Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 9.34e-04 | 5.97e-03 |   13.0 |
-| Mean | 8.87e-05 | 7.08e-04 |    9.8 |
+| Max | 5.06e-03 | 5.97e-03 |    5.8 |
+| Mean | 5.07e-04 | 7.08e-04 |    1.9 |
 
 **Haline Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 9.34e-04 | 5.97e-03 |   13.0 |
-| Mean | 8.87e-05 | 7.08e-04 |    9.8 |
+| Max | 5.06e-03 | 5.97e-03 |    5.8 |
+| Mean | 5.07e-04 | 7.08e-04 |    1.9 |
 
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
 |--------|-------|
-| GGL90 |   14.8 |
+| GGL90 |   15.0 |
 | KPP |   15.7 |
-| Difference |    0.9 |
+| Difference |    0.7 |
 
 #### Step 0048 (t  48.0h
 
@@ -154,14 +154,14 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
 | Mean [°C] |  12.89 |  12.89 |  -0.00 |
-| Max Diff [°C] | - | - |   0.18 |
-| RMSE [°C] | - | - |   0.04 |
+| Max Diff [°C] | - | - |   0.11 |
+| RMSE [°C] | - | - |   0.02 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
 | Mean [psu] | 34.988 | 34.988 | -0.000 |
-| Max Diff [psu] | - | - |  0.013 |
+| Max Diff [psu] | - | - |  0.007 |
 | RMSE [psu] | - | - |  0.002 |
 
 **Vertical Viscosity [m²/s]:**
@@ -185,9 +185,9 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
 |--------|-------|
-| GGL90 |   14.9 |
+| GGL90 |   16.0 |
 | KPP |   16.4 |
-| Difference |    1.5 |
+| Difference |    0.4 |
 
 ### COMBINED_STORM
 
@@ -201,34 +201,34 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Temperature:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [°C] |   9.57 |   8.59 |  -0.98 |
-| Max Diff [°C] | - | - |   2.90 |
-| RMSE [°C] | - | - |   1.90 |
+| Mean [°C] |   9.16 |   8.59 |  -0.56 |
+| Max Diff [°C] | - | - |   2.59 |
+| RMSE [°C] | - | - |   1.12 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 35.084 | 35.025 | -0.059 |
-| Max Diff [psu] | - | - |  0.179 |
-| RMSE [psu] | - | - |  0.115 |
+| Mean [psu] | 35.060 | 35.025 | -0.035 |
+| Max Diff [psu] | - | - |  0.161 |
+| RMSE [psu] | - | - |  0.069 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 1.30e-01 | 6.96e-01 | 2772.8 |
-| Mean | 5.39e-02 | 3.36e-01 |   85.4 |
+| Max | 4.06e-01 | 6.96e-01 |   11.1 |
+| Mean | 1.35e-01 | 3.36e-01 |    3.3 |
 
 **Thermal Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 1.16e-01 | 7.09e-01 | 28235.2 |
-| Mean | 4.45e-02 | 3.42e-01 |  760.4 |
+| Max | 3.75e-01 | 7.09e-01 |   32.6 |
+| Mean | 1.18e-01 | 3.42e-01 |    5.6 |
 
 **Haline Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 1.16e-01 | 7.09e-01 | 28235.2 |
-| Mean | 4.45e-02 | 3.42e-01 |  760.4 |
+| Max | 3.75e-01 | 7.09e-01 |   32.6 |
+| Mean | 1.18e-01 | 3.42e-01 |    5.6 |
 
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
@@ -242,16 +242,16 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Temperature:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [°C] |   8.79 |   7.20 |  -1.59 |
-| Max Diff [°C] | - | - |   2.93 |
-| RMSE [°C] | - | - |   2.51 |
+| Mean [°C] |   7.92 |   7.20 |  -0.72 |
+| Max Diff [°C] | - | - |   2.09 |
+| RMSE [°C] | - | - |   1.15 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 35.039 | 34.941 | -0.098 |
-| Max Diff [psu] | - | - |  0.183 |
-| RMSE [psu] | - | - |  0.156 |
+| Mean [psu] | 34.985 | 34.941 | -0.044 |
+| Max Diff [psu] | - | - |  0.126 |
+| RMSE [psu] | - | - |  0.071 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
@@ -297,27 +297,27 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 34.123 | 34.063 | -0.060 |
-| Max Diff [psu] | - | - |  3.418 |
-| RMSE [psu] | - | - |  0.779 |
+| Mean [psu] | 34.123 | 34.063 | -0.059 |
+| Max Diff [psu] | - | - |  3.409 |
+| RMSE [psu] | - | - |  0.777 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
 | Max | 2.34e-03 | 3.38e-03 |   11.4 |
-| Mean | 1.13e-04 | 1.69e-04 |    3.8 |
+| Mean | 1.22e-04 | 1.69e-04 |    1.9 |
 
 **Thermal Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 3.98e-04 | 3.34e-03 |   42.2 |
-| Mean | 3.24e-05 | 1.30e-04 |   10.3 |
+| Max | 3.97e-04 | 3.34e-03 |   43.3 |
+| Mean | 3.31e-05 | 1.30e-04 |    6.5 |
 
 **Haline Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 3.98e-04 | 3.34e-03 |   42.2 |
-| Mean | 3.24e-05 | 1.30e-04 |   10.3 |
+| Max | 3.97e-04 | 3.34e-03 |   43.3 |
+| Mean | 3.31e-05 | 1.30e-04 |    6.5 |
 
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
@@ -338,9 +338,9 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 33.534 | 33.402 | -0.132 |
-| Max Diff [psu] | - | - |  3.203 |
-| RMSE [psu] | - | - |  0.927 |
+| Mean [psu] | 33.533 | 33.402 | -0.131 |
+| Max Diff [psu] | - | - |  3.188 |
+| RMSE [psu] | - | - |  0.922 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
@@ -379,57 +379,57 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Temperature:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [°C] |  18.75 |  18.27 |  -0.49 |
-| Max Diff [°C] | - | - |   5.05 |
-| RMSE [°C] | - | - |   1.40 |
+| Mean [°C] |  18.66 |  18.27 |  -0.40 |
+| Max Diff [°C] | - | - |   3.87 |
+| RMSE [°C] | - | - |   1.15 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 34.961 | 34.947 | -0.013 |
-| Max Diff [psu] | - | - |  0.136 |
-| RMSE [psu] | - | - |  0.038 |
+| Mean [psu] | 34.958 | 34.947 | -0.011 |
+| Max Diff [psu] | - | - |  0.104 |
+| RMSE [psu] | - | - |  0.031 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 2.58e-01 | 4.80e-01 |    8.5 |
-| Mean | 7.46e-02 | 1.83e-01 |    3.4 |
+| Max | 3.60e-01 | 4.80e-01 |    4.6 |
+| Mean | 9.47e-02 | 1.83e-01 |    2.3 |
 
 **Thermal Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 2.32e-01 | 4.78e-01 |   75.9 |
-| Mean | 5.96e-02 | 1.82e-01 |    6.8 |
+| Max | 3.60e-01 | 4.78e-01 |    6.5 |
+| Mean | 8.39e-02 | 1.82e-01 |    3.2 |
 
 **Haline Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 2.32e-01 | 4.78e-01 |   75.9 |
-| Mean | 5.96e-02 | 1.82e-01 |    6.8 |
+| Max | 3.60e-01 | 4.78e-01 |    6.5 |
+| Mean | 8.39e-02 | 1.82e-01 |    3.2 |
 
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
 |--------|-------|
-| GGL90 |   56.7 |
+| GGL90 |   58.6 |
 | KPP |   85.0 |
-| Difference |   28.3 |
+| Difference |   26.4 |
 
 #### Step 0024 (t  24.0h
 
 **Temperature:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [°C] |  17.67 |  16.57 |  -1.10 |
-| Max Diff [°C] | - | - |   5.76 |
-| RMSE [°C] | - | - |   2.37 |
+| Mean [°C] |  17.39 |  16.57 |  -0.82 |
+| Max Diff [°C] | - | - |   4.09 |
+| RMSE [°C] | - | - |   1.78 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 34.932 | 34.904 | -0.028 |
-| Max Diff [psu] | - | - |  0.145 |
-| RMSE [psu] | - | - |  0.061 |
+| Mean [psu] | 34.925 | 34.904 | -0.021 |
+| Max Diff [psu] | - | - |  0.104 |
+| RMSE [psu] | - | - |  0.046 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
@@ -452,9 +452,9 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
 |--------|-------|
-| GGL90 |   91.3 |
+| GGL90 |  102.2 |
 | KPP |  150.6 |
-| Difference |   59.3 |
+| Difference |   48.4 |
 
 ### TROPICAL_HEATING_DIURNAL
 
@@ -475,27 +475,27 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 35.010 | 35.010 | -0.000 |
+| Mean [psu] | 35.010 | 35.010 | +0.000 |
 | Max Diff [psu] | - | - |  0.000 |
 | RMSE [psu] | - | - |  0.000 |
 
 **Vertical Viscosity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 8.50e-04 | 6.46e-05 |    1.2 |
-| Mean | 6.51e-05 | 4.96e-05 |    0.6 |
+| Max | 8.51e-04 | 6.46e-05 |    1.1 |
+| Mean | 7.09e-05 | 4.96e-05 |    0.7 |
 
 **Thermal Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 8.50e-05 | 2.46e-05 |    0.1 |
-| Mean | 1.13e-05 | 1.04e-05 |    0.1 |
+| Max | 8.51e-05 | 2.46e-05 |    1.0 |
+| Mean | 1.15e-05 | 1.04e-05 |    0.6 |
 
 **Haline Diffusivity [m²/s]:**
 | Metric | GGL90 | KPP | Ratio |
 |--------|-------|-----|-------|
-| Max | 8.50e-05 | 2.46e-05 |    0.1 |
-| Mean | 1.13e-05 | 1.04e-05 |    0.1 |
+| Max | 8.51e-05 | 2.46e-05 |    1.0 |
+| Mean | 1.15e-05 | 1.04e-05 |    0.6 |
 
 **Mixed Layer Depth [m]:**
 | Scheme | Depth |
@@ -510,13 +510,13 @@ Comparison includes temperature, salinity, mixing coefficients (viscosity and di
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
 | Mean [°C] |  13.41 |  13.41 |  +0.00 |
-| Max Diff [°C] | - | - |   1.55 |
+| Max Diff [°C] | - | - |   1.56 |
 | RMSE [°C] | - | - |   0.29 |
 
 **Salinity:**
 | Metric | GGL90 | KPP | Difference |
 |--------|-------|-----|-----------|
-| Mean [psu] | 35.010 | 35.010 | -0.000 |
+| Mean [psu] | 35.010 | 35.010 | +0.000 |
 | Max Diff [psu] | - | - |  0.000 |
 | RMSE [psu] | - | - |  0.000 |
 
