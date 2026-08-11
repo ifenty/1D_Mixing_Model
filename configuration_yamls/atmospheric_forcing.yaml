@@ -1,10 +1,10 @@
 metadata:
   name: shared_atmos_forcing
-  description: Time-invariant atmospheric forcing shared by KPP_PY and GGL90_PY
+  description: Time-invariant atmospheric forcing shared by KPP and GGL90
   time_dependence: invariant
 
 atmospheric_forcing:
-  # KPP-compatible surface momentum forcing components (tau/rho_water) [m^2/s^2]
+  # Surface momentum forcing components (tau/rho_water) [m^2/s^2]
   tau_x: 0.10
   tau_y: 0.04
 
