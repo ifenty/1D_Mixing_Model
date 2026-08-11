@@ -4,7 +4,14 @@
 # ========== Physical Parameters ==========
 ck: 0.1                 # Viscosity coefficient
 ceps: 0.7               # Dissipation coefficient
-alpha: 1.0              # TKE diffusivity multiplier (KappaE/KappaM)
+# alpha: TKE diffusivity multiplier (KappaE/KappaM).
+# NOTE: The original GGL90 paper (Gaspar et al. 1990) uses alpha = 1.0.
+# We default to 10.0 here because alpha = 1.0 produces cell-to-cell
+# oscillations in the TKE and mixing-coefficient profiles on this grid
+# (see scripts/analysis/diagnose_oscillation_threshold.py: three independent
+# metrics agree the profiles become oscillation-free for alpha >= 5).
+# ECCOv4 Release 4 uses alpha = 30.0. Set alpha: 1.0 to reproduce the paper.
+alpha: 10.0             # TKE diffusivity multiplier (KappaE/KappaM)
 m2: 3.75                # Wind stress to TKE surface BC ratio
 
 # ========== TKE Limits ==========

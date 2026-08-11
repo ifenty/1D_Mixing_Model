@@ -7,9 +7,9 @@ Python ports of MITgcm's KPP and GGL90 vertical mixing schemes, designed for sce
 - **Two mixing schemes**: K-Profile Parameterization (KPP) and GGL90 turbulence closure
 - **Unified driver interface**: run identical experiments with either scheme using the same configuration files
 - **Scenario-based configuration**: YAML-driven initial conditions, atmospheric forcing, and time integration
-- **Built-in test scenarios**: arctic convection, hurricane wind, heavy rain freshening, combined storm, and more
-- **Validated physics**: implements MITgcm's equation of state (JMD95), potential density gradients, Richardson number mixing, and TKE evolution
-- **Comprehensive diagnostics**: time series of temperature, salinity, velocity, mixing layer depth, turbulent kinetic energy, and mixing coefficients
+- **Built-in test scenarios**: arctic convection, hurricane wind, heavy rain freshening, combined storm, tropical diurnal heating, and a calm baseline
+- **Validated physics**: implements MITgcm's equation of state (JMD95), potential density gradients, Richardson number mixing, and TKE evolution, with vertical staggering that overlays MITgcm output index-for-index
+- **Comprehensive diagnostics**: time series of temperature, salinity, velocity, turbulent kinetic energy, mixing length, and mixing coefficients
 
 ## Repository Structure
 
@@ -18,21 +18,21 @@ Python ports of MITgcm's KPP and GGL90 vertical mixing schemes, designed for sce
 ├── README.md              # This file
 ├── user_guide.md          # Complete end-to-end usage documentation
 ├── conftest.py            # Pytest configuration
-├── main/                  # Unified driver, adapters, config manager, EOS, physics basis
-├── GGL90_ML/GGL90_PY/     # GGL90 turbulence closure implementation
-├── KPP_ML/KPP_PY/         # KPP boundary layer mixing implementation
-├── configuration_yamls/   # Shared physical parameters
-├── simulations/scenarios/ # Built-in scenario configuration files
-├── output/                # Experiment results and visualizations
-├── visualizations/        # Additional plots and analysis outputs
-├── docs/
-│   ├── GGL90/             # GGL90 reports, package description, implementation notes
-│   ├── KPP/               # KPP reports, package description, physics explanations
-│   └── dev_notes/         # Implementation notes, staggering docs, refactoring reports
+├── main/                  # Unified driver, adapters, config manager, EOS, physics basis, solver, plotter
+├── GGL90_ML/GGL90_PY/     # GGL90 turbulence closure implementation + default parameter YAML
+├── KPP_ML/KPP_PY/         # KPP boundary layer mixing implementation + default parameter YAML
+├── configuration_yamls/   # Shared physical parameters + example GGL90 override configs
+├── simulations/scenarios/ # Built-in scenario configuration files (6 scenarios × 3 files each)
 ├── tests/                 # All test modules
-└── scripts/
-    ├── analysis/          # Diagnostic scripts (alpha_min, TKE oscillations, thresholds)
-    └── scenario_generation/ # Training data generation from MITgcm output
+├── scripts/
+│   ├── analysis/          # Diagnostic scripts (alpha_min, TKE oscillations, oscillation threshold)
+│   └── scenario_generation/ # Training data generation from MITgcm output
+└── docs/
+    ├── GGL90/             # GGL90_package_description.tex (physics) + GGL90_port_description.tex (port map)
+    ├── KPP/               # KPP_package_description.tex (physics) + KPP_port_description.tex (port map)
+    ├── porting/           # porting_lessons.md — insights for future Fortran→Python porting work
+    ├── dev_notes/         # Implementation notes, MITgcm staggering, physics explanations
+    └── ML/                # ML draft notes
 ```
 
 ## Quick Start
@@ -44,7 +44,7 @@ conda activate ecco  # or your environment with numpy, matplotlib, pyyaml, xarra
 
 ### 2. Run built-in scenarios
 ```bash
-# Run all scenarios with both schemes
+# Run all 6 scenarios with both schemes
 python main/run_scenarios.py
 
 # Run a single scenario with KPP only
@@ -55,8 +55,9 @@ python main/run_experiment_example.py --scheme ggl90
 ```
 
 ### 3. Results
-Output files and plots are written to `output/` (or `../output/` relative to configuration directory). Each scenario produces:
-- `<scheme>_experiment.npz`: full time series data
+`run_scenarios.py` writes to an `output/` directory (by default one level above the
+package; use `--output-dir` to choose a location). Each scenario/scheme produces:
+- `<scheme>_experiment.npz`: full time series data (load with `numpy.load()`)
 - `<scheme>_profiles.png`: snapshot profiles of T, S, velocity, mixing coefficients
 - `<scheme>_contours.png`: time-depth contours of key variables
 
@@ -73,14 +74,21 @@ Install via conda environment `ecco` or equivalent.
 
 ## Documentation
 
-See `user_guide.md` for complete documentation covering:
-- Running built-in scenarios and custom experiments
-- Choosing and configuring mixing schemes
-- Setting up initial conditions and atmospheric forcing
-- Creating your own experiments
-- Running tests and analysis scripts
+See `user_guide.md` for complete documentation covering running scenarios, choosing
+and configuring mixing schemes, setting up initial conditions and forcing, and adding
+your own experiments.
 
-See `docs/` for detailed scheme physics, MITgcm validation reports, and implementation notes.
+For the mixing physics and implementation, each scheme has two LaTeX reference documents
+with identical structure (open them side-by-side to compare schemes):
+
+| Scheme | Physics reference | Port reference (Fortran→Python map) |
+|--------|-------------------|-------------------------------------|
+| GGL90  | `docs/GGL90/GGL90_package_description.tex` | `docs/GGL90/GGL90_port_description.tex` |
+| KPP    | `docs/KPP/KPP_package_description.tex`     | `docs/KPP/KPP_port_description.tex`     |
+
+- **`*_package_description.tex`** — the physics of each mixing scheme (governing equations, boundary/interior mixing, diagnostics, validation).
+- **`*_port_description.tex`** — how the Python port maps onto the MITgcm Fortran, organized by code flow with file + line-number references in both languages.
+- **`docs/porting/porting_lessons.md`** — cross-cutting lessons (sign conventions, 1-based↔0-based indexing, vertical staggering, unit verification) for anyone extending the ports.
 
 ## Testing
 
@@ -91,4 +99,6 @@ python -m pytest tests/ -q
 
 ## More Information
 
-This repository is part of the ECCO 1D Mixing Experiments project. For questions or issues, refer to the documentation in `docs/` or the comprehensive developer notes in `docs/dev_notes/`.
+This repository is part of the ECCO 1D Mixing Experiments project. For deeper physics
+and implementation background, see the LaTeX references above and the developer notes in
+`docs/dev_notes/`.

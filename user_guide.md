@@ -12,6 +12,7 @@ Complete end-to-end guide for running ocean mixing experiments with Python imple
 7. [Time Integration Configuration](#7-time-integration-configuration)
 8. [Adding Your Own Experiment](#8-adding-your-own-experiment)
 9. [Running Tests and Analysis Scripts](#9-running-tests-and-analysis-scripts)
+10. [Further Documentation](#10-further-documentation)
 
 ---
 
@@ -40,46 +41,54 @@ All commands in this guide assume you are in the repository root (`1D_Mixing_Mod
 ```
 1D_Mixing_Model/
 ├── main/                     # Core driver and physics
-│   ├── unified_column_driver.py  # Main experiment orchestration
+│   ├── unified_driver.py         # Main experiment orchestration (UnifiedColumnDriver)
 │   ├── config_manager.py         # YAML configuration loader
-│   ├── kpp_adapter.py, ggl90_adapter.py  # Scheme adapters
-│   ├── eos.py                    # Equation of state (JMD95)
+│   ├── mixing_adapter.py         # KPPAdapter and GGL90Adapter (unified scheme interface)
+│   ├── eos.py                    # Equation of state (JMD95 + linear)
 │   ├── physics_basis.py          # Shared physics (N², S², Ri)
+│   ├── column_grid.py            # Vertical grid representation
+│   ├── column_state.py           # Ocean column state container
+│   ├── shared_column_solver.py   # Implicit tridiagonal diffusion solver
+│   ├── diagnostics.py            # Diagnostic accumulation / output
+│   ├── unified_plotter.py        # Profile + contour figure generation
 │   ├── run_scenarios.py          # Run all built-in scenarios
 │   └── run_experiment_example.py # Example single-experiment runner
 ├── GGL90_ML/GGL90_PY/        # GGL90 turbulence closure
 │   ├── ggl90_core_driver.py
 │   ├── ggl90_parameters.py
+│   ├── ggl90_default_parameters.yaml   # Built-in GGL90 defaults
 │   └── ggl90_*.py (scheme-specific modules)
 ├── KPP_ML/KPP_PY/            # KPP boundary layer mixing
 │   ├── kpp_core_driver.py
 │   ├── kpp_parameters.py
 │   └── kpp_*.py (scheme-specific modules)
 ├── configuration_yamls/
-│   └── physical_parameters.yaml  # Shared physical constants
+│   ├── physical_parameters.yaml   # Shared physical constants
+│   ├── ggl90_realistic.yaml       # Example GGL90 override (realistic tuning)
+│   └── ggl90_eccov4r4.yaml        # Example GGL90 override (ECCOv4 R4 tuning)
 ├── simulations/scenarios/    # Built-in scenario YAML configs
-├── output/                   # Results directory (created on first run)
 ├── tests/                    # Test suite
 ├── scripts/
 │   ├── analysis/             # Diagnostic analysis tools
 │   └── scenario_generation/  # Training data generation
-└── docs/                     # Detailed reports and implementation notes
+└── docs/                     # LaTeX references, porting lessons, dev notes
 ```
+
+Output is written to an `output/` directory (see §3 for exact location).
 
 ---
 
 ## 3. Running Built-in Scenarios
 
-The repository includes several pre-configured scenarios demonstrating different ocean mixing regimes.
+The repository includes six pre-configured scenarios demonstrating different ocean mixing regimes.
 
 ### Available Scenarios
 - `arctic_convection`: deep winter convection with strong surface cooling
 - `calm_baseline`: control case with light wind and moderate heat flux
 - `combined_storm`: simultaneous hurricane-force wind and heavy precipitation
-- `heavy_rain_freshening`: strong freshwater flux causing stratification
+- `heavy_rain_freshening`: strong freshwater flux causing near-surface stratification
 - `hurricane_wind`: extreme wind stress driving deep mixing
-- `intermediate_wind`: moderate wind conditions
-- `mild_convection`: modest surface cooling
+- `tropical_heating_diurnal`: strong daytime solar heating (diurnal warm layer)
 
 ### Run All Scenarios
 ```bash
@@ -87,6 +96,11 @@ python main/run_scenarios.py
 ```
 
 This runs every scenario with both KPP and GGL90, writing results to `output/<scenario_name>/`.
+
+**Output location**: `run_scenarios.py` writes to an `output/` directory one level
+above the package (i.e., alongside `1D_Mixing_Model/`, not inside it). Use
+`--output-dir PATH` to place results wherever you like. `run_experiment_example.py`
+instead defaults to `<config-dir>/../output`.
 
 ### Run Specific Scenarios
 ```bash
@@ -118,7 +132,7 @@ python main/run_experiment_example.py --no-plots
 # Use custom configuration directory
 python main/run_experiment_example.py --config-dir /path/to/configs
 
-# Override convective adjustment diffusivity
+# Override convective adjustment diffusivity (MITgcm ivdc_kappa; ECCOv4 R4 uses 10)
 python main/run_experiment_example.py --ivdc-kappa 10.0
 ```
 
@@ -127,27 +141,33 @@ python main/run_experiment_example.py --ivdc-kappa 10.0
 **`run_scenarios.py` options:**
 - `--scheme {kpp,ggl90,both}`: which mixing scheme(s) to run (default: both)
 - `--scenario NAME [NAME ...]`: run only specified scenarios (default: all)
-- `--output-dir PATH`: output directory (default: `output/`)
-- `--ggl90-yaml PATH`: GGL90 parameter override file
-- `--kpp-yaml PATH`: KPP parameter override file
-- `--ivdc-kappa FLOAT`: convective adjustment diffusivity (m^2/s)
+- `--output-dir PATH`: output directory root (default: `../output/`)
+- `--n-profiles INT`: number of profile snapshots per plot (default: 5)
+- `--ggl90-yaml PATH`: GGL90 parameter override file (data.ggl90-style)
+- `--kpp-yaml PATH`: KPP parameter override file (data.kpp-style)
+- `--ivdc-kappa FLOAT`: convective adjustment diffusivity (m²/s)
 - `--no-plots`: skip plot generation
 
 **`run_experiment_example.py` options:**
 - `--scheme {kpp,ggl90,both}`: which mixing scheme(s) to run (default: both)
 - `--config-dir PATH`: configuration directory (default: `configuration_yamls/`)
-- `--output-dir PATH`: output directory (default: `config-dir/../output`)
+- `--output-dir PATH`: output directory (default: `<config-dir>/../output`)
 - `--n-profiles INT`: number of profile snapshots in plots (default: 5)
 - `--no-plots`: skip figure generation
 - `--kpp-yaml PATH`: KPP parameter override file
 - `--ggl90-yaml PATH`: GGL90 parameter override file
-- `--ivdc-kappa FLOAT`: convective adjustment diffusivity (m^2/s)
+- `--ivdc-kappa FLOAT`: convective adjustment diffusivity (m²/s)
 
 ### Output Files
 For each scenario and scheme, the following files are created in `output/<scenario_name>/`:
 - `<scheme>_experiment.npz`: full time series data (load with `numpy.load()`)
 - `<scheme>_profiles.png`: snapshot profiles of temperature, salinity, velocity, mixing coefficients
-- `<scheme>_contours.png`: time-depth contours of temperature, salinity, velocity, MLD
+- `<scheme>_contours.png`: time-depth contours of temperature, salinity, and mixing fields
+
+The `.npz` file contains these arrays (time-by-depth unless noted):
+`time_seconds` (1-D), `theta`, `salt`, `u_vel`, `v_vel`, `potential_density`,
+`drho_dz`, `shear_s2`, `visc_az`, `diff_kz_t`, `diff_kz_s`, `tke`, `mixing_length`,
+`n_square`, `shear_square`, `depth` (1-D), `cell_thickness` (1-D), and `scheme` (scalar string).
 
 ---
 
@@ -155,48 +175,60 @@ For each scenario and scheme, the following files are created in `output/<scenar
 
 ### KPP (K-Profile Parameterization)
 - **Best for**: surface boundary layer mixing, wind-driven entrainment, convective adjustment
-- **Physics**: determines boundary layer depth based on bulk Richardson number criterion, applies shape functions for mixing within the boundary layer, handles interior shear and double-diffusive mixing
-- **Key parameters**:
-  - `crit_bulk_richardson`: bulk Richardson number threshold for boundary layer depth (default: 0.3)
-  - `epsilon`: interior mixing efficiency (default: 0.1)
-  - `vonkarman`: von Karman constant (default: 0.4)
-  - `background_visc`, `background_diff`: minimum mixing coefficients
+- **Physics**: determines boundary layer depth from a bulk Richardson number criterion, applies cubic shape functions for mixing within the boundary layer, and handles interior shear and double-diffusive mixing. KPP is **diagnostic** — it recomputes all mixing coefficients each time step and carries no state between steps.
+- **Key parameters** (see `KPP_ML/KPP_PY/kpp_parameters.py` for the full list):
+  - `Ricr`: critical bulk Richardson number for boundary layer depth (default: 0.3)
+  - `epsilon`: surface layer extent fraction (default: 0.1)
+  - `vonk`: von Karman constant (default: 0.4)
+  - `use_ghat`: enable nonlocal (counter-gradient) transport (default: true)
+  - Background viscosity/diffusivity come from `configuration_yamls/physical_parameters.yaml` (`background_viscosity`, `background_diffusivity`), not from the KPP parameter file.
 
 **Use KPP when** your scenario involves strong surface forcing (wind, cooling, heating) and you need to capture sharp transitions at the base of the mixed layer.
 
 ### GGL90 (Turbulence Closure)
 - **Best for**: interior turbulence, stratified shear layers, time-evolving turbulent kinetic energy
-- **Physics**: solves a prognostic TKE equation, applies local mixing based on TKE and mixing length, handles stable and unstable stratification, includes pressure-strain interaction
-- **Key parameters**:
-  - `alpha`: pressure-strain coefficient (default: 1.0; ECCOv4r4 uses 30.0)
-  - `mxl_max_flag`: mixing length criterion (0=simple, 1=N-based, 2=N+S-based; default: 2)
-  - `min_tke`: minimum TKE threshold to prevent numerical oscillations (default: 1e-6)
-  - `background_visc`, `background_diff`: minimum mixing coefficients
+- **Physics**: solves a **prognostic** TKE equation, applies local mixing based on TKE and a mixing length, and handles stable and unstable stratification. Because TKE is prognostic, GGL90 carries state between time steps.
+- **Key parameters** (see `GGL90_ML/GGL90_PY/ggl90_parameters.py`):
+  - `alpha`: TKE diffusivity multiplier, KappaE/KappaM (default: **10.0**)
+  - `ck`: viscosity coefficient (default: 0.1)
+  - `ceps`: dissipation coefficient (default: 0.7)
+  - `m2`: wind-stress-to-TKE surface BC ratio (default: 3.75)
+  - `tke_min`: floor on TKE (default: 1e-11 m²/s²)
+  - `tke_surf_min`: floor on surface TKE (default: 1e-4 m²/s²)
+  - `mxl_max_flag`: mixing-length limiting method (0, 1, 2, or 3; default: 0)
+  - `mxl_surf_flag`: enforce surface mixing between first two levels (default: false)
 
 **Use GGL90 when** you need to resolve interior mixing processes, stratified shear instabilities, or track TKE evolution over time.
 
-**Important GGL90 notes:**
-- The `alpha` parameter controls the partitioning of TKE production into dissipation vs. mixing. Small values (alpha=1) can produce numerical oscillations in the TKE field on coarse grids. ECCOv4 Release 4 uses alpha=30 to suppress these. See `docs/GGL90/00_GGL90_COMPREHENSIVE_REPORT.md` for analysis of alpha stability and the grid Reynolds number criterion.
-- The mixing length method (`mxl_max_flag`) significantly affects mixed layer depth behavior. Method 2 (N+S-based) is the most physically complete but may produce deeper MLDs under weak stratification.
+**Important note on `alpha`:**
+The `alpha` parameter scales the TKE diffusion coefficient. The original GGL90 paper
+(Gaspar et al. 1990) uses `alpha = 1.0`, but on this grid that value produces
+cell-to-cell oscillations in the TKE and mixing-coefficient profiles. Three independent
+metrics (TKE roughness, oscillation count, and the fraction of under-resolved layers)
+agree that the profiles become oscillation-free for `alpha >= 5`, so the built-in
+default is **`alpha = 10.0`**. ECCOv4 Release 4 uses `alpha = 30.0`. Set `alpha: 1.0`
+in a GGL90 override YAML to reproduce the paper's configuration. The oscillation
+analysis is in `scripts/analysis/diagnose_oscillation_threshold.py` and documented in
+`docs/GGL90/GGL90_package_description.tex` (Numerical Considerations section).
 
 ### Overriding Scheme Parameters
-Both schemes load default parameters from built-in YAML files. You can override any parameter by providing a custom YAML:
+Both schemes load built-in defaults first, then apply any keys you supply in an override
+YAML (mirroring MITgcm's `data.ggl90` / `data.kpp` workflow — only the keys you list are
+changed). Two example GGL90 overrides ship in `configuration_yamls/`: `ggl90_realistic.yaml`
+and `ggl90_eccov4r4.yaml`.
 
 **Example GGL90 override (`my_ggl90.yaml`):**
 ```yaml
-alpha: 30.0
-mxl_max_flag: 1
-min_tke: 1.0e-5
-background_visc: 1.0e-5
-background_diff: 1.0e-5
+alpha: 30.0          # ECCOv4-like strong TKE transport
+mxl_max_flag: 2      # smooth two-way-sweep mixing length
+mxl_surf_flag: true  # enforce mixing between first two levels
 ```
 
 **Example KPP override (`my_kpp.yaml`):**
 ```yaml
-crit_bulk_richardson: 0.25
-epsilon: 0.15
-background_visc: 1.0e-4
-background_diff: 1.0e-5
+Ricr: 0.25
+epsilon: 0.1
+use_ghat: true
 ```
 
 Use with:
@@ -228,6 +260,7 @@ initial_conditions:
 - **Depth sign**: negative downward cell centers (depth[k] < 0 for all k)
 - **Grid**: `drF` defines cell thickness; depth is computed as cumulative sum of face positions
 - **Units**: velocities in m/s, salinity in PSU, temperature in °C
+- **Indexing**: index 0 is the surface layer; index increases downward (matching MITgcm's k=1 surface convention after the 1-based↔0-based shift — see `docs/porting/porting_lessons.md`)
 
 ### Vertical Grid Design
 The `drF` array controls vertical resolution. Common strategies:
@@ -242,7 +275,7 @@ drF: [1.09, 1.16, 1.24, 1.32, 1.41, 1.51, ..., 24.50, 26.14]  # exponentially st
 
 ### Initial Stratification
 - **Stable stratification**: temperature and salinity decrease with depth (light over heavy)
-- **Unstable stratification**: temperature decreases more slowly than needed to maintain stable density; drives convection
+- **Unstable stratification**: density increases upward; drives convection
 - **Uniform mixed layer**: constant T and S in surface layer (mimics pre-existing mixing)
 
 **Example: Arctic convection initial condition**
@@ -331,12 +364,11 @@ time_integration:
 ```
 
 ### Time Step Selection
-- **Stability**: choose `dt_seconds` small enough to satisfy CFL condition for diffusion and advection
+- Both schemes treat vertical diffusion **implicitly**, so the time step is not limited by a diffusive CFL condition. Choose `dt_seconds` based on the time scales you want to resolve.
 - **Typical values**:
-  - Fast processes (strong wind, shallow grid): dt = 60-300 seconds
+  - Fast processes (diurnal cycle, strong wind): dt = 300-600 seconds
   - Moderate processes: dt = 600 seconds (10 minutes)
   - Slow processes (deep column, weak forcing): dt = 1200-3600 seconds
-- **Rule of thumb**: dt < (dz^2) / (2 * max(kappa_vertical))
 
 ### Duration and Output
 - Total simulation time = `dt_seconds * n_steps`
@@ -345,14 +377,6 @@ time_integration:
   - Total duration: 288 * 600 = 172,800 seconds = 48 hours
   - Output interval: 6 * 600 = 3,600 seconds = 1 hour
   - Number of output snapshots: 288 / 6 = 48
-
-**Example: 48-hour simulation with hourly output**
-```yaml
-time_integration:
-  dt_seconds: 600.0
-  n_steps: 288
-  output_frequency_steps: 6
-```
 
 **Example: 7-day simulation with 6-hour output**
 ```yaml
@@ -386,18 +410,7 @@ Open `scenario_my_experiment_initial_conditions.yaml` and modify:
 2. **Temperature profile**: edit `theta` to set initial stratification
 3. **Salinity profile**: edit `salt` to set initial density structure
 4. **Velocity**: edit `u_vel` and `v_vel` if starting with non-zero flow
-5. **Coriolis**: edit `coriol` to match latitude (f = 2 * Omega * sin(lat), where Omega = 7.292e-5 rad/s)
-
-**Example: Mid-latitude stratified column**
-```yaml
-initial_conditions:
-  drF: [2.0, 2.0, 2.0, ..., 50.0, 50.0]  # 50 levels, surface-refined
-  theta: [20.0, 19.8, 19.6, ..., 8.0, 7.5, 7.0]  # warm surface, cold deep
-  salt: [35.0, 35.0, 35.0, ..., 34.8, 34.8, 34.8]  # uniform salinity
-  u_vel: [0.05, 0.05, ..., 0.01, 0.0, 0.0]  # weak eastward flow, decaying with depth
-  v_vel: [0.0, 0.0, ..., 0.0]  # no meridional flow
-  coriol: 1.0e-4  # ~40°N
-```
+5. **Coriolis**: edit `coriol` to match latitude (f = 2 * Omega * sin(lat), Omega = 7.292e-5 rad/s)
 
 ### Step 4: Edit Atmospheric Forcing
 Open `scenario_my_experiment_atmospheric_forcing.yaml` and set surface fluxes:
@@ -431,28 +444,30 @@ python main/run_scenarios.py --scenario my_experiment --scheme ggl90 --ggl90-yam
 ```
 
 ### Step 7: Analyze Results
-Results are written to `output/my_experiment/`:
-- Load the NPZ file to analyze time series:
-  ```python
-  import numpy as np
-  data = np.load('output/my_experiment/ggl90_experiment.npz')
-  print(data.files)  # List all variables
-  temperature = data['temperature']  # Shape: (n_times, n_depths)
-  mld = data['mld']  # Mixed layer depth time series
-  ```
-- View the generated plots in `output/my_experiment/ggl90_profiles.png` and `ggl90_contours.png`
+Results are written to `output/my_experiment/`. Load the NPZ file to analyze time series
+(note the array names listed in §3 — temperature is `theta`, not `temperature`):
+```python
+import numpy as np
+data = np.load('output/my_experiment/ggl90_experiment.npz')
+print(data.files)                 # List all variables
+theta = data['theta']             # Shape: (n_times, n_depths), °C
+diff_kz_t = data['diff_kz_t']     # Vertical temperature diffusivity, m²/s
+depth = data['depth']             # Cell-center depths (m, negative down)
+time_hr = data['time_seconds'] / 3600.0
+```
+View the generated plots in `output/my_experiment/ggl90_profiles.png` and `ggl90_contours.png`.
 
 ---
 
 ## 9. Running Tests and Analysis Scripts
 
 ### Test Suite
-The repository includes unit tests, integration tests, and validation tests covering:
+The repository includes unit, integration, and validation tests covering:
 - Physics basis functions (N², S², Ri)
-- Equation of state (JMD95)
+- Equation of state (JMD95, potential density gradients)
 - Scheme-specific logic (KPP boundary layer, GGL90 TKE evolution)
-- Cross-scheme consistency
-- Full scenario validation
+- Vertical staggering (output overlays MITgcm index-for-index)
+- Cross-scheme consistency and full-scenario validation
 
 Run all tests:
 ```bash
@@ -464,34 +479,29 @@ Run a specific test module:
 python -m pytest tests/test_physics_basis.py -v
 ```
 
-Run tests with detailed output:
-```bash
-python -m pytest tests/ -v --tb=short
-```
-
 ### Analysis Scripts
 Three diagnostic scripts are available in `scripts/analysis/`:
 
 #### 1. Diagnose TKE Oscillations
-Analyzes TKE oscillation behavior in GGL90 simulations:
 ```bash
 python scripts/analysis/diagnose_tke_oscillations.py
 ```
-Examines grid Reynolds number, time step sensitivity, TKE spatial gradients, and dissipation treatment.
+Examines TKE spatial gradients, time-step sensitivity, and dissipation treatment in GGL90.
 
 #### 2. Diagnose Oscillation Threshold
-Systematically tests alpha values to identify oscillation onset:
 ```bash
 python scripts/analysis/diagnose_oscillation_threshold.py
 ```
-Runs a scenario with varying alpha and reports amplitude metrics.
+Sweeps `alpha` and reports TKE roughness, oscillation count, and the under-resolved-layer
+fraction to identify the oscillation-free threshold (`alpha >= 5`; the built-in default is 10).
 
 #### 3. Compute Alpha Minimum
-Computes the minimum stable alpha based on grid Reynolds number criterion:
 ```bash
 python scripts/analysis/compute_alpha_min.py
 ```
-Post-processes simulation results to determine alpha_min from Re_grid throughout the time series. See `docs/GGL90/00_GGL90_COMPREHENSIVE_REPORT.md` for details on the alpha stability criterion.
+Post-processes simulation results to estimate a minimum `alpha` from resolution metrics
+through the time series. See `docs/GGL90/GGL90_package_description.tex` (Numerical
+Considerations) for the underlying analysis.
 
 ### Training Data Generation
 Generate ML training data from MITgcm NetCDF output:
@@ -516,17 +526,38 @@ Note: Requires MITgcm output in NetCDF format with standard variable names (T, S
 
 ---
 
+## 10. Further Documentation
+
+For the mixing physics and how the Python ports map onto MITgcm's Fortran, each scheme
+has two LaTeX reference documents with **identical structure**, so you can open the GGL90
+and KPP versions side-by-side and compare:
+
+| Scheme | Physics reference | Port reference (Fortran→Python map) |
+|--------|-------------------|-------------------------------------|
+| GGL90  | `docs/GGL90/GGL90_package_description.tex` | `docs/GGL90/GGL90_port_description.tex` |
+| KPP    | `docs/KPP/KPP_package_description.tex`     | `docs/KPP/KPP_port_description.tex`     |
+
+- **`*_package_description.tex`** — the physics of each scheme: governing equations,
+  interior and boundary-layer mixing, diagnostics, compile-time options, validation,
+  and (GGL90) the `alpha` oscillation analysis.
+- **`*_port_description.tex`** — a code-flow walkthrough of each port, giving the Python
+  file + line numbers for every major step alongside the originating MITgcm Fortran
+  file + line numbers.
+- **`docs/porting/porting_lessons.md`** — cross-cutting lessons for extending or
+  re-porting the code: sign conventions, 1-based↔0-based indexing, vertical staggering
+  (cell centers vs. W-point interfaces, the `ghat` half-level offset), and verifying
+  units against the Fortran source.
+- **`docs/dev_notes/`** — implementation notes, the MITgcm staggering map, and physics
+  explanations.
+
 ## Summary
 
-This guide covers the complete workflow for running ocean mixing experiments:
-1. Set up your conda environment with required packages
-2. Choose a mixing scheme (KPP or GGL90) based on your physics goals
-3. Run built-in scenarios to familiarize yourself with the interface
-4. Create custom experiments by editing three YAML files (initial conditions, forcing, time integration)
-5. Analyze results using the generated NPZ files and plots
-6. Run tests to verify code behavior and physics consistency
-7. Use analysis scripts to diagnose TKE oscillations, alpha stability, and other diagnostics
-
-For deeper understanding of the mixing physics, consult the detailed reports in `docs/GGL90/` and `docs/KPP/`. For implementation details and refactoring history, see `docs/dev_notes/`.
+1. Set up your conda environment with the required packages.
+2. Choose a mixing scheme (KPP diagnostic boundary-layer, or GGL90 prognostic TKE) based on your physics goals.
+3. Run built-in scenarios to familiarize yourself with the interface.
+4. Create custom experiments by editing three YAML files (initial conditions, forcing, time integration).
+5. Analyze results using the generated NPZ files and plots.
+6. Run tests to verify code behavior and physics consistency.
+7. Use analysis scripts to diagnose TKE oscillations and `alpha` sensitivity.
 
 Happy mixing!

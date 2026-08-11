@@ -37,7 +37,10 @@ class GGL90Parameters:
             TKE diffusivity multiplier (KappaE/KappaM).
             MITgcm computes tracer diffusivity from the turbulent Prandtl
             number, not directly from alpha.
-            Default: 1.0 (ECCOv4 R4 uses 30.0)
+            Default: 10.0. The original GGL90 paper (Gaspar et al. 1990)
+            uses 1.0, but that produces cell-to-cell TKE oscillations on
+            this grid (oscillation-free for alpha >= 5). Set alpha=1.0 to
+            reproduce the paper; ECCOv4 R4 uses 30.0.
         m2 : float
             Wind stress to vertical stress ratio for TKE boundary condition
             Default: 3.75 (Blanke and Delecluse 1993)
@@ -117,7 +120,11 @@ class GGL90Parameters:
     # Physical parameters
     ck: float = 0.1
     ceps: float = 0.7
-    alpha: float = 1.0  # TKE diffusivity multiplier (KappaE/KappaM)
+    # TKE diffusivity multiplier (KappaE/KappaM). Original GGL90 paper
+    # (Gaspar et al. 1990) uses 1.0; we default to 10.0 because 1.0 produces
+    # cell-to-cell TKE oscillations on this grid (oscillation-free for
+    # alpha >= 5). Set alpha=1.0 to reproduce the paper; ECCOv4 R4 uses 30.0.
+    alpha: float = 10.0
     m2: float = 3.75
 
     # TKE limits
