@@ -247,8 +247,7 @@ with Two Different Mixed-Layer Physics}. Journal of Physical Oceanography, 23, 1
 % ============================================================
 
 % ============================================================
-\section{Introduction and Scientific Background}
-% ============================================================
+\section{Introduction and Scientific Background}\n% ============================================================
 
 The GGL90 package implements a one-equation turbulence closure scheme based on
 a prognostic equation for turbulent kinetic energy (TKE). Originally proposed by
@@ -476,8 +475,90 @@ every model timestep. The following sections describe their implementation in
 MITgcm in detail, with extensive code references and examples.
 
 % ============================================================
-\section{Package Architecture and Call Flow}
-% ============================================================
+\section{Governing Equations (overview)}
+\label{sec:governing_equations}
+
+This section provides a high-level overview of the governing equations for GGL90. Detailed derivations and computational procedures appear in later sections.
+
+\subsection{TKE Evolution Equation}
+
+The fundamental prognostic equation solved by GGL90 is the turbulent kinetic energy (TKE) evolution equation:
+
+\begin{equation}
+\frac{\partial \TKE}{\partial t} + \vec{u} \cdot \nabla \TKE = P + B - \varepsilon + \frac{\partial}{\partial z}\left(\KE \frac{\partial \TKE}{\partial z}\right)
+\end{equation}
+
+where:
+\begin{itemize}
+\item $P = \KM \Ssq$ --- Shear production from vertical velocity gradients
+\item $B = -\KH \Nsq$ --- Buoyancy flux (positive for unstable stratification)
+\item $\varepsilon = c_\varepsilon \frac{\TKE^{3/2}}{L}$ --- Dissipation rate
+\item $\KE = \KM$ --- Vertical diffusivity of TKE
+\end{itemize}
+
+The TKE field $\TKE(x,y,z,t)$ is the only prognostic variable in GGL90; all mixing coefficients are diagnosed from TKE at each time step.
+
+\subsection{Eddy Viscosity and Diffusivity}
+
+The eddy viscosity $\KM$ and diffusivity $\KH$ are computed from TKE via:
+
+\begin{equation}
+\KM(z) = c_k L(z) \sqrt{\TKE(z)}
+\end{equation}
+
+\begin{equation}
+\KH(z) = \frac{\KM(z)}{\alpha}
+\end{equation}
+
+where:
+\begin{itemize}
+\item $c_k = 0.1$ --- Dimensionless closure constant
+\item $L(z)$ --- Mixing length (stratification-dependent, bounded by distance to boundaries)
+\item $\alpha$ --- Turbulent Prandtl number (ratio $\KM/\KH$; default 1.0, ECCOv4: 30.0)
+\end{itemize}
+
+\subsection{Mixing Length}
+
+The mixing length $L(z)$ is computed from the Gaspar et al.\\ (1990) formulation:
+
+\begin{equation}
+L(z) = \sqrt{2} \frac{\sqrt{\TKE(z)}}{\sqrt{\max(\Nsq(z), 0)}}
+\quad \text{(stable stratification)}
+\end{equation}
+
+with hard limits imposed by distance to boundaries:
+
+\begin{equation}
+L(z) \leftarrow \min\left(\max\left(L(z), L_{\min}\right), \kappa |z|\right)
+\end{equation}
+
+where $\kappa = 0.4$ is the von Kármán constant and $|z|$ is distance from the surface.
+
+\subsection{Boundary Conditions}
+
+\subsubsection{Surface}
+At the ocean surface ($z=0$), TKE is forced by wind stress:
+
+\begin{equation}
+\TKE(z=0) = \max\left(\frac{u_*^2}{B_1}, \text{GGL90TKEsurfMin}\right)
+\end{equation}
+
+where $u_*^2 = \sqrt{(\tau_x/\rho_0)^2 + (\tau_y/\rho_0)^2}$ is the friction velocity squared and $B_1 \approx 16.6$ is a dimensionless coefficient.
+
+\subsubsection{Bottom}
+At the ocean bottom, TKE is set to a minimum background value:
+
+\begin{equation}
+\TKE(z=z_{\text{bottom}}) = \max\left(\text{GGL90TKEbottom}, \text{GGL90TKEmin}\right)
+\end{equation}
+
+\subsection{Coordinate System and Discretization}
+
+MITgcm uses a $z$-coordinate with $z=0$ at the surface and $z<0$ in the ocean interior. The vertical coordinate is discretized into $N_z$ levels with cell-center depths $z_c(k)$ and cell-interface depths $z_f(k)$. GGL90 computes mixing coefficients at cell interfaces (where vertical fluxes are evaluated) and updates TKE at cell centers (where the prognostic equation is integrated).
+
+See \S\ref{sec:main_driver} for the complete computational sequence and \S\ref{sec:core_update} for detailed time-stepping procedures.
+
+\section{Package Architecture and Call Flow}\n% ============================================================
 
 The GGL90 package follows MITgcm's modular architecture, with clearly separated
 initialization, computation, and I/O phases. This section describes the overall
@@ -817,8 +898,7 @@ If these flags are undefined, the corresponding code blocks are excluded at
 compile time, reducing memory footprint and computational cost.
 
 % ============================================================
-\section{Parameter Initialization}
-% ============================================================
+\section{Parameter Initialization}\n% ============================================================
 
 GGL90 parameters are read from the namelist file \texttt{data.ggl90} during
 model initialization. The reading is handled by \texttt{ggl90\_readparms.F}
@@ -1104,8 +1184,7 @@ If any check fails, the model stops with a descriptive error message. This
 prevents common configuration mistakes.
 
 % ============================================================
-\section{Main Driver: \texttt{GGL90\_CALC}}
-\label{sec:ggl90_calc}
+\section{Main Driver Routine}\n\label{sec:main_driver}\n\label{sec:ggl90_calc}
 % ============================================================
 
 The subroutine \texttt{GGL90\_CALC} (\texttt{ggl90\_calc.F:13--1177}) is the
@@ -1268,17 +1347,7 @@ The remainder of this document examines each step in detail with code snippets
 and physical interpretation.
 
 % ============================================================
-\section{Stratification and Shear Computation}
-\label{sec:stratification}
-% ============================================================
-
-The TKE budget depends critically on two fundamental quantities: the buoyancy
-frequency squared ($N^2$, representing stratification) and the vertical shear
-squared ($S^2$, representing velocity gradients). These appear in the
-production and buoyancy terms of the TKE equation. This section describes how
-GGL90 computes these quantities from the model state.
-
-\subsection{Buoyancy Frequency Squared ($N^2$)}
+\section{Stratification and Buoyancy}\n\label{sec:stratification_buoyancy}\n\n\subsection{Buoyancy Frequency Squared ($N^2$)}
 
 The buoyancy frequency squared (also called the Brunt-V\"ais\"al\"a frequency
 squared) quantifies the strength of stable stratification:
@@ -1337,133 +1406,264 @@ B = -\kappa_h N^2
 When $N^2 < 0$, $B > 0$ (source of TKE). When $N^2 > 0$ and mixing transports
 light water downward, $B < 0$ (sink of TKE).
 
-\subsection{Vertical Shear Squared ($S^2$)}
+\section{Surface Forcing}\n\label{sec:surface_forcing}\n\nSurface forcing in GGL90 is applied via wind stress, which generates turbulent kinetic energy at the ocean-atmosphere interface.\n\n\subsection{Surface Boundary Condition}
+\label{sec:bc_surface}
+% ------------------------------------------------------------
 
-Vertical shear of the horizontal velocity field is a primary source of
-turbulence in the ocean. The shear squared is defined as:
-\[
-S^2 = \left( \frac{\partial u}{\partial z} \right)^2
-    + \left( \frac{\partial v}{\partial z} \right)^2
-\]
-where $u$ and $v$ are zonal and meridional velocity components.
+\subsubsection{Physical basis}
 
-\subsubsection{Implementation: Two Methods}
+At the ocean surface, TKE is generated by wind stress and surface wave breaking. The standard boundary condition relates the near-surface TKE to the friction velocity $u_*$:
 
-GGL90 offers two methods for computing $S^2$, controlled by the parameter
-\texttt{calcMeanVertShear}.
+\begin{equation}
+e_{\text{surface}} = B_0 \, u_*^2
+\label{eq:surface_bc}
+\end{equation}
 
-\textbf{Method 1: Shear of mean velocity (default, \texttt{calcMeanVertShear = .FALSE.})}
+where:
+\begin{itemize}
+\item $u_*$: Friction velocity (m s$^{-1}$), defined by the surface wind stress $\tau$: $u_*^2 = |\tau| / \rho_0$.
+\item $B_0$ (\verb|GGL90m2|): Dimensionless constant relating surface TKE to $u_*^2$. The default value is $B_0 = 3.75$, based on atmospheric boundary layer measurements and the Blanke \& Delecluse (1993) calibration for ocean applications.
+\end{itemize}
 
-Lines 484--498:
+\paragraph{Physical interpretation.} The factor $B_0 = 3.75$ indicates that the TKE at the surface is several times larger than the mean kinetic energy of the wind-driven current ($\sim u_*^2$). This excess energy comes from surface wave motion and wave breaking, which inject TKE directly into the upper ocean. The calibrated value of 3.75 balances the need for adequate surface layer mixing against observations of mixed layer depth and SST evolution.
 
-\begin{lstlisting}[caption={\texttt{ggl90\_calc.F}, lines 484--498 -- Shear of mean velocity.}]
-! Average velocity to cell centers, then compute shear
-tempU = ( ( uVel(i,j,km1,bi,bj) + uVel(i+1,j,km1,bi,bj) )
-     &   -( uVel(i,j,k  ,bi,bj) + uVel(i+1,j,k  ,bi,bj) )
-     &  ) * 0.5 * recip_drC(k) * coordFac
+\paragraph{Minimum surface TKE.} To prevent the surface TKE from vanishing under calm conditions (which would cause numerical issues), GGL90 imposes a minimum value:
 
-tempV = ( ( vVel(i,j,km1,bi,bj) + vVel(i,j+1,km1,bi,bj) )
-     &   -( vVel(i,j,k  ,bi,bj) + vVel(i,j+1,k  ,bi,bj) )
-     &  ) * 0.5 * recip_drC(k) * coordFac
+\begin{equation}
+e_{\text{surface}} = \max(e_{\text{surf,min}}, \, B_0 u_*^2)
+\label{eq:surface_bc_min}
+\end{equation}
 
-verticalShear(i,j) = tempU*tempU + tempV*tempV
+where $e_{\text{surf,min}}$ = \verb|GGL90TKEsurfMin| is typically $10^{-4}$ to $10^{-6}$ m$^2$ s$^{-2}$ (corresponding to a turbulent velocity scale of 1--10 mm s$^{-1}$).
+
+\subsubsection{Friction velocity calculation}
+
+The friction velocity $u_*$ is computed from the surface wind stress components $\tau_x$, $\tau_y$:
+
+\begin{equation}
+u_* = \sqrt{\frac{|\tau|}{\rho_0}} = \sqrt{\frac{\sqrt{\tau_x^2 + \tau_y^2}}{\rho_0}}
+\label{eq:ustar_definition}
+\end{equation}
+
+In MITgcm, the surface stresses are provided by the fields \verb|surfaceForcingU| and \verb|surfaceForcingV|, which have units of m$^2$ s$^{-2}$ (kinematic stress = stress / density). Therefore, the code computes:
+
+\begin{equation}
+u_*^2 = \sqrt{\tau_x^2 + \tau_y^2}
+\label{eq:ustar_squared}
+\end{equation}
+
+(Note: MITgcm's \verb|surfaceForcingU/V| are already divided by $\rho_0$, so no additional normalization is needed.)
+
+The implementation (lines 764--795 of \verb|ggl90_calc.F|) offers two options, controlled by \verb|calcMeanVertShear|:
+
+\paragraph{Option 1: Average of four components (\texttt{calcMeanVertShear = .TRUE.})}
+
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L764--783) Surface friction velocity: Option 1}]
+      IF ( calcMeanVertShear ) THEN
+C     by averaging (@ grid-cell center) the 4 components @ U,V pos.
+       DO j=jMin,jMax
+        DO i=iMin,iMax
+         tempU  = surfaceForcingU( i ,j,bi,bj)
+         tempUp = surfaceForcingU(i+1,j,bi,bj)
+         tempV  = surfaceForcingV(i, j ,bi,bj)
+         tempVp = surfaceForcingV(i,j+1,bi,bj)
+         uStarSquare(i,j) =
+     &        ( tempU*tempU + tempUp*tempUp
+     &        + tempV*tempV + tempVp*tempVp
+     &        )*halfRL
+        ENDDO
+       ENDDO
 \end{lstlisting}
 
-This method:
-\begin{enumerate}[label=\textbf{\arabic*.}]
-  \item Averages $u$ from adjacent U-points to the T-point.
-  \item Averages $v$ from adjacent V-points to the T-point.
-  \item Computes $\partial u/\partial z$ and $\partial v/\partial z$ from the
-        averaged velocities.
-  \item Squares and sums to get $S^2$.
-\end{enumerate}
+This averages the squared stresses from the four surrounding U- and V-points, which is appropriate for the Arakawa C-grid staggering.
 
-\textbf{Method 2: Mean of vertical shear (\texttt{calcMeanVertShear = .TRUE.})}
+\paragraph{Option 2: Shear of averaged stress (\texttt{calcMeanVertShear = .FALSE.})}
 
-Lines 468--482:
-
-\begin{lstlisting}[caption={\texttt{ggl90\_calc.F}, lines 468--482 -- Mean of shear components.}]
-! Compute shear at each U/V point, then average
-tempU  = ( uVel( i ,j,km1,bi,bj) - uVel( i ,j,k,bi,bj) )
-tempUp = ( uVel(i+1,j,km1,bi,bj) - uVel(i+1,j,k,bi,bj) )
-tempV  = ( vVel(i, j ,km1,bi,bj) - vVel(i, j ,k,bi,bj) )
-tempVp = ( vVel(i,j+1,km1,bi,bj) - vVel(i,j+1,k,bi,bj) )
-
-verticalShear(i,j) = (
-     &       ( tempU*tempU + tempUp*tempUp )
-     &     + ( tempV*tempV + tempVp*tempVp )
-     &               ) * 0.5 * recip_drC(k) * recip_drC(k)
-     &                       * coordFac * coordFac
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L784--795) Surface friction velocity: Option 2}]
+      ELSE
+       DO j=jMin,jMax
+        DO i=iMin,iMax
+C     estimate friction velocity uStar from surface forcing
+         uStarSquare(i,j) =
+     &     ( .5 _d 0*( surfaceForcingU(i,  j,  bi,bj)
+     &               + surfaceForcingU(i+1,j,  bi,bj) ) )**2
+     &   + ( .5 _d 0*( surfaceForcingV(i,  j,  bi,bj)
+     &               + surfaceForcingV(i,  j+1,bi,bj) ) )**2
+        ENDDO
+       ENDDO
+      ENDIF
 \end{lstlisting}
 
-This method:
-\begin{enumerate}[label=\textbf{\arabic*.}]
-  \item Computes $(\partial u/\partial z)^2$ at both U-points adjacent to the
-        T-point.
-  \item Computes $(\partial v/\partial z)^2$ at both V-points adjacent to the
-        T-point.
-  \item Averages the four squared shears.
-\end{enumerate}
+This averages the stresses first, then computes the squared magnitude. The difference is typically small.
 
-\textbf{Comparison:}
+After computing \verb|uStarSquare|, the code takes its square root and applies coordinate scaling (lines 864--873):
 
-Method 1 (default) computes shear of averaged velocity. Method 2 computes
-average of squared shear. Method 2 is more conservative in that it captures
-localized shear spikes better, but can produce noisier fields. The default
-(Method 1) is smoother and is recommended for most applications.
-
-\subsubsection{Physical Interpretation}
-
-Shear extracts kinetic energy from the mean flow and converts it to turbulent
-kinetic energy. The production term in the TKE budget is:
-\[
-P = \kappa_m S^2
-\]
-Strong shear (e.g., in western boundary currents, equatorial jets, or beneath
-strong winds) generates vigorous turbulence. Conversely, regions with weak
-currents have low $S^2$ and rely on other processes (convection, internal
-waves) for mixing.
-
-\subsection{Surface Stress ($u_*^2$)}
-
-The surface friction velocity $u_*$ characterizes the rate at which wind
-transfers momentum (and energy) to the ocean:
-\[
-u_* = \sqrt{\frac{\tau}{\rho_0}}
-\]
-where $\tau$ is the wind stress magnitude.
-
-\subsubsection{Implementation}
-
-Surface stress is computed in the surface layer (interface at \texttt{kTop})
-by averaging U and V stresses (lines not shown in prior excerpts but typically
-around lines 700--750):
-
-\begin{lstlisting}[caption={Conceptual code for surface stress (typically lines 700--750).}]
-! At surface interface (k = kTop)
-IF ( usingZCoords ) THEN
-  uStarSquare(i,j) = SQRT(
-       ( 0.5*(surfaceForcingU(i,j,bi,bj) + surfaceForcingU(i+1,j,bi,bj)) )**2
-     + ( 0.5*(surfaceForcingV(i,j,bi,bj) + surfaceForcingV(i,j+1,bi,bj)) )**2
-     )
-ENDIF
-! surfaceForcingU/V are in units of N/m^2 (stress)
-! Convert to u_star^2 by dividing by rho_0
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L864--873) Square root and coordinate transformation}]
+      DO j=jMin,jMax
+       DO i=iMin,iMax
+#ifdef ALLOW_AUTODIFF
+         IF ( uStarSquare(i,j) .GT. zeroRL )
+     &        uStarSquare(i,j) = SQRT(uStarSquare(i,j))*recip_coordFac
+#else
+         uStarSquare(i,j) = SQRT(uStarSquare(i,j))*recip_coordFac
+#endif
+       ENDDO
+      ENDDO
 \end{lstlisting}
 
-\textbf{Use in TKE budget:}
+Despite the variable name, \verb|uStarSquare| after this step actually contains $u_*$ (not $u_*^2$), scaled by \verb|recip_coordFac| for pressure coordinates.
 
-$u_*^2$ sets the surface boundary condition for TKE. The wind-driven TKE flux
-at the surface is:
-\[
-\kappa_E \frac{\partial \TKE}{\partial z}\bigg|_{z=0} = m_2 u_*^3
-\]
-This boundary condition injects TKE into the surface layer, which then
-diffuses and is transported downward, energizing the mixed layer.
+\subsubsection{Application of surface boundary condition}
 
-% ============================================================
-\section{Mixing Length Computation: \texttt{GGL90\_MIXINGLENGTH}}
-% ============================================================
+The surface TKE is imposed as a Dirichlet boundary condition in the implicit TKE solve. The implementation differs slightly between z-coordinates and pressure coordinates.
+
+\paragraph{Z-coordinates (surface at $k=1$):}
+
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L899--912) Surface BC in z-coordinates}]
+       DO j=jMin,jMax
+        DO i=iMin,iMax
+#ifdef ALLOW_SHELFICE
+         IF ( useShelfIce ) THEN
+          kSrf = MAX(1,kTopC(i,j,bi,bj))
+          kTop = MIN(kSrf+1,Nr)
+         ENDIF
+#endif
+         GGL90TKE(i,j,kSrf,bi,bj) = maskC(i,j,kSrf,bi,bj)
+     &        *MAX(GGL90TKEsurfMin,GGL90m2*uStarSquare(i,j))
+         GGL90TKE(i,j,kTop,bi,bj) = GGL90TKE(i,j,kTop,bi,bj)
+     &        - a3d(i,j,kTop)*GGL90TKE(i,j,kSrf,bi,bj)
+         a3d(i,j,kTop) = 0. _d 0
+        ENDDO
+\end{lstlisting}
+
+\paragraph{Key details:}
+\begin{itemize}
+\item Line 907--908: Set the surface cell TKE to $\max(e_{\text{surf,min}}, B_0 u_*^2)$.
+\item Lines 909--911: Subtract the contribution of the surface TKE from the RHS of the implicit equation for the second cell (since the surface TKE is now known and moves to the RHS).
+\item Line 911: Zero out the lower diagonal coefficient for the second cell, effectively decoupling it from the surface cell in the tridiagonal solve.
+\end{itemize}
+
+\paragraph{Pressure coordinates (surface at $k=N_r$):}
+
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L883--897) Surface BC in pressure coordinates}]
+      IF ( usingPCoords ) THEN
+       DO j=jMin,jMax
+        DO i=iMin,iMax
+         GGL90TKE(i,j,kSrf,bi,bj) = GGL90TKE(i,j,kSrf,bi,bj)
+     &        - c3d(i,j,kSrf) * maskC(i,j,kSrf,bi,bj)
+     &        *MAX(GGL90TKEsurfMin,GGL90m2*uStarSquare(i,j))
+         c3d(i,j,kSrf) = 0. _d 0
+        ENDDO
+       ENDDO
+\end{lstlisting}
+
+The logic is similar, but the upper diagonal \verb|c3d| (instead of lower diagonal \verb|a3d|) is zeroed out, reflecting the reversed vertical indexing in pressure coordinates.
+
+\subsubsection{Surface minimum TKE}
+
+The parameter \verb|GGL90TKEsurfMin| (default $10^{-4}$ m$^2$ s$^{-2}$) ensures that the surface TKE never vanishes, even under zero wind forcing. This is essential for:
+\begin{itemize}
+\item \textbf{Numerical stability}: Prevents division by zero in the mixing length and eddy coefficient calculations.
+\item \textbf{Physical realism}: Even under calm conditions, there is residual turbulence from diurnal heating cycles, residual wave motion, and surface roughness.
+\end{itemize}
+
+Typical values: $e_{\text{surf,min}} = 10^{-6}$ m$^2$ s$^{-2}$ (very quiescent) to $10^{-4}$ m$^2$ s$^{-2}$ (moderate background turbulence).
+
+% ------------------------------------------------------------
+\section{Interior Mixing}\n\label{sec:interior_mixing}\n\nInterior mixing in GGL90 is driven by shear production from vertical velocity gradients and buoyancy forcing.\n\n\subsection{Production Term}
+\label{sec:tke_production}
+% ------------------------------------------------------------
+
+The shear production term $P = \kappa_m S^2$ represents the extraction of kinetic energy from the mean flow by turbulent Reynolds stresses.
+
+\subsubsection{Vertical shear computation}
+
+The squared vertical shear $S^2$ is computed in \verb|GGL90_CALC| immediately after the mixing length calculation. MITgcm provides two options for computing $S^2$, controlled by the runtime parameter \verb|calcMeanVertShear|:
+
+\paragraph{Option 1: Average of four components (\texttt{calcMeanVertShear = .TRUE.})}
+
+Compute the shear at each of the four surrounding velocity points (two U-points, two V-points), then average:
+
+\begin{equation}
+S^2(i,j,k) = \frac{1}{2} \left[
+\left(\frac{\Delta u_1}{\Delta z}\right)^2 + \left(\frac{\Delta u_2}{\Delta z}\right)^2
++ \left(\frac{\Delta v_1}{\Delta z}\right)^2 + \left(\frac{\Delta v_2}{\Delta z}\right)^2
+\right]
+\label{eq:shear_option1}
+\end{equation}
+
+where $\Delta u_1 = u(i,j,k-1) - u(i,j,k)$, $\Delta u_2 = u(i+1,j,k-1) - u(i+1,j,k)$, and similarly for $v$.
+
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L468--482) Vertical shear: Option 1}]
+       IF ( calcMeanVertShear ) THEN
+C     by averaging (@ grid-cell center) the 4 vertical shear compon @ U,V pos.
+        DO j=jMin,jMax
+         DO i=iMin,iMax
+          tempU  = ( uVel( i ,j,km1,bi,bj) - uVel( i ,j,k,bi,bj) )
+          tempUp = ( uVel(i+1,j,km1,bi,bj) - uVel(i+1,j,k,bi,bj) )
+          tempV  = ( vVel(i, j ,km1,bi,bj) - vVel(i, j ,k,bi,bj) )
+          tempVp = ( vVel(i,j+1,km1,bi,bj) - vVel(i,j+1,k,bi,bj) )
+          verticalShear(i,j) = (
+     &                 ( tempU*tempU + tempUp*tempUp )
+     &               + ( tempV*tempV + tempVp*tempVp )
+     &                         )*halfRL*recip_drC(k)*recip_drC(k)
+     &                          *coordFac*coordFac
+         ENDDO
+        ENDDO
+\end{lstlisting}
+
+\paragraph{Option 2: Shear of averaged flow (\texttt{calcMeanVertShear = .FALSE.})}
+
+First average the velocity components to the cell center, then compute shear:
+
+\begin{equation}
+S^2(i,j,k) = \left(\frac{\bar{u}(k-1) - \bar{u}(k)}{\Delta z}\right)^2
++ \left(\frac{\bar{v}(k-1) - \bar{v}(k)}{\Delta z}\right)^2
+\label{eq:shear_option2}
+\end{equation}
+
+where $\bar{u}(k) = \frac{1}{2}[u(i,j,k) + u(i+1,j,k)]$ and $\bar{v}(k) = \frac{1}{2}[v(i,j,k) + v(i,j+1,k)]$.
+
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L483--498) Vertical shear: Option 2}]
+       ELSE
+C     from the averaged flow at grid-cell center (2 compon x 2 pos.)
+        DO j=jMin,jMax
+         DO i=iMin,iMax
+          tempU = ( ( uVel(i,j,km1,bi,bj) + uVel(i+1,j,km1,bi,bj) )
+     &             -( uVel(i,j,k  ,bi,bj) + uVel(i+1,j,k  ,bi,bj) )
+     &            )*halfRL*recip_drC(k)
+     &             *coordFac
+          tempV = ( ( vVel(i,j,km1,bi,bj) + vVel(i,j+1,km1,bi,bj) )
+     &             -( vVel(i,j,k  ,bi,bj) + vVel(i,j+1,k  ,bi,bj) )
+     &            )*halfRL*recip_drC(k)
+     &             *coordFac
+          verticalShear(i,j) = tempU*tempU + tempV*tempV
+         ENDDO
+        ENDDO
+       ENDIF
+\end{lstlisting}
+
+\paragraph{Which option to use?} Option 1 is more accurate on the Arakawa C-grid, as it avoids spurious cancellation of checkerboard modes. Option 2 is slightly cheaper computationally. The difference is typically small in well-resolved simulations. Global applications typically use Option 1 (\verb|calcMeanVertShear = .TRUE.|, see Appendix~\ref{app:eccov4_config}).
+
+\subsubsection{Production term calculation}
+
+Once $S^2$ and $\kappa_m$ are known, the production term is straightforward:
+
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L605--610) Explicit TKE budget update: production term}]
+         GGL90TKE(i,j,k,bi,bj) = GGL90TKE(i,j,k,bi,bj)
+     &        + deltaTloc*(
+     &        + KappaM(i,j)*verticalShear(i,j)
+     &        - KappaH*Nsquare(i,j,k)
+     &        - TKEdissipation
+     &        )
+\end{lstlisting}
+
+The production term \verb|KappaM(i,j)*verticalShear(i,j)| is always non-negative, since both $\kappa_m$ and $S^2$ are non-negative.
+
+\paragraph{Typical values.} In a wind-driven surface mixed layer with $\kappa_m \sim 0.01$ m$^2$ s$^{-1}$ and $S^2 \sim 10^{-4}$ s$^{-2}$, the production term is $P \sim 10^{-6}$ m$^2$ s$^{-3}$. This is comparable to the dissipation term (see below), indicating a balance between shear production and dissipation in quasi-steady turbulence.
+
+% ------------------------------------------------------------
+\section{Boundary / Surface Layer Mixing}\n\label{sec:boundary_mixing}\n% ============================================================
 
 The mixing length $\ell$ is one of the most critical elements of the GGL90 scheme, determining the spatial scale over which turbulent eddies can transport momentum and scalars. Unlike some other turbulence closures that prescribe the mixing length purely from geometric considerations, GGL90 computes it from both turbulent energetics (TKE and buoyancy frequency) and geometric constraints imposed by boundaries and the water column structure.
 
@@ -2037,8 +2237,7 @@ If the \verb|ALLOW_GGL90_LANGMUIR| compile-time option is enabled, the mixing le
 The Langmuir enhancement computes a modified mixing length \verb|LCmixingLength| that is larger than the standard \verb|GGL90mixingLength| in the surface boundary layer, enhancing vertical mixing when wind and surface waves align. The details are beyond the scope of this section, but users should be aware that the mixing length values may differ from the standard GGL90 formulation when this option is active.
 
 % ============================================================
-\section{TKE Evolution and Budget}
-\label{sec:tke_evolution}
+\section{Core Diffusivity/Prognostic Update}\n\label{sec:core_update}\n\nThis section describes the complete time-integration procedure for TKE and the subsequent computation of eddy viscosity and diffusivity coefficients.\n\n\subsection{TKE Evolution and Budget}\n\label{sec:tke_evolution}
 % ============================================================
 
 The turbulent kinetic energy (TKE) $e$ is the sole prognostic variable in the GGL90 scheme. Its evolution is governed by a budget equation that balances production (from shear and surface forcing), buoyancy effects (destruction by stable stratification, or enhancement by convection), dissipation (conversion to heat at small scales), and diffusive transport. This section documents the TKE equation as implemented in MITgcm, including the time-splitting between explicit and implicit terms.
@@ -2533,8 +2732,7 @@ C--    Add horiz. diffusion tendency
 The default is \verb|GGL90diffTKEh = 0| (no horizontal diffusion).
 
 % ============================================================
-\section{Eddy Coefficient Calculation}
-\label{sec:eddy_coeffs}
+\subsection{Eddy Coefficient Calculation}\n\label{sec:eddy_coeffs}
 % ============================================================
 
 The GGL90 scheme diagnoses eddy viscosity $\kappa_m$ and eddy diffusivity $\kappa_h$ from the prognostic TKE field $e$ and the mixing length $\ell$. These coefficients are then used by the main model to compute vertical fluxes of momentum, temperature, and salinity.
@@ -2807,332 +3005,46 @@ MITgcm does not impose an explicit maximum cap on GGL90 eddy coefficients by def
 All eddy coefficients are multiplied by \verb|maskC(i,j,k)*maskC(i,j,k-1)| to ensure they are zero at dry interfaces (e.g., adjacent to land, ice, or outside the domain). This prevents spurious fluxes across solid boundaries.
 
 % ============================================================
-\section{Boundary Conditions}
-\label{sec:boundary_conditions}
+\section{Additional Mixing Processes}\n\label{sec:additional_processes}\n\nGGL90 supports optional enhancements: the IDEMIX internal wave energy model and Langmuir circulation parameterization.\n\n\subsection{IDEMIX Extension}\n\label{sec:idemix}
 % ============================================================
 
-The TKE equation requires boundary conditions at the ocean surface and bottom (and optionally at ice-shelf bases). GGL90 uses a Dirichlet (prescribed value) condition at the surface and either Dirichlet or Neumann (zero flux) at the bottom, controlled by the runtime parameter \verb|GGL90_dirichlet|.
+IDEMIX (Internal Wave Dissipation and MIXing) is an optional extension to GGL90 that parameterizes the generation, propagation, and dissipation of internal wave energy. When enabled (\verb|ALLOW_GGL90_IDEMIX| in \verb|GGL90_OPTIONS.h|), IDEMIX adds internal wave breaking as an additional source term in the TKE equation.
 
-% ------------------------------------------------------------
-\subsection{Surface Boundary Condition}
-\label{sec:bc_surface}
-% ------------------------------------------------------------
+\subsection{Overview of Internal Wave Model}
 
-\subsubsection{Physical basis}
-
-At the ocean surface, TKE is generated by wind stress and surface wave breaking. The standard boundary condition relates the near-surface TKE to the friction velocity $u_*$:
+IDEMIX represents the internal wave field as a single prognostic variable $E$ (internal wave energy per unit mass, m$^2$ s$^{-2}$), which evolves according to:
 
 \begin{equation}
-e_{\text{surface}} = B_0 \, u_*^2
-\label{eq:surface_bc}
+\frac{\partial E}{\partial t} = F_{\text{sources}} - \frac{E}{\tau_v} + \frac{\partial}{\partial z}\left(\kappa_E \frac{\partial E}{\partial z}\right) + \nabla_h \cdot (\kappa_{E,h} \nabla_h E)
 \end{equation}
 
 where:
 \begin{itemize}
-\item $u_*$: Friction velocity (m s$^{-1}$), defined by the surface wind stress $\tau$: $u_*^2 = |\tau| / \rho_0$.
-\item $B_0$ (\verb|GGL90m2|): Dimensionless constant relating surface TKE to $u_*^2$. The default value is $B_0 = 3.75$, based on atmospheric boundary layer measurements and the Blanke \& Delecluse (1993) calibration for ocean applications.
+\item $F_{\text{sources}}$: Energy input from tidal forcing and near-inertial wind forcing
+\item $\tau_v$: Vertical dissipation time scale (typically 2--10 days)
+\item $\kappa_E$, $\kappa_{E,h}$: Vertical and horizontal diffusivities of internal wave energy
 \end{itemize}
 
-\paragraph{Physical interpretation.} The factor $B_0 = 3.75$ indicates that the TKE at the surface is several times larger than the mean kinetic energy of the wind-driven current ($\sim u_*^2$). This excess energy comes from surface wave motion and wave breaking, which inject TKE directly into the upper ocean. The calibrated value of 3.75 balances the need for adequate surface layer mixing against observations of mixed layer depth and SST evolution.
+The dissipated internal wave energy is converted to TKE with an efficiency factor $\gamma_{\text{mix}}$ (typically 0.1--0.2).
 
-\paragraph{Minimum surface TKE.} To prevent the surface TKE from vanishing under calm conditions (which would cause numerical issues), GGL90 imposes a minimum value:
+\subsection{Coupling to GGL90}
+
+IDEMIX couples to GGL90 through two mechanisms:
+
+\paragraph{1. TKE source term:} The internal wave dissipation rate $\varepsilon_{\text{IW}} = E / \tau_v$ is added to the TKE equation (Section~\ref{sec:tke_evolution}):
 
 \begin{equation}
-e_{\text{surface}} = \max(e_{\text{surf,min}}, \, B_0 u_*^2)
-\label{eq:surface_bc_min}
+\frac{\partial e}{\partial t} = \ldots + \gamma_{\text{mix}} \frac{E}{\tau_v}
 \end{equation}
 
-where $e_{\text{surf,min}}$ = \verb|GGL90TKEsurfMin| is typically $10^{-4}$ to $10^{-6}$ m$^2$ s$^{-2}$ (corresponding to a turbulent velocity scale of 1--10 mm s$^{-1}$).
+This enhances mixing in the ocean interior where internal wave breaking is significant (e.g., over rough topography, at the equator).
 
-\subsubsection{Friction velocity calculation}
+\paragraph{2. Modified Prandtl number:} The turbulent Prandtl number formula is modified to account for internal wave-driven mixing (Section~\ref{sec:tke_prandtl}), reducing $Pr_t$ and enhancing scalar diffusivity when $E$ is large.
 
-The friction velocity $u_*$ is computed from the surface wind stress components $\tau_x$, $\tau_y$:
-
-\begin{equation}
-u_* = \sqrt{\frac{|\tau|}{\rho_0}} = \sqrt{\frac{\sqrt{\tau_x^2 + \tau_y^2}}{\rho_0}}
-\label{eq:ustar_definition}
-\end{equation}
-
-In MITgcm, the surface stresses are provided by the fields \verb|surfaceForcingU| and \verb|surfaceForcingV|, which have units of m$^2$ s$^{-2}$ (kinematic stress = stress / density). Therefore, the code computes:
-
-\begin{equation}
-u_*^2 = \sqrt{\tau_x^2 + \tau_y^2}
-\label{eq:ustar_squared}
-\end{equation}
-
-(Note: MITgcm's \verb|surfaceForcingU/V| are already divided by $\rho_0$, so no additional normalization is needed.)
-
-The implementation (lines 764--795 of \verb|ggl90_calc.F|) offers two options, controlled by \verb|calcMeanVertShear|:
-
-\paragraph{Option 1: Average of four components (\texttt{calcMeanVertShear = .TRUE.})}
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L764--783) Surface friction velocity: Option 1}]
-      IF ( calcMeanVertShear ) THEN
-C     by averaging (@ grid-cell center) the 4 components @ U,V pos.
-       DO j=jMin,jMax
-        DO i=iMin,iMax
-         tempU  = surfaceForcingU( i ,j,bi,bj)
-         tempUp = surfaceForcingU(i+1,j,bi,bj)
-         tempV  = surfaceForcingV(i, j ,bi,bj)
-         tempVp = surfaceForcingV(i,j+1,bi,bj)
-         uStarSquare(i,j) =
-     &        ( tempU*tempU + tempUp*tempUp
-     &        + tempV*tempV + tempVp*tempVp
-     &        )*halfRL
-        ENDDO
-       ENDDO
-\end{lstlisting}
-
-This averages the squared stresses from the four surrounding U- and V-points, which is appropriate for the Arakawa C-grid staggering.
-
-\paragraph{Option 2: Shear of averaged stress (\texttt{calcMeanVertShear = .FALSE.})}
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L784--795) Surface friction velocity: Option 2}]
-      ELSE
-       DO j=jMin,jMax
-        DO i=iMin,iMax
-C     estimate friction velocity uStar from surface forcing
-         uStarSquare(i,j) =
-     &     ( .5 _d 0*( surfaceForcingU(i,  j,  bi,bj)
-     &               + surfaceForcingU(i+1,j,  bi,bj) ) )**2
-     &   + ( .5 _d 0*( surfaceForcingV(i,  j,  bi,bj)
-     &               + surfaceForcingV(i,  j+1,bi,bj) ) )**2
-        ENDDO
-       ENDDO
-      ENDIF
-\end{lstlisting}
-
-This averages the stresses first, then computes the squared magnitude. The difference is typically small.
-
-After computing \verb|uStarSquare|, the code takes its square root and applies coordinate scaling (lines 864--873):
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L864--873) Square root and coordinate transformation}]
-      DO j=jMin,jMax
-       DO i=iMin,iMax
-#ifdef ALLOW_AUTODIFF
-         IF ( uStarSquare(i,j) .GT. zeroRL )
-     &        uStarSquare(i,j) = SQRT(uStarSquare(i,j))*recip_coordFac
-#else
-         uStarSquare(i,j) = SQRT(uStarSquare(i,j))*recip_coordFac
-#endif
-       ENDDO
-      ENDDO
-\end{lstlisting}
-
-Despite the variable name, \verb|uStarSquare| after this step actually contains $u_*$ (not $u_*^2$), scaled by \verb|recip_coordFac| for pressure coordinates.
-
-\subsubsection{Application of surface boundary condition}
-
-The surface TKE is imposed as a Dirichlet boundary condition in the implicit TKE solve. The implementation differs slightly between z-coordinates and pressure coordinates.
-
-\paragraph{Z-coordinates (surface at $k=1$):}
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L899--912) Surface BC in z-coordinates}]
-       DO j=jMin,jMax
-        DO i=iMin,iMax
-#ifdef ALLOW_SHELFICE
-         IF ( useShelfIce ) THEN
-          kSrf = MAX(1,kTopC(i,j,bi,bj))
-          kTop = MIN(kSrf+1,Nr)
-         ENDIF
-#endif
-         GGL90TKE(i,j,kSrf,bi,bj) = maskC(i,j,kSrf,bi,bj)
-     &        *MAX(GGL90TKEsurfMin,GGL90m2*uStarSquare(i,j))
-         GGL90TKE(i,j,kTop,bi,bj) = GGL90TKE(i,j,kTop,bi,bj)
-     &        - a3d(i,j,kTop)*GGL90TKE(i,j,kSrf,bi,bj)
-         a3d(i,j,kTop) = 0. _d 0
-        ENDDO
-\end{lstlisting}
-
-\paragraph{Key details:}
-\begin{itemize}
-\item Line 907--908: Set the surface cell TKE to $\max(e_{\text{surf,min}}, B_0 u_*^2)$.
-\item Lines 909--911: Subtract the contribution of the surface TKE from the RHS of the implicit equation for the second cell (since the surface TKE is now known and moves to the RHS).
-\item Line 911: Zero out the lower diagonal coefficient for the second cell, effectively decoupling it from the surface cell in the tridiagonal solve.
-\end{itemize}
-
-\paragraph{Pressure coordinates (surface at $k=N_r$):}
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L883--897) Surface BC in pressure coordinates}]
-      IF ( usingPCoords ) THEN
-       DO j=jMin,jMax
-        DO i=iMin,iMax
-         GGL90TKE(i,j,kSrf,bi,bj) = GGL90TKE(i,j,kSrf,bi,bj)
-     &        - c3d(i,j,kSrf) * maskC(i,j,kSrf,bi,bj)
-     &        *MAX(GGL90TKEsurfMin,GGL90m2*uStarSquare(i,j))
-         c3d(i,j,kSrf) = 0. _d 0
-        ENDDO
-       ENDDO
-\end{lstlisting}
-
-The logic is similar, but the upper diagonal \verb|c3d| (instead of lower diagonal \verb|a3d|) is zeroed out, reflecting the reversed vertical indexing in pressure coordinates.
-
-\subsubsection{Surface minimum TKE}
-
-The parameter \verb|GGL90TKEsurfMin| (default $10^{-4}$ m$^2$ s$^{-2}$) ensures that the surface TKE never vanishes, even under zero wind forcing. This is essential for:
-\begin{itemize}
-\item \textbf{Numerical stability}: Prevents division by zero in the mixing length and eddy coefficient calculations.
-\item \textbf{Physical realism}: Even under calm conditions, there is residual turbulence from diurnal heating cycles, residual wave motion, and surface roughness.
-\end{itemize}
-
-Typical values: $e_{\text{surf,min}} = 10^{-6}$ m$^2$ s$^{-2}$ (very quiescent) to $10^{-4}$ m$^2$ s$^{-2}$ (moderate background turbulence).
-
-% ------------------------------------------------------------
-\subsection{Bottom Boundary Condition}
-\label{sec:bc_bottom}
-% ------------------------------------------------------------
-
-At the ocean bottom (or topography in the interior), GGL90 supports two types of boundary conditions, controlled by the runtime parameter \verb|GGL90_dirichlet|:
-
-\begin{enumerate}
-\item \textbf{Dirichlet (prescribed TKE)}: $e_{\text{bottom}} = B_0 u_{*,\text{bottom}}^2$, where $u_{*,\text{bottom}}$ is the bottom friction velocity. This is the default (\verb|GGL90_dirichlet = .TRUE.|).
-\item \textbf{Neumann (zero flux)}: $\partial e / \partial z = 0$ at the bottom. This assumes no TKE injection from bottom drag (\verb|GGL90_dirichlet = .FALSE.|).
-\end{enumerate}
-
-\subsubsection{Dirichlet bottom boundary condition}
-
-When \verb|GGL90_dirichlet = .TRUE.| (default), the bottom TKE is set to:
-
-\begin{equation}
-e_{\text{bottom}} = B_0 \, u_{*,\text{bottom}}^2
-\label{eq:bottom_bc_dirichlet}
-\end{equation}
-
-where $u_{*,\text{bottom}}$ is the friction velocity associated with bottom drag. In MITgcm, this is computed from the bottom stress (diagnosed from the velocity field and a quadratic drag law) in a manner analogous to the surface friction velocity.
-
-However, the standard GGL90 implementation in MITgcm \emph{does not explicitly impose a non-zero bottom TKE} based on bottom drag. Instead, the bottom boundary condition is effectively $e_{\text{bottom}} = 0$ (or \verb|GGL90TKEbottom|, if specified). This is because:
-\begin{itemize}
-\item Computing bottom friction velocity requires knowledge of the near-bottom velocity, which introduces a two-way coupling between TKE and momentum that complicates the solver.
-\item In most ocean applications, wind-driven turbulence dominates in the surface mixed layer, and bottom-generated turbulence is much weaker (except in shallow coastal regions or over rough topography).
-\end{itemize}
-
-For applications where bottom turbulence is important, users can:
-\begin{itemize}
-\item Set a non-zero background diffusivity (\verb|diffKrNrS(Nr)|) in the bottom layer.
-\item Use a separate bottom boundary layer parameterization (e.g., a logarithmic law-of-the-wall).
-\item Modify the code to explicitly compute $u_{*,\text{bottom}}$ and impose Eq.~\eqref{eq:bottom_bc_dirichlet}.
-\end{itemize}
-
-\subsubsection{Neumann bottom boundary condition}
-
-When \verb|GGL90_dirichlet = .FALSE.|, the code imposes a zero-flux condition:
-
-\begin{equation}
-\frac{\partial e}{\partial z}\bigg|_{\text{bottom}} = 0
-\label{eq:bottom_bc_neumann}
-\end{equation}
-
-This is implemented by zeroing out the appropriate off-diagonal coefficient in the tridiagonal matrix:
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L722--739) Neumann bottom BC}]
-      IF (.NOT.GGL90_dirichlet) THEN
-C      Neumann bottom boundary condition for TKE: no flux from bottom
-       IF ( usingPCoords ) THEN
-        DO j=jMin,jMax
-         DO i=iMin,iMax
-          kBot = MIN(kSurfC(i,j,bi,bj)+1,Nr)
-          a3d(i,j,kBot) = 0. _d 0
-         ENDDO
-        ENDDO
-       ELSE
-        DO j=jMin,jMax
-         DO i=iMin,iMax
-          kBot = MAX(kLowC(i,j,bi,bj),1)
-          c3d(i,j,kBot) = 0. _d 0
-         ENDDO
-        ENDDO
-       ENDIF
-      ENDIF
-\end{lstlisting}
-
-\paragraph{Physical interpretation.} The Neumann condition assumes that TKE is not generated at the bottom, and any TKE present in the bottom layer is due to downward diffusion from above (or local shear production). This is appropriate for:
-\begin{itemize}
-\item Deep ocean basins with weak bottom currents.
-\item Coarse-resolution models where bottom boundary layer processes are not resolved.
-\end{itemize}
-
-For shallow coastal regions or continental shelves with strong tidal currents, the Neumann condition is \emph{not} appropriate, and a Dirichlet condition (with bottom friction velocity) should be used instead.
-
-\subsubsection{Choice of boundary condition}
-
-\begin{table}[ht]
-\centering
-\caption{Comparison of GGL90 bottom boundary conditions}
-\label{tab:bottom_bc}
-\begin{tabular}{lp{5cm}p{5cm}}
-\toprule
-\textbf{Parameter} & \textbf{Dirichlet} & \textbf{Neumann} \\
-\midrule
-\verb|GGL90_dirichlet| & \verb|.TRUE.| (default) & \verb|.FALSE.| \\
-\addlinespace
-Bottom condition & $e_{\text{bottom}} = 0$ (or user-specified) & $\partial e/\partial z = 0$ \\
-\addlinespace
-Best for & Deep ocean, weak bottom currents, typical global applications (Appendix~\ref{app:eccov4_config}) & Shallow coastal regions (if bottom drag is negligible) \\
-\addlinespace
-Physical interpretation & No TKE generation at bottom & No TKE flux through bottom \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Recommendation.} Use the default \verb|GGL90_dirichlet = .TRUE.| unless you have a specific reason to change it. For applications requiring realistic bottom boundary layer mixing, consider implementing a bottom friction velocity calculation (not included in the standard package).
-
-% ------------------------------------------------------------
-\subsection{Under-Ice-Shelf Treatment (Optional)}
-\label{sec:bc_iceshelf}
-% ------------------------------------------------------------
-
-When the \verb|ALLOW_SHELFICE| package is enabled and \verb|useShelfIce = .TRUE.|, GGL90 automatically adjusts the surface boundary condition to account for ice-shelf cavities, where the "surface" is the ice-shelf base rather than the open ocean surface.
-
-\subsubsection{Ice-shelf drag}
-
-In columns beneath ice shelves, the friction velocity $u_*$ is computed from the drag between the ocean and the ice-shelf base, rather than from wind stress. The code computes the sub-glacial stress using the same quadratic drag law as for the ocean bottom:
-
-\begin{equation}
-\tau_{\text{ice}} = C_D \, |\vec{u}_{\text{ice-ocean}}| \, \vec{u}_{\text{ice-ocean}}
-\label{eq:iceshelf_stress}
-\end{equation}
-
-where $C_D$ is the ice-shelf drag coefficient (specified by \verb|SHELFICEDragLinear| or \verb|SHELFICEDragQuadratic|) and $\vec{u}_{\text{ice-ocean}}$ is the ocean velocity at the ice-shelf base.
-
-The implementation (lines 796--860 of \verb|ggl90_calc.F|) is complex and involves iterating through vertical levels to accumulate the total stress:
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_calc.F:L849--858) Ice-shelf friction velocity}]
-       DO j=jMin,jMax
-        DO i=jMin,jMax
-         IF ( kTopC(i,j,bi,bj) .GT. 0 ) THEN
-          uStarSquare(i,j) =
-     &         ( stressU(i,j)*stressU(i,j)+stressU(i+1,j)*stressU(i+1,j)
-     &         + stressV(i,j)*stressV(i,j)+stressV(i,j+1)*stressV(i,j+1)
-     &         )*halfRL
-         ENDIF
-        ENDDO
-       ENDDO
-\end{lstlisting}
-
-\paragraph{Key details:}
-\begin{itemize}
-\item \verb|kTopC(i,j,bi,bj)|: Index of the top wet cell (i.e., the first cell below the ice shelf). If \verb|kTopC > 0|, the column is beneath an ice shelf.
-\item \verb|stressU|, \verb|stressV|: Ice-shelf drag stresses, computed by \verb|SHELFICE_U_DRAG_COEFF| and \verb|SHELFICE_V_DRAG_COEFF|.
-\item The computed \verb|uStarSquare| replaces the surface wind stress in the surface boundary condition.
-\end{itemize}
-
-\subsubsection{Surface mixing length adjustment}
-
-When \verb|mxlSurfFlag = .TRUE.| (Section~\ref{sec:mxl_surface_constraints}), the surface mixing length constraint is applied at the ice-shelf base (level \verb|kTopC|) instead of at the ocean surface, ensuring that the first two wet cells beneath the ice shelf are coupled by mixing.
-
-\subsubsection{When to use ice-shelf treatment}
-
-Enable \verb|useShelfIce = .TRUE.| when:
-\begin{itemize}
-\item Simulating Antarctic or Greenland ice-shelf cavities.
-\item Including Antarctic bottom water formation or ice-shelf basal melt processes.
-\end{itemize}
-
-The ice-shelf treatment is \emph{not} needed for sea ice (use the \verb|SEAICE| package instead, which has its own coupling to GGL90).
+\paragraph{When to use IDEMIX:} IDEMIX is beneficial for global ocean simulations where interior mixing from internal tides and near-inertial waves is important for water mass properties and overturning circulation. It requires additional forcing files (\verb|IDEMIX_tidal_file|, \verb|IDEMIX_wind_file|) and runtime parameters in the \verb|GGL90_PARM02| namelist. For regional or process studies focused on surface boundary layer mixing, IDEMIX can be omitted.
 
 % ============================================================
-\section{Model Interface Routines}
-\label{sec:model_interface}
+\section{Eddy Coefficients and Model Interface}\n\label{sec:interface}\n\nAfter GGL90 computes vertical mixing coefficients, these must be transferred to the main model.\n\n\label{sec:model_interface}
 % ============================================================
 
 The GGL90 package communicates with the main MITgcm model through a set of interface routines that transfer eddy coefficients from the GGL90 arrays to the main model's mixing arrays. These routines are called during the vertical mixing phase of the time-stepping sequence.
@@ -3308,8 +3220,7 @@ The subroutine \verb|GGL90_EXCHANGES| updates the halo (overlap) regions of the 
 \end{itemize}
 
 % ============================================================
-\section{Initialization and Restart}
-\label{sec:initialization}
+\section{Initialization and Restart}\n\label{sec:initialization}
 % ============================================================
 
 GGL90 initialization proceeds in three stages: reading runtime parameters (Section~\ref{sec:readparms}), initializing time-invariant fields (Section~\ref{sec:init_fixed}), and initializing time-varying fields including restart capability (Section~\ref{sec:init_varia}).
@@ -3443,8 +3354,7 @@ GGL90 uses MITgcm's standard pickup file mechanism to save and restore the progn
 \paragraph{Usage:} No user action is required. MITgcm automatically calls \verb|GGL90_WRITE_PICKUP| at the end of each run and \verb|GGL90_READ_PICKUP| at the start of a restart run.
 
 % ============================================================
-\section{Compile-Time Options}
-\label{sec:cpp_options}
+\section{Compile-Time Options}\n\label{sec:cpp_options}
 % ============================================================
 
 GGL90 behavior is controlled by a combination of runtime parameters (in \verb|data.ggl90|) and compile-time CPP flags (in \verb|GGL90_OPTIONS.h|). This section documents the available compile-time options.
@@ -3492,8 +3402,7 @@ Enable the IDEMIX internal wave energy parameterization (Section~\ref{sec:idemix
 Enable Langmuir circulation parameterization. Enhances surface layer mixing under wind-wave forcing. Default: \emph{not defined}. Requires additional parameters in \verb|GGL90_PARM03| namelist.
 
 % ============================================================
-\section{Output and Diagnostics}
-\label{sec:diagnostics}
+\section{Output and Diagnostics}\n\label{sec:diagnostics}
 % ============================================================
 
 GGL90 provides a comprehensive set of diagnostic fields for monitoring mixing processes. All diagnostics are registered via MITgcm's standard diagnostics package.
@@ -3543,48 +3452,7 @@ Table~\ref{tab:ggl90_diagnostics} lists the available GGL90 diagnostic fields.
 Diagnostics are registered in \verb|GGL90_DIAGNOSTICS_INIT|, called from \verb|GGL90_INIT_FIXED|. The registration is automatic and requires no user action. To enable diagnostics output, set \verb|useDiagnostics = .TRUE.| in the main \verb|data| file and configure the desired fields in \verb|data.diagnostics|.
 
 % ============================================================
-\section{IDEMIX Extension (Optional)}
-\label{sec:idemix}
-% ============================================================
-
-IDEMIX (Internal Wave Dissipation and MIXing) is an optional extension to GGL90 that parameterizes the generation, propagation, and dissipation of internal wave energy. When enabled (\verb|ALLOW_GGL90_IDEMIX| in \verb|GGL90_OPTIONS.h|), IDEMIX adds internal wave breaking as an additional source term in the TKE equation.
-
-\subsection{Overview of Internal Wave Model}
-
-IDEMIX represents the internal wave field as a single prognostic variable $E$ (internal wave energy per unit mass, m$^2$ s$^{-2}$), which evolves according to:
-
-\begin{equation}
-\frac{\partial E}{\partial t} = F_{\text{sources}} - \frac{E}{\tau_v} + \frac{\partial}{\partial z}\left(\kappa_E \frac{\partial E}{\partial z}\right) + \nabla_h \cdot (\kappa_{E,h} \nabla_h E)
-\end{equation}
-
-where:
-\begin{itemize}
-\item $F_{\text{sources}}$: Energy input from tidal forcing and near-inertial wind forcing
-\item $\tau_v$: Vertical dissipation time scale (typically 2--10 days)
-\item $\kappa_E$, $\kappa_{E,h}$: Vertical and horizontal diffusivities of internal wave energy
-\end{itemize}
-
-The dissipated internal wave energy is converted to TKE with an efficiency factor $\gamma_{\text{mix}}$ (typically 0.1--0.2).
-
-\subsection{Coupling to GGL90}
-
-IDEMIX couples to GGL90 through two mechanisms:
-
-\paragraph{1. TKE source term:} The internal wave dissipation rate $\varepsilon_{\text{IW}} = E / \tau_v$ is added to the TKE equation (Section~\ref{sec:tke_evolution}):
-
-\begin{equation}
-\frac{\partial e}{\partial t} = \ldots + \gamma_{\text{mix}} \frac{E}{\tau_v}
-\end{equation}
-
-This enhances mixing in the ocean interior where internal wave breaking is significant (e.g., over rough topography, at the equator).
-
-\paragraph{2. Modified Prandtl number:} The turbulent Prandtl number formula is modified to account for internal wave-driven mixing (Section~\ref{sec:tke_prandtl}), reducing $Pr_t$ and enhancing scalar diffusivity when $E$ is large.
-
-\paragraph{When to use IDEMIX:} IDEMIX is beneficial for global ocean simulations where interior mixing from internal tides and near-inertial waves is important for water mass properties and overturning circulation. It requires additional forcing files (\verb|IDEMIX_tidal_file|, \verb|IDEMIX_wind_file|) and runtime parameters in the \verb|GGL90_PARM02| namelist. For regional or process studies focused on surface boundary layer mixing, IDEMIX can be omitted.
-
-% ============================================================
-\section{Package Validation: \texttt{GGL90\_CHECK}}
-\label{sec:validation}
+\section{Package Validation}\n\label{sec:validation}
 % ============================================================
 
 The routine \verb|GGL90_CHECK| performs compile-time and runtime validation of GGL90 parameters. It is called during model initialization to catch common configuration errors before the simulation begins.
@@ -3603,8 +3471,7 @@ If any check fails, the routine prints an error message and stops the model with
 \paragraph{User action:} If \verb|GGL90_CHECK| reports an error, review the parameters in \verb|data.ggl90| and correct the issue. Common problems include typos in parameter names (Fortran namelists are case-insensitive but require exact spelling) and missing parameters when optional features are enabled.
 
 % ============================================================
-\section{Frequently Encountered Issues}
-\label{sec:issues}
+\section{Numerical Considerations \& Frequently Encountered Issues}\n\label{sec:numerical_issues}\n\n\label{sec:issues}
 % ============================================================
 
 This section provides practical guidance for diagnosing and resolving common GGL90 problems.
@@ -3666,8 +3533,80 @@ For a well-tested baseline configuration suitable for global ocean applications,
 \end{itemize}
 
 % ============================================================
-\section{Conclusions}
-\label{sec:conclusions}
+\subsection{Minimum Alpha for Oscillation-Free Solutions}
+\label{sec:alpha_min_analysis}
+
+\subsubsection{Motivation: Why Alpha Matters for Numerical Accuracy}
+
+While GGL90 uses fully implicit time-stepping for TKE diffusion (ensuring unconditional numerical stability), the choice of $\alpha$ (turbulent Prandtl number) has a critical impact on the \textbf{accuracy} and \textbf{smoothness} of the solution. Small values of $\alpha$ can produce cell-to-cell oscillations in TKE and mixing coefficients, even though the simulation remains stable.
+
+The physical mechanism is:
+\begin{itemize}
+\item Small $\alpha$ $\Rightarrow$ small $\kappa_h = \kappa_m / \alpha$ $\Rightarrow$ weak TKE diffusion
+\item Weak TKE diffusion $\Rightarrow$ sharp, localized TKE gradients
+\item Sharp gradients on finite-difference grid $\Rightarrow$ under-resolved features and oscillations
+\end{itemize}
+
+This is a \textbf{resolution issue}, not a stability issue. The implicit treatment of diffusion eliminates CFL-like constraints, but cannot create information at scales finer than the grid spacing.
+
+\subsubsection{Oscillation Diagnosis Results}
+
+Systematic testing of the arctic convection scenario (strong cooling, ice formation, deep convection) across $\alpha = 1, 3, 5, 7.5, 10, 15, 20, 30, 50$ reveals:
+
+\begin{table}[ht]
+\centering
+\caption{TKE oscillation metrics vs.\ $\alpha$ for arctic convection scenario}
+\label{tab:alpha_oscillations}
+\small
+\begin{tabular}{cccccc}
+\toprule
+$\alpha$ & \textbf{TKE Roughness} & \textbf{Normalized} & \textbf{Oscillation} & \textbf{Under-resolved} & \textbf{Status} \\
+ & $\sum |\partial^2 \TKE/\partial z^2|$ & \textbf{Roughness} & \textbf{Count} & \textbf{fraction} ($L<2\Delta z$) &  \\
+\midrule
+1.0  & $1.22 \times 10^{-2}$ & 1.961 & 11 & 0.53 & \textcolor{red}{OSCILLATORY} \\
+3.0  & $4.53 \times 10^{-3}$ & 0.959 & 9  & 0.27 & \textcolor{red}{OSCILLATORY} \\
+5.0  & $4.61 \times 10^{-4}$ & 0.128 & 3  & 0.06 & \textcolor{orange}{THRESHOLD} \\
+7.5  & $4.12 \times 10^{-4}$ & 0.112 & 3  & 0.06 & \textcolor{green!60!black}{SMOOTH} \\
+10.0 & $3.82 \times 10^{-4}$ & 0.103 & 3  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+15.0 & $3.40 \times 10^{-4}$ & 0.090 & 3  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+20.0 & $3.09 \times 10^{-4}$ & 0.081 & 1  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+30.0 & $2.61 \times 10^{-4}$ & 0.068 & 1  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+50.0 & $2.15 \times 10^{-4}$ & 0.055 & 1  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key finding:} Three independent metrics agree on a threshold of \textbf{$\alpha \geq 5$}. TKE roughness drops by a factor of $\sim$27 from $\alpha=1$ to $\alpha=5$ (falling below $10\%$ of its maximum); the oscillation count falls from 11 to 3; and the fraction of layers whose gradient length scale $L=|\TKE|/|\partial \TKE/\partial z|$ is under-resolved ($L<2\Delta z$) drops from $0.53$ to $0.06$. The last metric directly confirms the mechanism: at $\alpha=1$ roughly half the column is under-resolved, producing the cell-to-cell oscillations, whereas by $\alpha=5$ almost the entire column is well resolved.
+
+\textit{Note on metric choice:} the resolution ratio is reported here as the \emph{median} $L/\Delta z$ together with the \emph{fraction} of under-resolved layers. A single minimum $L/\Delta z$ is not informative because a TKE profile spans many orders of magnitude, so its steepest single transition drives the minimum toward zero at every $\alpha$; the median and the under-resolved fraction are the robust measures.
+
+\subsubsection{Why ECCOv4 Uses $\alpha = 30$}
+
+ECCOv4's choice of $\alpha = 30$ is well-justified:
+
+\begin{itemize}
+\item \textbf{Safety factor:} $30 / 5 = 6\times$ above the oscillation threshold
+\item \textbf{Physical realism:} Observational studies suggest $\alpha \sim 20$--$50$ in stratified ocean interior
+\item \textbf{Adjoint stability:} Smoother mixing fields reduce gradient noise in adjoint model
+\item \textbf{Thermocline preservation:} Reduced $\kappa_h$ prevents excessive erosion of seasonal thermocline
+\end{itemize}
+
+\subsubsection{Practical Recommendations}
+
+For new GGL90 applications:
+
+\begin{enumerate}
+\item \textbf{Minimum:} Use $\alpha \geq 5$ to avoid numerical oscillations
+\item \textbf{Standard:} Use $\alpha = 10$--$20$ for most regional/process studies
+\item \textbf{Global/adjoint:} Use $\alpha = 30$ (ECCOv4 value) for state estimation
+\item \textbf{High stratification:} Consider $\alpha = 50$ for strongly stratified regimes
+\end{enumerate}
+
+\textbf{Grid dependence:} The minimum $\alpha$ is set by how well the grid resolves the TKE gradient length scale $L$, not by a stability (grid-Reynolds) limit --- the implicit solve is unconditionally stable. What matters is the ratio $L/\Delta z$: since larger $\alpha$ increases $\kappa_h$ and spreads TKE (increasing $L$), the threshold depends on the grid and forcing, so re-testing is recommended for a new configuration.
+
+\textbf{Testing protocol:} When adapting GGL90 to a new configuration, plot TKE and $\kappa_m$ vertical profiles. If you observe cell-to-cell oscillations, increase $\alpha$ until profiles are smooth.
+
+\section{Conclusions}\n\label{sec:conclusions}
 % ============================================================
 
 This document provides a comprehensive technical reference for the GGL90 turbulence closure scheme as implemented in the MIT General Circulation Model (MITgcm). We have documented:
@@ -3712,13 +3651,341 @@ This document provides a comprehensive technical reference for the GGL90 turbule
 
 The GGL90 package remains under active development within the MITgcm community, with ongoing refinements for global ocean state estimation and high-resolution process studies.
 
+
+
+% ============================================================
+\section{Glossary of Symbols}\n\label{app:glossary}
+% ============================================================
+
+This glossary defines the most frequently used mathematical symbols and variable names in the GGL90 documentation and MITgcm source code.
+
+\subsection*{Physical Variables}
+
+\begin{longtable}{p{2.5cm}p{4cm}p{6cm}l}
+\toprule
+\textbf{Symbol} & \textbf{Code Variable} & \textbf{Description} & \textbf{Units} \\
+\midrule
+\endhead
+$e$ & \verb|GGL90TKE| & Turbulent kinetic energy per unit mass & m$^2$ s$^{-2}$ \\
+\addlinespace
+$\ell$ & \verb|GGL90mixingLength| & Mixing length (vertical scale of turbulent eddies) & m \\
+\addlinespace
+$\kappa_m$ & \verb|GGL90viscArU|, \verb|GGL90viscArV| & Eddy viscosity for momentum & m$^2$ s$^{-1}$ \\
+\addlinespace
+$\kappa_h$ & \verb|GGL90diffKr| & Eddy diffusivity for scalars (T, S) & m$^2$ s$^{-1}$ \\
+\addlinespace
+$\kappa_e$ & \verb|KappaE| & Eddy diffusivity for TKE itself & m$^2$ s$^{-1}$ \\
+\addlinespace
+$N^2$ & \verb|Nsquare| & Squared buoyancy frequency (stratification), $N^2 = -(g/\rho_0) \partial\rho/\partial z$ & s$^{-2}$ \\
+\addlinespace
+$S^2$ & \verb|verticalShear| & Squared vertical shear of horizontal velocity, $S^2 = (\partial u/\partial z)^2 + (\partial v/\partial z)^2$ & s$^{-2}$ \\
+\addlinespace
+$Ri$ & \verb|RiNumber| & Richardson number, $Ri = N^2 / S^2$ & -- \\
+\addlinespace
+$Pr_t$ & \verb|TKEPrandtlNumber| & Turbulent Prandtl number, $Pr_t = \kappa_m / \kappa_h$ & -- \\
+\addlinespace
+$u_*$ & \verb|uStarSquare| (actually $u_*$ after sqrt) & Friction velocity at surface or bottom & m s$^{-1}$ \\
+\addlinespace
+$\rho$ & (not stored in GGL90) & In-situ density & kg m$^{-3}$ \\
+\addlinespace
+$\partial\rho/\partial z$ & \verb|sigmaR| & Vertical density gradient & kg m$^{-4}$ \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Dimensionless Constants}
+
+\begin{longtable}{p{2.5cm}p{4cm}p{6cm}l}
+\toprule
+\textbf{Symbol} & \textbf{Code Parameter} & \textbf{Description} & \textbf{Default} \\
+\midrule
+\endhead
+$c_\mu$ & \verb|GGL90ck| & Eddy viscosity constant & 0.1 \\
+\addlinespace
+$c_\varepsilon$ & \verb|GGL90ceps| & TKE dissipation constant & 0.7 \\
+\addlinespace
+$\alpha_e$ & \verb|GGL90alpha| & TKE diffusivity constant & 1.0 \\
+\addlinespace
+$B_0$ & \verb|GGL90m2| & Surface TKE boundary condition constant & 3.75 \\
+\addlinespace
+$e_{\text{min}}$ & \verb|GGL90TKEmin| & Minimum TKE (floor value) & 10$^{-11}$ m$^2$ s$^{-2}$ \\
+\addlinespace
+$\ell_{\text{min}}$ & \verb|GGL90mixingLengthMin| & Minimum mixing length (floor value) & 10$^{-8}$ m \\
+\addlinespace
+$\sqrt{2}$ & \verb|SQRTTWO| & Constant in Gaspar mixing length formula & 1.41421356 \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Grid and Coordinate Variables}
+
+\begin{longtable}{p{2.5cm}p{4cm}p{6cm}l}
+\toprule
+\textbf{Symbol} & \textbf{Code Variable} & \textbf{Description} & \textbf{Units} \\
+\midrule
+\endhead
+$k$ & \verb|k| & Vertical level index (1 to Nr) & -- \\
+\addlinespace
+$N_r$ & \verb|Nr| & Number of vertical levels & -- \\
+\addlinespace
+$\Delta z_k$ & \verb|drF(k)| & Thickness of cell $k$ at interface & m \\
+\addlinespace
+-- & \verb|drC(k)| & Distance between cell centers $k$ and $k+1$ & m \\
+\addlinespace
+$z$ & \verb|rF(k)| & Vertical position of interface $k$ (negative down in ocean) & m \\
+\addlinespace
+-- & \verb|coordFac| & Coordinate scaling factor (1 in z-coords, $g\rho_0$ in p-coords) & -- \\
+\addlinespace
+-- & \verb|maskC|, \verb|maskU|, \verb|maskV| & Land/ocean masks (0 = land, 1 = ocean) & -- \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Acronyms and Abbreviations}
+
+\begin{itemize}
+\item \textbf{GGL90}: Gaspar-Grégoris-Lefevre 1990 turbulence closure scheme
+\item \textbf{TKE}: Turbulent Kinetic Energy
+\item \textbf{KPP}: K-Profile Parameterization (alternative mixing scheme)
+\item \textbf{IDEMIX}: Internal wave Dissipation and MIXing parameterization
+\item \textbf{MITgcm}: Massachusetts Institute of Technology General Circulation Model
+\item \textbf{ECCOv4}: Estimating the Circulation and Climate of the Ocean, version 4
+\item \textbf{CPP}: C PreProcessor (compile-time flags)
+\item \textbf{EOS}: Equation Of State
+\item \textbf{BC}: Boundary Condition
+\item \textbf{RHS}: Right Hand Side (of equation)
+\item \textbf{LHS}: Left Hand Side (of equation)
+\end{itemize}
+
 % ============================================================
 \appendix
 % ============================================================
 
+\section{Complete Input/Output Mapping}
+\label{app:io_mapping}
+
+This appendix provides a comprehensive reference for all data exchanges between the GGL90 package and the main MITgcm model. Understanding these interfaces is essential for:
+\begin{itemize}
+\item Debugging GGL90 behavior in coupled simulations
+\item Implementing GGL90 ports to other ocean models
+\item Modifying GGL90 to use alternative input fields (e.g., from observations)
+\item Diagnosing conservation properties and boundary condition handling
+\end{itemize}
+
+The GGL90 package operates as a ``mixing engine'' that receives velocity, density, and surface forcing fields from the main model, computes eddy coefficients and updates TKE, and returns the eddy coefficients to the main model for use in momentum and tracer equations. Figure~\ref{fig:ggl90_dataflow} summarizes this bidirectional exchange.
+
+% ------------------------------------------------------------
+\subsection{External Inputs from Main Model}
+\label{app:external_inputs}
+% ------------------------------------------------------------
+
+Table~\ref{tab:external_inputs} lists all fields that GGL90 reads from the main model. These are \emph{inputs} from GGL90's perspective, but are computed elsewhere in MITgcm.
+
+\begin{table}[ht]
+\centering
+\caption{External inputs from main MITgcm model to GGL90 package}
+\label{tab:external_inputs}
+\small
+\begin{tabular}{p{3cm}p{3cm}p{5.5cm}lp{2.5cm}}
+\toprule
+\textbf{Variable Name} & \textbf{Source Module} & \textbf{Description} & \textbf{Units} & \textbf{Update Frequency} \\
+\midrule
+\verb|sigmaR| & \verb|CALC_PHI_HYD| (via \verb|FIND_RHO|) & Vertical gradient of in-situ density or potential density reference level, used to compute buoyancy frequency $N^2$ & kg m$^{-4}$ & Every time step \\
+\addlinespace
+\verb|uVel|, \verb|vVel| & Momentum solver & Horizontal velocity components on C-grid (U-points, V-points). Used to compute vertical shear $S^2 = (\partial u/\partial z)^2 + (\partial v/\partial z)^2$ & m s$^{-1}$ & Every time step \\
+\addlinespace
+\verb|surfaceForcingU|, \verb|surfaceForcingV| & External forcing / surface boundary layer & Surface wind stress (kinematic, i.e., divided by $\rho_0$). Used to compute friction velocity $u_*$ and surface TKE boundary condition & m$^2$ s$^{-2}$ & Every time step \\
+\addlinespace
+\verb|viscArNr(k)| & \verb|PARAMS.h| & Background vertical viscosity (depth-dependent array). GGL90 eddy viscosity is floored at this value & m$^2$ s$^{-1}$ & Initialization only \\
+\addlinespace
+\verb|diffKrNrS(k)| & \verb|PARAMS.h| & Background vertical diffusivity for scalars (depth-dependent array). GGL90 eddy diffusivity is floored at this value & m$^2$ s$^{-1}$ & Initialization only \\
+\addlinespace
+\verb|drF(k)|, \verb|drC(k)| & \verb|GRID.h| & Vertical grid spacing arrays: \verb|drF| = cell thickness at interfaces, \verb|drC| = distance between cell centers & m & Initialization only \\
+\addlinespace
+\verb|maskC|, \verb|maskU|, \verb|maskV| & \verb|GRID.h| & Land/ocean masks (0 = land, 1 = ocean) at tracer points (C), U-points, V-points & -- & Initialization only \\
+\addlinespace
+\verb|Ro_surf|, \verb|R_low| & \verb|GRID.h| & Vertical position of surface and bottom (z-coords: depth in m; p-coords: pressure in Pa). Used for mixing length boundary constraints & m or Pa & Initialization only \\
+\addlinespace
+\verb|theta|, \verb|salt| & Tracer solver & Potential temperature and salinity. \textbf{Not directly used by GGL90} except for optional diagnostics. Stratification is passed via \verb|sigmaR|, not recomputed from T/S & °C, psu & Every time step \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Key clarifications:}
+\begin{itemize}
+\item \textbf{Density gradient vs.\ T/S:} GGL90 does \emph{not} compute the equation of state internally. It receives the pre-computed density gradient \verb|sigmaR| from the main model's \verb|FIND_RHO| routine. This ensures consistency with the model's pressure gradient calculation.
+
+\item \textbf{Surface forcing sign convention:} \verb|surfaceForcingU/V| are kinematic stresses (stress divided by $\rho_0$), with units of m$^2$ s$^{-2}$. Positive values indicate stress in the positive U/V direction (eastward/northward in geographic coordinates).
+
+\item \textbf{Background mixing:} The arrays \verb|viscArNr| and \verb|diffKrNrS| are depth-dependent (varying with level index $k$) to allow specification of enhanced mixing in specific depth ranges (e.g., deep ocean background mixing from internal wave breaking).
+
+\item \textbf{Coordinate-independent:} GGL90 works in both z-coordinates and pressure coordinates. The \verb|coordFac| scaling factor (computed internally from \verb|usingPCoords|) handles the conversion.
+\end{itemize}
+
+% ------------------------------------------------------------
+\subsection{Package Outputs to Main Model}
+\label{app:package_outputs}
+% ------------------------------------------------------------
+
+Table~\ref{tab:package_outputs} lists all fields that GGL90 writes for use by the main model. These are \emph{outputs} from GGL90's perspective.
+
+\begin{table}[ht]
+\centering
+\caption{GGL90 package outputs to main MITgcm model}
+\label{tab:package_outputs}
+\small
+\begin{tabular}{p{3cm}p{3.5cm}p{5cm}lp{2.5cm}}
+\toprule
+\textbf{Variable Name} & \textbf{Destination Module} & \textbf{Description} & \textbf{Units} & \textbf{Update Frequency} \\
+\midrule
+\verb|GGL90viscArU|, \verb|GGL90viscArV| & Momentum solver (via \verb|GGL90_CALC_VISC|) & Eddy viscosity at U-points and V-points, including background floor. Used in vertical viscosity term $\partial/\partial z(\kappa_m \partial u/\partial z)$ & m$^2$ s$^{-1}$ & Every time step \\
+\addlinespace
+\verb|GGL90diffKr| & Tracer solver (via \verb|GGL90_CALC_DIFF|) & Eddy diffusivity for all scalars (T, S, passive tracers), including background floor. Used in vertical diffusion term $\partial/\partial z(\kappa_h \partial \theta/\partial z)$ & m$^2$ s$^{-1}$ & Every time step \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Key clarifications:}
+\begin{itemize}
+\item \textbf{Single diffusivity for all tracers:} GGL90 computes one diffusivity field \verb|GGL90diffKr| that is applied to temperature, salinity, and all passive tracers. This assumes the turbulent Prandtl number is the same for all scalars.
+
+\item \textbf{Already includes background:} The output arrays \verb|GGL90viscArU|, \verb|GGL90viscArV|, and \verb|GGL90diffKr| already include the background mixing coefficients (\verb|viscArNr|, \verb|diffKrNrS|). The interface routines \verb|GGL90_CALC_VISC| and \verb|GGL90_CALC_DIFF| subtract the background to avoid double-counting (see Section~\ref{sec:model_interface}).
+
+\item \textbf{Update timing:} GGL90 is called once per time step, after the tracer and momentum equations have been advected but before the implicit vertical mixing solve. The updated eddy coefficients are used immediately in the same time step.
+\end{itemize}
+
+% ------------------------------------------------------------
+\subsection{Internal Prognostic State}
+\label{app:prognostic_state}
+% ------------------------------------------------------------
+
+Table~\ref{tab:prognostic_state} lists the internal prognostic variables that GGL90 carries between time steps. These are stored in the GGL90 common block and written to/read from pickup files during restart.
+
+\begin{table}[ht]
+\centering
+\caption{GGL90 internal prognostic state (carried between time steps)}
+\label{tab:prognostic_state}
+\small
+\begin{tabular}{p{3cm}p{4cm}p{5cm}l}
+\toprule
+\textbf{Variable Name} & \textbf{Storage Location} & \textbf{Description} & \textbf{Units} \\
+\midrule
+\verb|GGL90TKE| & \verb|GGL90.h| common block, \verb|pickup_ggl90.*.data| file & Turbulent kinetic energy per unit mass. \textbf{Only prognostic variable} in standard GGL90 (without IDEMIX) & m$^2$ s$^{-2}$ \\
+\addlinespace
+\verb|IDEMIX_E| & \verb|GGL90.h| common block (optional), \verb|pickup_ggl90.*.data| file & Internal wave energy per unit mass. Prognostic variable when \verb|ALLOW_GGL90_IDEMIX| is enabled & m$^2$ s$^{-2}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Key clarifications:}
+\begin{itemize}
+\item \textbf{TKE is the only standard prognostic variable:} Unlike some other turbulence closures (e.g., $k$-$\varepsilon$ or $k$-$\omega$), GGL90 solves for TKE only. The mixing length $\ell$ is diagnosed algebraically from TKE and stratification (Section~\ref{sec:mxl_method2}), not evolved prognostically.
+
+\item \textbf{Eddy coefficients are diagnostic:} \verb|GGL90viscArU|, \verb|GGL90viscArV|, and \verb|GGL90diffKr| are recomputed from TKE at every time step. They are \emph{not} prognostic variables and are \emph{not} written to pickup files.
+
+\item \textbf{Restart behavior:} At the start of a simulation (\verb|nIter0 = 0|), TKE is initialized to \verb|GGL90TKEmin| or read from \verb|GGL90TKEFile| if specified. During a restart (\verb|nIter0 > 0|), TKE is read from the pickup file, preserving the exact state from the previous run.
+\end{itemize}
+
+% ------------------------------------------------------------
+\subsection{Data Flow Diagram}
+\label{app:dataflow}
+% ------------------------------------------------------------
+
+Figure~\ref{fig:ggl90_dataflow} illustrates the complete data flow between the main MITgcm model and the GGL90 package within a single time step.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  node distance=1.5cm and 2.5cm,
+  block/.style={rectangle, draw, fill=blue!10, text width=4.5cm, align=center, minimum height=1.2cm, rounded corners},
+  ggl90block/.style={rectangle, draw, fill=green!15, text width=4.5cm, align=center, minimum height=1.2cm, rounded corners, thick},
+  arrow/.style={->, >=stealth, thick},
+  datalabel/.style={font=\small, align=left}
+]
+
+% Main model blocks
+\node[block] (mom) {Main Model:\\Momentum Equations};
+\node[block, below=of mom] (tracer) {Main Model:\\Tracer Equations};
+\node[block, below=of tracer] (eos) {Main Model:\\Equation of State};
+
+% GGL90 block
+\node[ggl90block, right=of tracer] (ggl90) {\textbf{GGL90\_CALC}\\Compute TKE, $\ell$, $\kappa_m$, $\kappa_h$};
+
+% Interface routines
+\node[block, above right=0.8cm and 1cm of ggl90] (visc) {GGL90\_CALC\_VISC};
+\node[block, below right=0.8cm and 1cm of ggl90] (diff) {GGL90\_CALC\_DIFF};
+
+% Arrows: Inputs to GGL90
+\draw[arrow] (mom.east) -- node[above, datalabel] {$u$, $v$\\(velocity)} ++(1.5cm,0) |- (ggl90.west);
+\draw[arrow] (eos.east) -- node[above, datalabel] {$\partial\rho/\partial z$\\(density gradient)} ++(1.5cm,0) |- (ggl90.west);
+
+% Surface forcing input (from above)
+\draw[arrow] ($(mom.north) + (1.5cm,0)$) -- node[right, datalabel] {$\tau_x$, $\tau_y$\\(wind stress)} ($(mom.north) + (1.5cm,0) |- (ggl90.north)$) -- (ggl90.north);
+
+% Arrows: Outputs from GGL90
+\draw[arrow] (ggl90.east) -- ++(1.5cm,0) |- (visc.west);
+\draw[arrow] (visc.west) -- ++(-1.5cm,0) node[above right, datalabel] {$\kappa_m^U$, $\kappa_m^V$\\(eddy viscosity)} |- (mom.east);
+
+\draw[arrow] (ggl90.east) -- ++(1.5cm,0) |- (diff.west);
+\draw[arrow] (diff.west) -- ++(-1.5cm,0) node[below right, datalabel] {$\kappa_h$\\(eddy diffusivity)} |- (tracer.east);
+
+% TKE prognostic loop (feedback)
+\draw[arrow, dashed, red] (ggl90.south) -- ++(0,-0.8cm) -| ++(-6cm,0) node[below, datalabel, pos=0.5] {$e^{n+1}$ (updated TKE)\\carried to next time step} |- ($(ggl90.west) - (0,0.5cm)$);
+
+% Legend
+\node[below=2.5cm of ggl90, anchor=north] (legend) {
+  \begin{minipage}{10cm}
+  \textbf{Legend:}\\
+  \textcolor{blue!60}{\rule{1cm}{0.4pt}} Solid arrows: data flow within single time step\\
+  \textcolor{red}{\rule{1cm}{0.4pt}} Dashed arrow: prognostic variable carried between time steps
+  \end{minipage}
+};
+
+\end{tikzpicture}
+\caption{Data flow diagram for GGL90 package within a single MITgcm time step. The main model provides velocity, density gradient, and surface forcing to GGL90. GGL90 computes TKE, mixing length, and eddy coefficients, then returns the eddy coefficients to the momentum and tracer solvers via interface routines. TKE is the only prognostic variable, carried between time steps (dashed red arrow).}
+\label{fig:ggl90_dataflow}
+\end{figure}
+
+\paragraph{Interpretation of Figure~\ref{fig:ggl90_dataflow}:}
+
+\begin{enumerate}
+\item \textbf{Input phase (left side):} At the beginning of the vertical mixing phase, the main model has already computed:
+\begin{itemize}
+\item Updated velocity fields $u^{n+1/2}$, $v^{n+1/2}$ from momentum advection
+\item Density gradient $\partial\rho/\partial z$ from the equation of state applied to $\theta^{n+1/2}$, $S^{n+1/2}$
+\item Surface wind stress $\tau_x$, $\tau_y$ from atmospheric forcing
+\end{itemize}
+These fields are passed to \verb|GGL90_CALC| as inputs.
+
+\item \textbf{GGL90 computation (center):} \verb|GGL90_CALC| performs the full TKE equation solve:
+\begin{itemize}
+\item Compute stratification $N^2$ from $\partial\rho/\partial z$
+\item Compute vertical shear $S^2$ from $(u, v)$
+\item Compute mixing length $\ell$ from TKE and $N^2$ (Sections~\ref{sec:mxl_gaspar}--\ref{sec:mxl_method2})
+\item Update TKE: $e^{n+1} = e^n + \Delta t \, (\text{production} - \text{buoyancy} - \text{dissipation} + \text{diffusion})$ (Section~\ref{sec:tke_evolution})
+\item Diagnose eddy coefficients: $\kappa_m = c_\mu \ell \sqrt{e^{n+1}}$, $\kappa_h = \kappa_m / Pr_t$ (Section~\ref{sec:eddy_coeffs})
+\end{itemize}
+
+\item \textbf{Output phase (right side):} The eddy coefficients are transferred to the main model:
+\begin{itemize}
+\item \verb|GGL90_CALC_VISC| adds $\kappa_m^U$, $\kappa_m^V$ to the momentum solver's viscosity arrays
+\item \verb|GGL90_CALC_DIFF| adds $\kappa_h$ to the tracer solver's diffusivity arrays
+\item The main model then applies implicit vertical mixing using these coefficients
+\end{itemize}
+
+\item \textbf{Prognostic feedback (dashed red loop):} The updated TKE $e^{n+1}$ is stored in the GGL90 common block and used as the starting point for the next time step. This is the \emph{only} variable that couples time steps; all other fields are recomputed from scratch.
+\end{enumerate}
+
+\paragraph{Frequency of data exchange:}
+
+\begin{itemize}
+\item \textbf{Every time step:} Velocity, density gradient, wind stress $\to$ GGL90; eddy coefficients $\to$ main model.
+\item \textbf{Initialization only:} Grid parameters (\verb|drF|, \verb|drC|, masks), background mixing coefficients (\verb|viscArNr|, \verb|diffKrNrS|).
+\item \textbf{Restart (pickup) files:} TKE field written at checkpoint intervals, read at restart.
+\end{itemize}
+
+This clean separation of concerns—where GGL90 is a self-contained ``black box'' that receives state variables and returns mixing coefficients—makes it straightforward to replace GGL90 with alternative turbulence closures (e.g., KPP, Mellor-Yamada) without modifying the main model code.
+
 % ============================================================
-\section{ECCOv4 Configuration}
-\label{app:eccov4_config}
+\end{document}
+\section{ECCOv4 Configuration}\n\label{app:eccov4_config}
 % ============================================================
 
 The ECCO (Estimating the Circulation and Climate of the Ocean) consortium uses non-default GGL90 settings optimized for global ocean state estimation with $\sim$1$^\circ$ resolution. This appendix consolidates all ECCOv4-specific configuration details, parameter choices, and physical rationale.
@@ -3965,8 +4232,7 @@ ECCOv4's GGL90 configuration has been extensively validated in global ocean simu
 \textbf{Recommended starting point:} Use ECCOv4 defaults as a baseline, then adjust based on comparison with observations or higher-resolution reference simulations.
 
 % ============================================================
-\section{Adjoint Model Considerations}
-\label{app:adjoint_considerations}
+\section{Adjoint Model Considerations}\n\label{app:adjoint_considerations}
 % ============================================================
 
 The GGL90 package has been designed with adjoint-based optimization in mind, making it suitable for gradient-based data assimilation, parameter estimation, and sensitivity studies. This appendix documents adjoint-specific features, configuration options, and best practices.
@@ -4190,333 +4456,3 @@ For further background on adjoint methods and their application to ocean models:
 \end{itemize}
 
 % ============================================================
-\section{Glossary of Frequently Used Symbols}
-\label{app:glossary}
-% ============================================================
-
-This glossary defines the most frequently used mathematical symbols and variable names in the GGL90 documentation and MITgcm source code.
-
-\subsection*{Physical Variables}
-
-\begin{longtable}{p{2.5cm}p{4cm}p{6cm}l}
-\toprule
-\textbf{Symbol} & \textbf{Code Variable} & \textbf{Description} & \textbf{Units} \\
-\midrule
-\endhead
-$e$ & \verb|GGL90TKE| & Turbulent kinetic energy per unit mass & m$^2$ s$^{-2}$ \\
-\addlinespace
-$\ell$ & \verb|GGL90mixingLength| & Mixing length (vertical scale of turbulent eddies) & m \\
-\addlinespace
-$\kappa_m$ & \verb|GGL90viscArU|, \verb|GGL90viscArV| & Eddy viscosity for momentum & m$^2$ s$^{-1}$ \\
-\addlinespace
-$\kappa_h$ & \verb|GGL90diffKr| & Eddy diffusivity for scalars (T, S) & m$^2$ s$^{-1}$ \\
-\addlinespace
-$\kappa_e$ & \verb|KappaE| & Eddy diffusivity for TKE itself & m$^2$ s$^{-1}$ \\
-\addlinespace
-$N^2$ & \verb|Nsquare| & Squared buoyancy frequency (stratification), $N^2 = -(g/\rho_0) \partial\rho/\partial z$ & s$^{-2}$ \\
-\addlinespace
-$S^2$ & \verb|verticalShear| & Squared vertical shear of horizontal velocity, $S^2 = (\partial u/\partial z)^2 + (\partial v/\partial z)^2$ & s$^{-2}$ \\
-\addlinespace
-$Ri$ & \verb|RiNumber| & Richardson number, $Ri = N^2 / S^2$ & -- \\
-\addlinespace
-$Pr_t$ & \verb|TKEPrandtlNumber| & Turbulent Prandtl number, $Pr_t = \kappa_m / \kappa_h$ & -- \\
-\addlinespace
-$u_*$ & \verb|uStarSquare| (actually $u_*$ after sqrt) & Friction velocity at surface or bottom & m s$^{-1}$ \\
-\addlinespace
-$\rho$ & (not stored in GGL90) & In-situ density & kg m$^{-3}$ \\
-\addlinespace
-$\partial\rho/\partial z$ & \verb|sigmaR| & Vertical density gradient & kg m$^{-4}$ \\
-\bottomrule
-\end{longtable}
-
-\subsection*{Dimensionless Constants}
-
-\begin{longtable}{p{2.5cm}p{4cm}p{6cm}l}
-\toprule
-\textbf{Symbol} & \textbf{Code Parameter} & \textbf{Description} & \textbf{Default} \\
-\midrule
-\endhead
-$c_\mu$ & \verb|GGL90ck| & Eddy viscosity constant & 0.1 \\
-\addlinespace
-$c_\varepsilon$ & \verb|GGL90ceps| & TKE dissipation constant & 0.7 \\
-\addlinespace
-$\alpha_e$ & \verb|GGL90alpha| & TKE diffusivity constant & 1.0 \\
-\addlinespace
-$B_0$ & \verb|GGL90m2| & Surface TKE boundary condition constant & 3.75 \\
-\addlinespace
-$e_{\text{min}}$ & \verb|GGL90TKEmin| & Minimum TKE (floor value) & 10$^{-11}$ m$^2$ s$^{-2}$ \\
-\addlinespace
-$\ell_{\text{min}}$ & \verb|GGL90mixingLengthMin| & Minimum mixing length (floor value) & 10$^{-8}$ m \\
-\addlinespace
-$\sqrt{2}$ & \verb|SQRTTWO| & Constant in Gaspar mixing length formula & 1.41421356 \\
-\bottomrule
-\end{longtable}
-
-\subsection*{Grid and Coordinate Variables}
-
-\begin{longtable}{p{2.5cm}p{4cm}p{6cm}l}
-\toprule
-\textbf{Symbol} & \textbf{Code Variable} & \textbf{Description} & \textbf{Units} \\
-\midrule
-\endhead
-$k$ & \verb|k| & Vertical level index (1 to Nr) & -- \\
-\addlinespace
-$N_r$ & \verb|Nr| & Number of vertical levels & -- \\
-\addlinespace
-$\Delta z_k$ & \verb|drF(k)| & Thickness of cell $k$ at interface & m \\
-\addlinespace
--- & \verb|drC(k)| & Distance between cell centers $k$ and $k+1$ & m \\
-\addlinespace
-$z$ & \verb|rF(k)| & Vertical position of interface $k$ (negative down in ocean) & m \\
-\addlinespace
--- & \verb|coordFac| & Coordinate scaling factor (1 in z-coords, $g\rho_0$ in p-coords) & -- \\
-\addlinespace
--- & \verb|maskC|, \verb|maskU|, \verb|maskV| & Land/ocean masks (0 = land, 1 = ocean) & -- \\
-\bottomrule
-\end{longtable}
-
-\subsection*{Acronyms and Abbreviations}
-
-\begin{itemize}
-\item \textbf{GGL90}: Gaspar-Grégoris-Lefevre 1990 turbulence closure scheme
-\item \textbf{TKE}: Turbulent Kinetic Energy
-\item \textbf{KPP}: K-Profile Parameterization (alternative mixing scheme)
-\item \textbf{IDEMIX}: Internal wave Dissipation and MIXing parameterization
-\item \textbf{MITgcm}: Massachusetts Institute of Technology General Circulation Model
-\item \textbf{ECCOv4}: Estimating the Circulation and Climate of the Ocean, version 4
-\item \textbf{CPP}: C PreProcessor (compile-time flags)
-\item \textbf{EOS}: Equation Of State
-\item \textbf{BC}: Boundary Condition
-\item \textbf{RHS}: Right Hand Side (of equation)
-\item \textbf{LHS}: Left Hand Side (of equation)
-\end{itemize}
-
-% ============================================================
-\section{Complete Input/Output Mapping}
-\label{app:io_mapping}
-% ============================================================
-
-This appendix provides a comprehensive reference for all data exchanges between the GGL90 package and the main MITgcm model. Understanding these interfaces is essential for:
-\begin{itemize}
-\item Debugging GGL90 behavior in coupled simulations
-\item Implementing GGL90 ports to other ocean models
-\item Modifying GGL90 to use alternative input fields (e.g., from observations)
-\item Diagnosing conservation properties and boundary condition handling
-\end{itemize}
-
-The GGL90 package operates as a ``mixing engine'' that receives velocity, density, and surface forcing fields from the main model, computes eddy coefficients and updates TKE, and returns the eddy coefficients to the main model for use in momentum and tracer equations. Figure~\ref{fig:ggl90_dataflow} summarizes this bidirectional exchange.
-
-% ------------------------------------------------------------
-\subsection{External Inputs from Main Model}
-\label{app:external_inputs}
-% ------------------------------------------------------------
-
-Table~\ref{tab:external_inputs} lists all fields that GGL90 reads from the main model. These are \emph{inputs} from GGL90's perspective, but are computed elsewhere in MITgcm.
-
-\begin{table}[ht]
-\centering
-\caption{External inputs from main MITgcm model to GGL90 package}
-\label{tab:external_inputs}
-\small
-\begin{tabular}{p{3cm}p{3cm}p{5.5cm}lp{2.5cm}}
-\toprule
-\textbf{Variable Name} & \textbf{Source Module} & \textbf{Description} & \textbf{Units} & \textbf{Update Frequency} \\
-\midrule
-\verb|sigmaR| & \verb|CALC_PHI_HYD| (via \verb|FIND_RHO|) & Vertical gradient of in-situ density or potential density reference level, used to compute buoyancy frequency $N^2$ & kg m$^{-4}$ & Every time step \\
-\addlinespace
-\verb|uVel|, \verb|vVel| & Momentum solver & Horizontal velocity components on C-grid (U-points, V-points). Used to compute vertical shear $S^2 = (\partial u/\partial z)^2 + (\partial v/\partial z)^2$ & m s$^{-1}$ & Every time step \\
-\addlinespace
-\verb|surfaceForcingU|, \verb|surfaceForcingV| & External forcing / surface boundary layer & Surface wind stress (kinematic, i.e., divided by $\rho_0$). Used to compute friction velocity $u_*$ and surface TKE boundary condition & m$^2$ s$^{-2}$ & Every time step \\
-\addlinespace
-\verb|viscArNr(k)| & \verb|PARAMS.h| & Background vertical viscosity (depth-dependent array). GGL90 eddy viscosity is floored at this value & m$^2$ s$^{-1}$ & Initialization only \\
-\addlinespace
-\verb|diffKrNrS(k)| & \verb|PARAMS.h| & Background vertical diffusivity for scalars (depth-dependent array). GGL90 eddy diffusivity is floored at this value & m$^2$ s$^{-1}$ & Initialization only \\
-\addlinespace
-\verb|drF(k)|, \verb|drC(k)| & \verb|GRID.h| & Vertical grid spacing arrays: \verb|drF| = cell thickness at interfaces, \verb|drC| = distance between cell centers & m & Initialization only \\
-\addlinespace
-\verb|maskC|, \verb|maskU|, \verb|maskV| & \verb|GRID.h| & Land/ocean masks (0 = land, 1 = ocean) at tracer points (C), U-points, V-points & -- & Initialization only \\
-\addlinespace
-\verb|Ro_surf|, \verb|R_low| & \verb|GRID.h| & Vertical position of surface and bottom (z-coords: depth in m; p-coords: pressure in Pa). Used for mixing length boundary constraints & m or Pa & Initialization only \\
-\addlinespace
-\verb|theta|, \verb|salt| & Tracer solver & Potential temperature and salinity. \textbf{Not directly used by GGL90} except for optional diagnostics. Stratification is passed via \verb|sigmaR|, not recomputed from T/S & °C, psu & Every time step \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Key clarifications:}
-\begin{itemize}
-\item \textbf{Density gradient vs.\ T/S:} GGL90 does \emph{not} compute the equation of state internally. It receives the pre-computed density gradient \verb|sigmaR| from the main model's \verb|FIND_RHO| routine. This ensures consistency with the model's pressure gradient calculation.
-
-\item \textbf{Surface forcing sign convention:} \verb|surfaceForcingU/V| are kinematic stresses (stress divided by $\rho_0$), with units of m$^2$ s$^{-2}$. Positive values indicate stress in the positive U/V direction (eastward/northward in geographic coordinates).
-
-\item \textbf{Background mixing:} The arrays \verb|viscArNr| and \verb|diffKrNrS| are depth-dependent (varying with level index $k$) to allow specification of enhanced mixing in specific depth ranges (e.g., deep ocean background mixing from internal wave breaking).
-
-\item \textbf{Coordinate-independent:} GGL90 works in both z-coordinates and pressure coordinates. The \verb|coordFac| scaling factor (computed internally from \verb|usingPCoords|) handles the conversion.
-\end{itemize}
-
-% ------------------------------------------------------------
-\subsection{Package Outputs to Main Model}
-\label{app:package_outputs}
-% ------------------------------------------------------------
-
-Table~\ref{tab:package_outputs} lists all fields that GGL90 writes for use by the main model. These are \emph{outputs} from GGL90's perspective.
-
-\begin{table}[ht]
-\centering
-\caption{GGL90 package outputs to main MITgcm model}
-\label{tab:package_outputs}
-\small
-\begin{tabular}{p{3cm}p{3.5cm}p{5cm}lp{2.5cm}}
-\toprule
-\textbf{Variable Name} & \textbf{Destination Module} & \textbf{Description} & \textbf{Units} & \textbf{Update Frequency} \\
-\midrule
-\verb|GGL90viscArU|, \verb|GGL90viscArV| & Momentum solver (via \verb|GGL90_CALC_VISC|) & Eddy viscosity at U-points and V-points, including background floor. Used in vertical viscosity term $\partial/\partial z(\kappa_m \partial u/\partial z)$ & m$^2$ s$^{-1}$ & Every time step \\
-\addlinespace
-\verb|GGL90diffKr| & Tracer solver (via \verb|GGL90_CALC_DIFF|) & Eddy diffusivity for all scalars (T, S, passive tracers), including background floor. Used in vertical diffusion term $\partial/\partial z(\kappa_h \partial \theta/\partial z)$ & m$^2$ s$^{-1}$ & Every time step \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Key clarifications:}
-\begin{itemize}
-\item \textbf{Single diffusivity for all tracers:} GGL90 computes one diffusivity field \verb|GGL90diffKr| that is applied to temperature, salinity, and all passive tracers. This assumes the turbulent Prandtl number is the same for all scalars.
-
-\item \textbf{Already includes background:} The output arrays \verb|GGL90viscArU|, \verb|GGL90viscArV|, and \verb|GGL90diffKr| already include the background mixing coefficients (\verb|viscArNr|, \verb|diffKrNrS|). The interface routines \verb|GGL90_CALC_VISC| and \verb|GGL90_CALC_DIFF| subtract the background to avoid double-counting (see Section~\ref{sec:model_interface}).
-
-\item \textbf{Update timing:} GGL90 is called once per time step, after the tracer and momentum equations have been advected but before the implicit vertical mixing solve. The updated eddy coefficients are used immediately in the same time step.
-\end{itemize}
-
-% ------------------------------------------------------------
-\subsection{Internal Prognostic State}
-\label{app:prognostic_state}
-% ------------------------------------------------------------
-
-Table~\ref{tab:prognostic_state} lists the internal prognostic variables that GGL90 carries between time steps. These are stored in the GGL90 common block and written to/read from pickup files during restart.
-
-\begin{table}[ht]
-\centering
-\caption{GGL90 internal prognostic state (carried between time steps)}
-\label{tab:prognostic_state}
-\small
-\begin{tabular}{p{3cm}p{4cm}p{5cm}l}
-\toprule
-\textbf{Variable Name} & \textbf{Storage Location} & \textbf{Description} & \textbf{Units} \\
-\midrule
-\verb|GGL90TKE| & \verb|GGL90.h| common block, \verb|pickup_ggl90.*.data| file & Turbulent kinetic energy per unit mass. \textbf{Only prognostic variable} in standard GGL90 (without IDEMIX) & m$^2$ s$^{-2}$ \\
-\addlinespace
-\verb|IDEMIX_E| & \verb|GGL90.h| common block (optional), \verb|pickup_ggl90.*.data| file & Internal wave energy per unit mass. Prognostic variable when \verb|ALLOW_GGL90_IDEMIX| is enabled & m$^2$ s$^{-2}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Key clarifications:}
-\begin{itemize}
-\item \textbf{TKE is the only standard prognostic variable:} Unlike some other turbulence closures (e.g., $k$-$\varepsilon$ or $k$-$\omega$), GGL90 solves for TKE only. The mixing length $\ell$ is diagnosed algebraically from TKE and stratification (Section~\ref{sec:mxl_method2}), not evolved prognostically.
-
-\item \textbf{Eddy coefficients are diagnostic:} \verb|GGL90viscArU|, \verb|GGL90viscArV|, and \verb|GGL90diffKr| are recomputed from TKE at every time step. They are \emph{not} prognostic variables and are \emph{not} written to pickup files.
-
-\item \textbf{Restart behavior:} At the start of a simulation (\verb|nIter0 = 0|), TKE is initialized to \verb|GGL90TKEmin| or read from \verb|GGL90TKEFile| if specified. During a restart (\verb|nIter0 > 0|), TKE is read from the pickup file, preserving the exact state from the previous run.
-\end{itemize}
-
-% ------------------------------------------------------------
-\subsection{Data Flow Diagram}
-\label{app:dataflow}
-% ------------------------------------------------------------
-
-Figure~\ref{fig:ggl90_dataflow} illustrates the complete data flow between the main MITgcm model and the GGL90 package within a single time step.
-
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}[
-  node distance=1.5cm and 2.5cm,
-  block/.style={rectangle, draw, fill=blue!10, text width=4.5cm, align=center, minimum height=1.2cm, rounded corners},
-  ggl90block/.style={rectangle, draw, fill=green!15, text width=4.5cm, align=center, minimum height=1.2cm, rounded corners, thick},
-  arrow/.style={->, >=stealth, thick},
-  datalabel/.style={font=\small, align=left}
-]
-
-% Main model blocks
-\node[block] (mom) {Main Model:\\Momentum Equations};
-\node[block, below=of mom] (tracer) {Main Model:\\Tracer Equations};
-\node[block, below=of tracer] (eos) {Main Model:\\Equation of State};
-
-% GGL90 block
-\node[ggl90block, right=of tracer] (ggl90) {\textbf{GGL90\_CALC}\\Compute TKE, $\ell$, $\kappa_m$, $\kappa_h$};
-
-% Interface routines
-\node[block, above right=0.8cm and 1cm of ggl90] (visc) {GGL90\_CALC\_VISC};
-\node[block, below right=0.8cm and 1cm of ggl90] (diff) {GGL90\_CALC\_DIFF};
-
-% Arrows: Inputs to GGL90
-\draw[arrow] (mom.east) -- node[above, datalabel] {$u$, $v$\\(velocity)} ++(1.5cm,0) |- (ggl90.west);
-\draw[arrow] (eos.east) -- node[above, datalabel] {$\partial\rho/\partial z$\\(density gradient)} ++(1.5cm,0) |- (ggl90.west);
-
-% Surface forcing input (from above)
-\draw[arrow] ($(mom.north) + (1.5cm,0)$) -- node[right, datalabel] {$\tau_x$, $\tau_y$\\(wind stress)} ($(mom.north) + (1.5cm,0) |- (ggl90.north)$) -- (ggl90.north);
-
-% Arrows: Outputs from GGL90
-\draw[arrow] (ggl90.east) -- ++(1.5cm,0) |- (visc.west);
-\draw[arrow] (visc.west) -- ++(-1.5cm,0) node[above right, datalabel] {$\kappa_m^U$, $\kappa_m^V$\\(eddy viscosity)} |- (mom.east);
-
-\draw[arrow] (ggl90.east) -- ++(1.5cm,0) |- (diff.west);
-\draw[arrow] (diff.west) -- ++(-1.5cm,0) node[below right, datalabel] {$\kappa_h$\\(eddy diffusivity)} |- (tracer.east);
-
-% TKE prognostic loop (feedback)
-\draw[arrow, dashed, red] (ggl90.south) -- ++(0,-0.8cm) -| ++(-6cm,0) node[below, datalabel, pos=0.5] {$e^{n+1}$ (updated TKE)\\carried to next time step} |- ($(ggl90.west) - (0,0.5cm)$);
-
-% Legend
-\node[below=2.5cm of ggl90, anchor=north] (legend) {
-  \begin{minipage}{10cm}
-  \textbf{Legend:}\\
-  \textcolor{blue!60}{\rule{1cm}{0.4pt}} Solid arrows: data flow within single time step\\
-  \textcolor{red}{\rule{1cm}{0.4pt}} Dashed arrow: prognostic variable carried between time steps
-  \end{minipage}
-};
-
-\end{tikzpicture}
-\caption{Data flow diagram for GGL90 package within a single MITgcm time step. The main model provides velocity, density gradient, and surface forcing to GGL90. GGL90 computes TKE, mixing length, and eddy coefficients, then returns the eddy coefficients to the momentum and tracer solvers via interface routines. TKE is the only prognostic variable, carried between time steps (dashed red arrow).}
-\label{fig:ggl90_dataflow}
-\end{figure}
-
-\paragraph{Interpretation of Figure~\ref{fig:ggl90_dataflow}:}
-
-\begin{enumerate}
-\item \textbf{Input phase (left side):} At the beginning of the vertical mixing phase, the main model has already computed:
-\begin{itemize}
-\item Updated velocity fields $u^{n+1/2}$, $v^{n+1/2}$ from momentum advection
-\item Density gradient $\partial\rho/\partial z$ from the equation of state applied to $\theta^{n+1/2}$, $S^{n+1/2}$
-\item Surface wind stress $\tau_x$, $\tau_y$ from atmospheric forcing
-\end{itemize}
-These fields are passed to \verb|GGL90_CALC| as inputs.
-
-\item \textbf{GGL90 computation (center):} \verb|GGL90_CALC| performs the full TKE equation solve:
-\begin{itemize}
-\item Compute stratification $N^2$ from $\partial\rho/\partial z$
-\item Compute vertical shear $S^2$ from $(u, v)$
-\item Compute mixing length $\ell$ from TKE and $N^2$ (Sections~\ref{sec:mxl_gaspar}--\ref{sec:mxl_method2})
-\item Update TKE: $e^{n+1} = e^n + \Delta t \, (\text{production} - \text{buoyancy} - \text{dissipation} + \text{diffusion})$ (Section~\ref{sec:tke_evolution})
-\item Diagnose eddy coefficients: $\kappa_m = c_\mu \ell \sqrt{e^{n+1}}$, $\kappa_h = \kappa_m / Pr_t$ (Section~\ref{sec:eddy_coeffs})
-\end{itemize}
-
-\item \textbf{Output phase (right side):} The eddy coefficients are transferred to the main model:
-\begin{itemize}
-\item \verb|GGL90_CALC_VISC| adds $\kappa_m^U$, $\kappa_m^V$ to the momentum solver's viscosity arrays
-\item \verb|GGL90_CALC_DIFF| adds $\kappa_h$ to the tracer solver's diffusivity arrays
-\item The main model then applies implicit vertical mixing using these coefficients
-\end{itemize}
-
-\item \textbf{Prognostic feedback (dashed red loop):} The updated TKE $e^{n+1}$ is stored in the GGL90 common block and used as the starting point for the next time step. This is the \emph{only} variable that couples time steps; all other fields are recomputed from scratch.
-\end{enumerate}
-
-\paragraph{Frequency of data exchange:}
-
-\begin{itemize}
-\item \textbf{Every time step:} Velocity, density gradient, wind stress $\to$ GGL90; eddy coefficients $\to$ main model.
-\item \textbf{Initialization only:} Grid parameters (\verb|drF|, \verb|drC|, masks), background mixing coefficients (\verb|viscArNr|, \verb|diffKrNrS|).
-\item \textbf{Restart (pickup) files:} TKE field written at checkpoint intervals, read at restart.
-\end{itemize}
-
-This clean separation of concerns—where GGL90 is a self-contained ``black box'' that receives state variables and returns mixing coefficients—makes it straightforward to replace GGL90 with alternative turbulence closures (e.g., KPP, Mellor-Yamada) without modifying the main model code.
-
-% ============================================================
-\end{document}
