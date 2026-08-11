@@ -1,25 +1,13 @@
 \documentclass[11pt]{article}
 \usepackage{amsmath}
-\usepackage{listings}
 \usepackage{hyperref}
-\usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{geometry}
 \geometry{margin=1in}
 
-% Code listing configuration
-\lstset{
-    basicstyle=\ttfamily\small,
-    breaklines=true,
-    frame=single,
-    numbers=left,
-    numberstyle=\tiny,
-    showstringspaces=false,
-}
-
-\title{KPP Python Port Description:\\
-       Implementation of MITgcm pkg/kpp in 1D Column Model}
-\author{Python Port Development Team}
+\title{KPP Python Port Reference:\\
+       Code Flow and Fortran-to-Python Mapping}
+\author{1D Mixing Model Development Team}
 \date{August 2026}
 
 \begin{document}
@@ -27,1232 +15,772 @@
 \tableofcontents
 \newpage
 
-\section{Introduction and Scope}
+\section{Introduction}
 \label{sec:introduction}
 
-The KPP Python port is a faithful 1D ocean column implementation of the MITgcm's \verb|pkg/kpp| K-Profile Parameterization mixing scheme. This document describes how the Python code implements the Fortran algorithms and documents key translation decisions, validation milestones, and integration patterns.
+\subsection{Purpose of This Document}
 
-\subsection{Purpose of the Python Port}
+This document serves as a \textbf{reference guide} for mapping the MITgcm KPP (K-Profile Parameterization) mixing scheme (Fortran) to its Python port in the 1D Column Model. The document is organized by algorithm flow, providing file and line number references for each major computational step. Use this document to:
 
-The Python implementation serves three primary purposes:
+\begin{itemize}
+    \item Trace where specific KPP capabilities from MITgcm are implemented in Python
+    \item Understand the computational flow of the KPP mixing scheme
+    \item Locate corresponding code sections when comparing Fortran and Python implementations
+    \item Identify file-to-file correspondence between the two implementations
+\end{itemize}
+
+\subsection{Scope of the Port}
+
+The Python port implements the KPP boundary layer parameterization for a 1D ocean column. The port faithfully reproduces the core physics and numerical methods from MITgcm's \verb|pkg/kpp|, adapted for the 1D vertical column context.
+
+\textbf{Included in the port:}
+\begin{itemize}
+    \item Boundary layer depth diagnosis (bulk Richardson criterion)
+    \item Surface forcing calculation (friction velocity, buoyancy forcing)
+    \item Interior Richardson number-based mixing
+    \item Boundary layer mixing profiles (cubic shape functions)
+    \item Nonlocal transport (counter-gradient term)
+    \item Diffusivity assembly (interior + boundary layer)
+    \item Enhancement at boundary layer interface
+    \item Stratification and shear diagnostics
+    \item Shortwave penetration (single Jerlov water type)
+\end{itemize}
+
+\textbf{Excluded from the 1D port:}
+\begin{itemize}
+    \item Horizontal mixing and advection
+    \item Horizontal smoothing of buoyancy gradients (requires 2D/3D data)
+    \item Double diffusion parameterization (not critical for 1D validation)
+    \item Salt plume parameterization
+    \item Multiple Jerlov water types (simplified to single type)
+    \item 3D-specific features (requires horizontal neighbors)
+\end{itemize}
+
+\subsection{How to Use This Document}
 
 \begin{enumerate}
-    \item \textbf{Educational platform}: Provide a readable, well-documented reference implementation for understanding KPP physics and boundary layer dynamics
-    \item \textbf{Validation testbed}: Enable rapid debugging of boundary layer depth algorithms, shape functions, and Richardson number-based mixing in a controlled 1D setting
-    \item \textbf{Research tool}: Support sensitivity studies, parameter tuning experiments, and comparative analysis with alternative mixing schemes (e.g., GGL90)
+    \item \textbf{Section 2 (Overview):} Start here to understand the high-level algorithm flow and main entry points
+    \item \textbf{Section 3 (Step-by-Step Mapping):} Use this to find where each major computational step lives in both codebases
+    \item \textbf{Section 4 (Infrastructure):} Consult for parameter handling, grid conventions, and boundary conditions
+    \item \textbf{Section 5 (File Correspondence):} Quick lookup table for file-to-file mapping
+    \item \textbf{Section 6 (Variable Reference):} Look up variable name mappings and sign conventions
 \end{enumerate}
 
-\subsection{Relationship to MITgcm Fortran}
+\section{Overview of Code Flow}
+\label{sec:overview}
 
-The Python port is designed as a \textit{faithful translation} of MITgcm's KPP implementation, preserving:
+\subsection{Algorithm Flowchart}
 
+The KPP scheme computes vertical mixing coefficients through the following sequence:
+
+\begin{enumerate}
+    \item \textbf{Parameter Initialization}: Load scheme parameters from configuration files
+    \item \textbf{Density and Buoyancy Calculation}: Compute density, buoyancy gradients, and thermal expansion coefficients
+    \item \textbf{Boundary Layer Depth Diagnosis}: Find boundary layer depth using bulk Richardson criterion
+    \item \textbf{Surface Forcing Calculation}: Compute surface friction velocity and buoyancy forcing
+    \item \textbf{Interior Richardson Mixing}: Compute diffusivity below boundary layer based on local Ri
+    \item \textbf{Boundary Layer Mixing}: Compute mixing within boundary layer using shape functions
+    \item \textbf{Nonlocal Transport}: Calculate counter-gradient flux term
+    \item \textbf{Diffusivity Assembly}: Combine interior and boundary layer contributions
+    \item \textbf{Enhancement at Interface}: Enhance mixing at boundary layer base
+\end{enumerate}
+
+\subsection{Main Entry Points}
+
+\textbf{Python:}
 \begin{itemize}
-    \item Core physics equations (bulk Richardson criterion, shape functions, nonlocal transport)
-    \item Numerical methods (diagnostic recomputation each timestep, no state persistence)
-    \item Parameter defaults (matching MITgcm defaults from \verb|KPP_PARAMS.h|)
-    \item Coordinate conventions (z-axis positive upward, depth positive downward)
-    \item Staggering conventions (diffusivities at cell interfaces, tracers at cell centers)
+    \item Module: \verb|KPP_ML/KPP_PY/kpp_core_driver.py|
+    \item Class: \verb|KPPDriver| (lines 80-400+)
+    \item Method: \verb|compute_mixing()| (lines 105-400+)
+    \item Called from: \verb|main/mixing_adapter.py| via unified interface
 \end{itemize}
 
-\textbf{Key simplifications} for 1D column context:
+\textbf{Fortran:}
 \begin{itemize}
-    \item No horizontal mixing or advection
-    \item No horizontal smoothing of buoyancy gradients (requires 2D/3D data)
-    \item No double diffusion parameterization (not critical for 1D validation)
-    \item Simplified shortwave penetration (single Jerlov water type)
-    \item Simplified equation of state (JMD95 without full compressibility terms)
+    \item File: \verb|pkg/kpp/kpp_calc.F|
+    \item Subroutine: \verb|KPP_CALC| (lines 19-799)
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Subroutine: \verb|KPPMIX| (lines 28-1765)
+    \item Called from: \verb|model/src/do_oceanic_phys.F|
 \end{itemize}
 
-\subsection{Target Use Cases}
+\subsection{Calling Sequence}
 
-\begin{itemize}
-    \item \textbf{Parameter sensitivity studies}: Test impact of KPP tuning parameters (e.g., $Ri_c$, shape function coefficients) on boundary layer depth and mixing profiles
-    \item \textbf{Scheme comparison}: Quantify differences between KPP and GGL90 under identical forcing scenarios
-    \item \textbf{Training data generation}: Produce controlled scenario outputs for machine learning applications
-    \item \textbf{Algorithm debugging}: Isolate and validate individual physics components (e.g., boundary layer depth diagnosis, interior Ri mixing)
-\end{itemize}
-
-\subsection{Directory Structure Overview}
-
+\textbf{Python calling sequence:}
 \begin{verbatim}
-KPP_ML/
-  KPP_PY/
-    kpp_core_driver.py          # Main orchestrator (≈ kpp_calc.F)
-    kpp_scheme_specific.py      # BL depth, BL mixing, enhancement
-    kpp_routines.py             # Ri mixing, velocity scales, utilities
-    kpp_shortwave.py            # Shortwave penetration (swfrac)
-    kpp_parameters.py           # YAML parameter loading
-main/
-  mixing_adapter.py             # Unified interface for GGL90/KPP
-  unified_driver.py             # Time-stepping orchestrator
-  eos.py                        # Buoyancy gradients, density computation
-configuration_yamls/
-  kpp_default.yaml              # MITgcm default parameters
-  physical_parameters.yaml      # Shared constants (g, ρ₀, etc.)
-simulations/scenarios/
-  scenario_*_initial_conditions.yaml
-  scenario_*_atmospheric_forcing.yaml
-  scenario_*_time_integration.yaml
+unified_driver.py::step_forward()
+  -> mixing_adapter.py::compute_mixing_coefficients()
+    -> kpp_core_driver.py::KPPDriver.compute_mixing()
+      -> eos.py::compute_buoyancy_gradients()
+      -> kpp_core_driver.py::_compute_surface_forcing()
+      -> kpp_core_driver.py::_compute_shear()
+      -> kpp_routines.py::ri_iwmix()
+      -> kpp_scheme_specific.py::diagnose_bl_depth()
+      -> kpp_scheme_specific.py::compute_bl_mixing()
+      -> kpp_scheme_specific.py::enhance_at_interface()
 \end{verbatim}
 
-\section{Development History and Bug Fixes}
-\label{sec:history}
+\textbf{Fortran calling sequence:}
+\begin{verbatim}
+do_oceanic_phys.F::DO_OCEANIC_PHYS()
+  -> kpp_calc.F::KPP_CALC()
+    -> kpp_forcing_surf.F::KPP_FORCING_SURF()
+    -> kpp_routines.F::STATEKPP()
+    -> kpp_routines.F::KPPMIX()
+      -> kpp_routines.F (internal)::BLDEPTH()
+      -> kpp_routines.F (internal)::WSCALE()
+      -> kpp_routines.F (internal)::RI_IWMIX()
+      -> kpp_routines.F (internal)::BLMIX()
+      -> kpp_routines.F (internal)::ENHANCE()
+\end{verbatim}
 
-The KPP Python port was developed in parallel with the GGL90 port during 2024-2026. The implementation focused on accurate translation of the boundary layer depth algorithm, shape function profiles, and nonlocal transport. This section documents the development timeline and validation milestones.
+\section{Step-by-Step Code Mapping}
+\label{sec:mapping}
 
-\subsection{Timeline}
+This section provides detailed line-by-line mapping for each major computational step in the KPP algorithm.
 
+\subsection{Parameter Initialization}
+
+\textbf{Purpose}: Load and initialize KPP scheme parameters, including critical Richardson number (Ri$_c$), shape function coefficients, velocity scale parameters, and numerical control flags.
+
+\textbf{Python Implementation}:
 \begin{itemize}
-    \item \textbf{2024-2025}: Initial translation from MITgcm Fortran, focus on boundary layer depth diagnosis and bulk Richardson criterion
-    \item \textbf{2025-Q4}: Implementation of shape functions (cubic polynomials), nonlocal transport term ($\gamma$ profiles)
-    \item \textbf{2026-Q1}: Integration with unified driver architecture, YAML configuration system
-    \item \textbf{2026-Q2}: Development of realistic forcing scenarios, comparison with GGL90
-    \item \textbf{2026-07}: Full scenario validation, coordinate convention verification shared with GGL90 bug fixes
-    \item \textbf{2026-08}: Documentation consolidation, production-ready release
+    \item File: \verb|KPP_ML/KPP_PY/kpp_parameters.py|
+    \item Class: \verb|KPPParameters| (lines 1-300+)
+    \item Configuration files: \verb|configuration_yamls/kpp_default.yaml|
+    \item Key parameters loaded: \verb|Ricr|, \verb|cstar|, \verb|epsilon|, \verb|Vtc|, \verb|nu0|, \verb|diff_min|, \verb|diff_max|
 \end{itemize}
 
-\subsection{Coordinate Convention Validation}
-
-During the GGL90 bug fix campaign (2026-07-16), the KPP implementation underwent simultaneous validation to ensure consistent coordinate conventions across both schemes.
-
-\textbf{Validated conventions}:
+\textbf{Fortran Source}:
 \begin{itemize}
-    \item \textbf{N² sign convention}: KPP uses same buoyancy frequency calculation as GGL90, inheriting correct minus sign from Fix 1
-    \item \textbf{Z-coordinate convention}: KPP uses same \verb|ColumnGrid.z_positive_up| property as GGL90, validated after Fix 2
-    \item \textbf{Bulk Richardson number}: Critical sign check for $Ri_b$ numerator:
-    \begin{equation}
-    Ri_b(z) = \frac{(z_{\text{surf}} - z) \cdot \text{dbsfc}(z)}{|\vec{u}(z) - \vec{u}_{\text{surf}}|^2}
-    \end{equation}
-    Distance $(z_{\text{surf}} - z)$ must be positive; implemented as \verb|depth[0] - depth[k]| where depth is negative-downward
+    \item File: \verb|pkg/kpp/kpp_readparms.F| (lines 1-250+)
+    \item Subroutine: \verb|KPP_READPARMS| reads namelist \verb|KPP_PARM01|
+    \item File: \verb|pkg/kpp/kpp_init_fixed.F| (lines 1-200+)
+    \item Subroutine: \verb|KPP_INIT_FIXED| initializes fixed parameters
+    \item Header: \verb|pkg/kpp/KPP_PARAMS.h| defines parameter variables
 \end{itemize}
 
-\textbf{Implementation verification}:
-\begin{lstlisting}[language=Python, caption={Bulk Richardson numerator (correct sign)}]
-# depth is negative-down: depth[0] ~ 0 (surface), depth[k] < 0 (below)
-# Ritop must be positive for stable stratification
-Ritop = np.zeros(nz)
-for k in range(nz):
-    Ritop[k] = (depth[0] - depth[k]) * dbsfc[k]
-    # e.g., (0 - (-50)) * (+) = 50 * (+) = positive (stable)
-\end{lstlisting}
-
-Incorrect sign (e.g., \verb|depth[k] - depth[0]|) would produce negative $Ri_b$ under stable conditions, preventing boundary layer depth criterion from triggering.
-
-\subsection{Boundary Layer Depth Algorithm Refinements}
-
-\textbf{Issue}: Early versions used simplified boundary layer depth calculation without proper treatment of:
+\textbf{Key Parameters}:
 \begin{itemize}
-    \item Shortwave penetration (absorbed radiation contributing to subsurface buoyancy forcing)
-    \item Smoothing of diagnosed depth (MITgcm applies iterative smoothing)
-    \item Case A vs.\ Case B distinction (stable vs.\ unstable forcing)
+    \item \verb|KPPRicr| (Fortran) $\leftrightarrow$ \verb|Ricr| (Python): Critical bulk Richardson number (default: 0.3)
+    \item \verb|KPPcstar| (Fortran) $\leftrightarrow$ \verb|cstar| (Python): Shape function coefficient (default: 10.0)
+    \item \verb|KPPepsilon| (Fortran) $\leftrightarrow$ \verb|epsilon| (Python): Nondim. extent of surface layer (default: 0.1)
+    \item \verb|KPPVtc| (Fortran) $\leftrightarrow$ \verb|Vtc| (Python): Unresolved turbulence parameter (default: 1.8)
+    \item \verb|KPPnu0| (Fortran) $\leftrightarrow$ \verb|nu0| (Python): Maximum diffusivity (default: 5.0e-3 m²/s)
 \end{itemize}
 
-\textbf{Resolution}: Implemented full MITgcm algorithm from \verb|kpp_routines.F|:
-\begin{enumerate}
-    \item Compute bulk Richardson number profile accounting for shortwave absorption
-    \item Identify boundary layer depth where $Ri_b = Ri_c$ (critical Richardson number)
-    \item Apply depth smoothing if enabled (\verb|kbl_smoothing| parameter)
-    \item Classify as Case A (stable) or Case B (unstable) based on surface buoyancy forcing sign
-\end{enumerate}
+\subsection{Density and Buoyancy Calculation}
 
-\subsection{Shape Function Implementation}
+\textbf{Purpose}: Compute density, buoyancy gradients (dbloc), surface buoyancy relative to depth (Ritop), and thermal expansion/haline contraction coefficients. These are fundamental inputs for Richardson number and boundary layer depth diagnosis.
 
-\textbf{Challenge}: KPP shape functions (cubic polynomials) define vertical profile of mixing within boundary layer. Requires careful attention to:
+\textbf{Python Implementation}:
 \begin{itemize}
-    \item Normalized depth coordinate $\sigma = z / h_{bl}$
-    \item Separate shape functions for momentum vs.\ scalars
-    \item Matching conditions at boundary layer base ($\sigma = 1$)
+    \item File: \verb|main/eos.py|
+    \item Function: \verb|compute_buoyancy_gradients()| (lines 1-200+)
+    \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (lines 184-186)
+    \item Returns: \verb|rho_surf|, \verb|dbloc|, \verb|dbsfc|, \verb|ttalpha|, \verb|ssbeta|
+    \item Uses JMD95 equation of state (simplified for 1D)
 \end{itemize}
 
-\textbf{Implementation} (KPP\_ML/KPP\_PY/kpp\_scheme\_specific.py):
-\begin{lstlisting}[language=Python, caption={Cubic shape function}]
-def compute_shape_function(sigma, coef):
-    """
-    Compute KPP cubic shape function.
-
-    G(sigma) = coef[0] + coef[1]*sigma + coef[2]*sigma^2 + coef[3]*sigma^3
-
-    Parameters
-    ----------
-    sigma : float or np.ndarray
-        Normalized depth (0 at surface, 1 at BL base)
-    coef : tuple of 4 floats
-        Cubic polynomial coefficients
-
-    Returns
-    -------
-    G : float or np.ndarray
-        Shape function value (0 <= G <= 1)
-    """
-    G = (coef[0] + coef[1] * sigma +
-         coef[2] * sigma**2 + coef[3] * sigma**3)
-    # Clamp to [0, 1] to prevent extrapolation errors
-    return np.clip(G, 0.0, 1.0)
-\end{lstlisting}
-
-\textbf{Validation}: Shape function profiles compared against MITgcm reference plots; verified monotonic decrease from surface ($\sigma = 0$, $G = 1$) to boundary layer base ($\sigma = 1$, $G = 0$).
-
-\subsection{Nonlocal Transport Term}
-
-\textbf{Feature}: KPP includes nonlocal transport term $\gamma$ to represent large-eddy transport in convective boundary layers.
-
-\textbf{Implementation}:
-\begin{lstlisting}[language=Python, caption={Nonlocal transport profile}]
-def compute_nonlocal_transport(sigma, casea, params):
-    """
-    Compute nonlocal transport term gamma(sigma).
-
-    gamma = C_s * (1 - sigma)^2  (Case B: unstable)
-    gamma = 0                     (Case A: stable)
-
-    where C_s is a tunable coefficient (default: 10.0).
-    """
-    if casea > 0.5:  # Case A: stable, no nonlocal transport
-        return 0.0
-
-    # Case B: unstable, cubic profile
-    gamma = params.kpp_nonlocal_coef * (1.0 - sigma)**2
-    return gamma
-\end{lstlisting}
-
-\textbf{Physical interpretation}: In convective boundary layers, large eddies transport tracers downward even against local gradients; $\gamma$ term represents this non-gradient transport.
-
-\subsection{Interior Richardson Number Mixing}
-
-\textbf{Implementation}: Below the boundary layer, KPP applies Richardson number-based mixing from internal wave breaking and shear instabilities.
-
-\textit{From kpp\_routines.py}:
-\begin{lstlisting}[language=Python, caption={Interior Ri mixing}]
-def ri_iwmix(shear_sq, dbloc, dbloc_smooth, diff_s_bg, diff_t_bg,
-             params, zgrid, visc_nr_bg):
-    """
-    Compute interior mixing from Richardson number.
-
-    Corresponds to ri_iwmix in MITgcm kpp_routines.F.
-
-    Diffusivity increases where Ri < Ri_crit (shear instability).
-    Background internal wave mixing added everywhere.
-    """
-    nz = len(zgrid)
-    Ri = np.zeros(nz)
-
-    # Compute Richardson number: Ri = N^2 / S^2
-    for k in range(nz):
-        if shear_sq[k] > 1e-14:
-            Ri[k] = dbloc[k] / shear_sq[k]
-        else:
-            Ri[k] = 1e10  # Large Ri (stable, no shear)
-
-    # Enhanced mixing where Ri < Ri_0
-    visc_int = np.copy(visc_nr_bg)
-    diff_s_int = np.copy(diff_s_bg)
-    diff_t_int = np.copy(diff_t_bg)
-
-    for k in range(nz):
-        if Ri[k] < params.Ri0:
-            # Ri-dependent enhancement
-            fRi = (1.0 - Ri[k] / params.Ri0)**2
-            visc_int[k] += params.visc_shear_max * fRi
-            diff_s_int[k] += params.diff_shear_max * fRi
-            diff_t_int[k] += params.diff_shear_max * fRi
-
-    return visc_int, diff_s_int, diff_t_int
-\end{lstlisting}
-
-\subsection{Validation Status}
-
-\textbf{Scenario suite}: All 6 scenarios $\times$ 2 schemes (GGL90 + KPP) validated, exit code 0
-
-\begin{table}[h]
-\centering
-\caption{Scenario Validation Results (2026-07-16)}
-\begin{tabular}{lcc}
-\toprule
-Scenario & KPP SST (°C) & GGL90 SST (°C) \\
-\midrule
-arctic\_convection & $-5.99$ & $-8.49$ \\
-calm\_baseline & 21.89 & 21.91 \\
-combined\_storm & 7.21 & 8.27 \\
-heavy\_rain\_freshening & 21.97 & 21.96 \\
-hurricane\_wind & 9.23 & 13.49 \\
-tropical\_heating\_diurnal & 26.36 & 26.39 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Key observations}:
+\textbf{Fortran Source}:
 \begin{itemize}
-    \item Weak-forcing scenarios (calm, rain, tropical): KPP $\approx$ GGL90 (differences $< 0.1°$C)
-    \item Strong-forcing scenarios (hurricane, storm, Arctic): Larger differences (2-4°C) reflect scheme sensitivities, not errors
-    \item KPP generally produces deeper mixing than GGL90 under strong wind forcing (hurricane: 9.2°C vs.\ 13.5°C)
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Subroutine: \verb|STATEKPP| (lines 1766-1961)
+    \item Called from: \verb|kpp_calc.F::KPP_CALC| (line 300+)
+    \item Computes: \verb|rho1|, \verb|dbloc|, \verb|dbsfc|, \verb|ttalpha|, \verb|ssbeta|
+    \item Uses model equation of state (\verb|find_rho.F|)
 \end{itemize}
 
-\section{File Organization and Module Structure}
-\label{sec:file-organization}
+\textbf{Key Computations}:
 
-The KPP Python implementation follows a modular architecture separating scheme-specific physics (KPP core), shared utilities (EOS, grid, solvers), and unified driver infrastructure.
-
-\subsection{Core KPP Modules}
-
-\textbf{kpp\_core\_driver.py} (main orchestrator, $\approx$ 500 lines)
-
-Python equivalent of MITgcm's \verb|kpp_calc.F|. Orchestrates the complete KPP calculation sequence:
-\begin{enumerate}
-    \item Density and buoyancy gradient computation via \verb|eos.py|
-    \item Surface forcing diagnosis (friction velocity, buoyancy forcing)
-    \item Velocity shear computation
-    \item Interior mixing from Richardson number via \verb|kpp_routines.ri_iwmix()|
-    \item Boundary layer depth diagnosis via \verb|kpp_scheme_specific.diagnose_bl_depth()|
-    \item Boundary layer mixing profiles via \verb|kpp_scheme_specific.compute_bl_mixing()|
-    \item Interface enhancement via \verb|kpp_scheme_specific.enhance_at_interface()|
-    \item Combination of interior and boundary layer mixing
-    \item Re-indexing to MITgcm top-of-cell output convention
-\end{enumerate}
-
-Key class: \verb|KPPDriver|, with method \verb|compute_mixing()| as main entry point.
-
-\textbf{kpp\_scheme\_specific.py} (KPP-specific physics, $\approx$ 400 lines)
-
-Implements KPP-specific formulations:
-\begin{itemize}
-    \item \verb|diagnose_bl_depth()|: Boundary layer depth from bulk Richardson criterion
-    \item \verb|compute_bl_mixing()|: Mixing coefficients within boundary layer using shape functions
-    \item \verb|enhance_at_interface()|: Enhanced mixing at boundary layer base
-    \item Shape function computation (cubic polynomials)
-    \item Nonlocal transport term $\gamma$ profiles
-\end{itemize}
-
-Corresponds to boundary layer calculations in \verb|kpp_routines.F| (MITgcm).
-
-\textbf{kpp\_routines.py} (shared KPP utilities, $\approx$ 400 lines)
-
-Utility functions shared across KPP components:
-\begin{itemize}
-    \item \verb|ri_iwmix()|: Interior Richardson number-based mixing
-    \item \verb|wscale()|: Turbulent velocity scale computation (Monin-Obukhov similarity)
-    \item \verb|build_wscale_lookup_tables()|: Pre-compute velocity scale tables for efficiency
-    \item \verb|safe_divide()|: Safe division handling for edge cases
-\end{itemize}
-
-Corresponds to utility functions in \verb|kpp_routines.F| (MITgcm).
-
-\textbf{kpp\_shortwave.py} (shortwave penetration, $\approx$ 150 lines)
-
-Implements shortwave radiation penetration (Jerlov water types):
-\begin{lstlisting}[language=Python, caption={Shortwave fraction function}]
-def swfrac(depth, jerlov_type=1):
-    """
-    Compute fraction of shortwave radiation reaching depth z.
-
-    swfrac(z) = R * exp(-z/lambda1) + (1-R) * exp(-z/lambda2)
-
-    where R, lambda1, lambda2 depend on Jerlov water type.
-
-    Corresponds to swfrac.F in MITgcm.
-    """
-    # Jerlov water type coefficients
-    jerlov_params = {
-        1: {'R': 0.58, 'lambda1': 0.35, 'lambda2': 23.0},  # Type I (clear)
-        2: {'R': 0.62, 'lambda1': 0.60, 'lambda2': 20.0},  # Type IA
-        3: {'R': 0.67, 'lambda1': 1.0, 'lambda2': 17.0},   # Type IB
-        # ... (additional types)
-    }
-
-    params = jerlov_params[jerlov_type]
-    R = params['R']
-    l1 = params['lambda1']
-    l2 = params['lambda2']
-
-    # Depth must be positive (distance below surface)
-    z = np.abs(depth)
-
-    frac = R * np.exp(-z / l1) + (1 - R) * np.exp(-z / l2)
-    return frac, R, l1, l2
-\end{lstlisting}
-
-\textbf{kpp\_parameters.py} (configuration, $\approx$ 250 lines)
-
-Parameter dataclass with YAML loader:
-\begin{lstlisting}[language=Python, caption={KPPParameters class}]
-@dataclass
-class KPPParameters:
-    """KPP parameter configuration (matches MITgcm defaults)."""
-    # Critical Richardson number
-    Ricr: float = 0.3
-
-    # Shape function coefficients (momentum)
-    shp_m: tuple = (1.0, -2.0, 1.0, 0.0)
-
-    # Shape function coefficients (scalars)
-    shp_s: tuple = (1.0, -2.0, 1.0, 0.0)
-
-    # Nonlocal transport coefficient
-    kpp_nonlocal_coef: float = 10.0
-
-    # Interior Ri mixing parameters
-    Ri0: float = 0.7
-    visc_shear_max: float = 0.01  # m²/s
-    diff_shear_max: float = 0.005  # m²/s
-
-    # Velocity scale lookup table dimensions
-    nni: int = 90
-    nnj: int = 90
-
-    # Physical constants
-    vonk: float = 0.4  # von Karman constant
-    gravity: float = 9.81
-    rho_const: float = 1027.5
-
-    # Shortwave penetration
-    jerlov_water_type: int = 1
-    shortwave_heating: bool = True
-    select_penetrating_sw: int = 1
-
-    @classmethod
-    def from_yaml(cls, yaml_path=None):
-        """Load from YAML file, or use defaults if None."""
-        ...
-\end{lstlisting}
-
-\subsection{Shared Utilities (main/ directory)}
-
-KPP uses the same shared utilities as GGL90:
-
-\textbf{eos.py} (equation of state, buoyancy gradients)
-
-KPP-specific function:
-\begin{itemize}
-    \item \verb|compute_buoyancy_gradients()|: Computes local buoyancy gradient (dbloc), surface reference gradient (dbsfc), and thermal expansion/haline contraction coefficients
-\end{itemize}
-
-\textbf{column\_grid.py} (vertical grid)
-
-Same \verb|ColumnGrid| class as GGL90, providing consistent coordinate system.
-
-\textbf{shared\_column\_solver.py} (tridiagonal solver)
-
-KPP uses implicit diffusion solver for tracer time-stepping (shared with GGL90).
-
-\subsection{Unified Driver Infrastructure}
-
-Same \verb|mixing_adapter.py| and \verb|unified_driver.py| as GGL90 (see GGL90 port description §3.3).
-
-\textbf{Key difference}: KPP is \textit{diagnostic} (no prognostic state), while GGL90 is \textit{prognostic} (evolves TKE). The mixing adapter abstracts this difference:
-
-\begin{lstlisting}[language=Python, caption={Diagnostic vs prognostic handling}]
-class MixingAdapter:
-    def __init__(self, scheme: str, params):
-        if scheme == "ggl90":
-            self.is_prognostic = True  # GGL90 has state (TKE)
-        elif scheme == "kpp":
-            self.is_prognostic = False  # KPP is diagnostic
-        ...
-
-    def get_state(self):
-        """Get prognostic state (TKE for GGL90, None for KPP)."""
-        if self.is_prognostic:
-            return self.driver.tke
-        return None
-\end{lstlisting}
-
-\subsection{Configuration Files}
-
-\textbf{configuration\_yamls/kpp\_default.yaml}
-
-MITgcm default parameters (see \verb|kpp_parameters.py| for values).
-
-\textbf{configuration\_yamls/physical\_parameters.yaml}
-
-Shared physical constants (same as GGL90).
-
-\subsection{Mapping to MITgcm Files}
-
-\begin{table}[h]
-\centering
-\caption{Python $\leftrightarrow$ MITgcm File Correspondence}
-\begin{tabular}{ll}
-\toprule
-\textbf{Python File} & \textbf{MITgcm Fortran File} \\
-\midrule
-kpp\_core\_driver.py & kpp\_calc.F, kpp\_mix.F \\
-kpp\_scheme\_specific.py & kpp\_routines.F (bldepth, blmix) \\
-kpp\_routines.py & kpp\_routines.F (ri\_iwmix, wscale) \\
-kpp\_shortwave.py & swfrac.F \\
-kpp\_parameters.py & KPP\_PARAMS.h, kpp\_readparms.F \\
-eos.py & find\_rho.F, gradients.F \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Coordinate System and Sign Conventions}
-\label{sec:coordinates}
-
-KPP uses the same coordinate conventions as GGL90 (see GGL90 port description §4 for detailed discussion). This section highlights KPP-specific considerations.
-
-\subsection{Vertical Coordinate System}
-
-Identical to GGL90:
-\begin{itemize}
-    \item Depth stored negative-downward: $z = 0$ (surface), $z = -H$ (bottom)
-    \item Physics calculations use z-positive-upward convention
-    \item \verb|ColumnGrid.z_positive_up| property provides correct translation (validated after GGL90 Fix 2)
-\end{itemize}
-
-\subsection{Bulk Richardson Number Sign}
-
-Critical for boundary layer depth diagnosis:
+Local buoyancy gradient across interface k:
 \begin{equation}
-Ri_b(z) = \frac{(z_{\text{surf}} - z) \cdot \Delta b(z)}{|\Delta \vec{u}(z)|^2 + V_t^2}
+\text{dbloc}[k] = g \frac{\rho[k] - \rho[k-1]}{\rho_0}
 \end{equation}
 
-\textbf{Numerator sign}: $(z_{\text{surf}} - z)$ must be positive (distance from surface).
-
-Implementation:
-\begin{lstlisting}[language=Python, caption={Bulk Richardson numerator (KPP)}]
-# depth[0] ~ 0 (surface), depth[k] < 0 (below)
-# Positive distance for z below surface
-Ritop = np.zeros(nz)
-for k in range(nz):
-    Ritop[k] = (depth[0] - depth[k]) * dbsfc[k]
-\end{lstlisting}
-
-\textbf{Validation}: If sign is wrong (e.g., \verb|depth[k] - depth[0]|), $Ri_b < 0$ for stable stratification, and boundary layer depth never triggers (remains at maximum depth).
-
-\subsection{Diffusivity Staggering}
-
-KPP output follows MITgcm staggering convention:
-
-\textbf{Diffusivities} (visc\_az, diff\_kz\_s, diff\_kz\_t): Defined at \textit{top face} of cell $k$
-\begin{itemize}
-    \item Index $k=0$: Surface interface (always 0, no surface flux)
-    \item Index $k$: Interface between cells $k-1$ and $k$
-\end{itemize}
-
-\textbf{Nonlocal transport} (ghat): Defined at \textit{bottom face} of cell $k$
-\begin{itemize}
-    \item Flux at top face $k$ pairs \verb|diff_kz_t[k]| with \verb|ghat[k-1]|
-\end{itemize}
-
-\textbf{Re-indexing}: KPP internally computes diffusivities at bottom-of-cell, then re-indexes to top-of-cell for output to match MITgcm convention:
-
-\begin{lstlisting}[language=Python, caption={Re-indexing to MITgcm convention}]
-# Internal: visc_bot[k] = viscosity at bottom of cell k
-# Output: visc_az[k] = viscosity at top of cell k
-
-visc_az = np.zeros(nz)
-visc_az[1:] = visc_bot[:-1]  # Shift up by one
-visc_az[0] = 0.0  # Surface boundary
-\end{lstlisting}
-
-This ensures index-for-index correspondence with MITgcm output arrays.
-
-\subsection{Comparison to MITgcm Conventions}
-
-Identical to GGL90 (see GGL90 port description §4.4).
-
-\section{Core Algorithm Implementation}
-\label{sec:core-algorithm}
-
-This section describes how the Python port implements the KPP parameterization from Large et al. (1994), with comparison to MITgcm's \verb|kpp_calc.F| and \verb|kpp_routines.F|.
-
-\subsection{KPP Physics Overview}
-
-KPP is a diagnostic turbulence scheme computing mixing coefficients directly from column state (no prognostic variables). The scheme divides the water column into two regions:
-
-\textbf{1. Boundary layer} (0 to $h_{bl}$): Enhanced mixing using shape functions
+Surface buoyancy difference (numerator of bulk Ri):
 \begin{equation}
-\kappa(z) = h_{bl} \, w_\kappa(\zeta) \, G(\sigma)
-\end{equation}
-where:
-\begin{itemize}
-    \item $h_{bl}$: Boundary layer depth (diagnosed from bulk Richardson criterion)
-    \item $w_\kappa(\zeta)$: Turbulent velocity scale (Monin-Obukhov similarity)
-    \item $G(\sigma)$: Shape function (cubic polynomial, $\sigma = z / h_{bl}$)
-\end{itemize}
-
-\textbf{2. Interior} ($h_{bl}$ to bottom): Richardson number-based mixing
-\begin{equation}
-\kappa(z) = \kappa_{\text{bg}} + \kappa_{\text{shear}}(Ri)
+\text{Ritop}[k] = (z_{\text{ref}} - z[k]) \times g \frac{\rho[k] - \rho_{\text{surf}}}{\rho_0}
 \end{equation}
 
-\subsection{Main Driver: compute\_mixing()}
-
-Entry point for KPP calculation (KPPDriver.compute\_mixing()):
-
-\begin{lstlisting}[language=Python, caption={KPP main driver structure (10-step roadmap)}]
-def compute_mixing(self, theta, salt, u_vel, v_vel, depth,
-                   cell_thickness, tau_x, tau_y, q_net, q_sw,
-                   fw_flux, coriol, background_visc,
-                   background_diff_s, background_diff_t):
-    """
-    Compute KPP mixing coefficients for one column.
-
-    Roadmap (10 steps):
-    1. Compute density and buoyancy gradients
-    2. Compute surface forcing (ustar, buoyancy forcing)
-    3. Compute velocity shear
-    4. Interior mixing from Richardson number (Ri-based)
-    5. Diagnose boundary layer depth (hbl)
-    6. Compute boundary layer mixing profiles + nonlocal
-    7. Enhance mixing at boundary-layer base interface
-    8. Combine interior and boundary-layer mixing
-    9. Re-index to MITgcm top-of-cell output convention
-    10. Assemble output
-    """
-
-    # Step 1: Density and buoyancy
-    rho_surf, dbloc, dbsfc, ttalpha, ssbeta = \
-        compute_buoyancy_gradients(theta, salt, depth, ...)
-
-    # Step 2: Surface forcing
-    ustar, bo, bosol = self._compute_surface_forcing(
-        tau_x, tau_y, q_net, q_sw, fw_flux, ...
-    )
-
-    # Step 3: Velocity shear
-    shsq, dvsq = self._compute_shear(u_vel, v_vel, depth, ...)
-
-    # Step 4: Interior Ri mixing
-    diffus_visc_int, diffus_s_int, diffus_t_int = ri_iwmix(
-        shsq, dbloc, dbloc_smooth, bg_diff_s, bg_diff_t, params
-    )
-
-    # Step 5: Boundary layer depth
-    Ritop = np.array([(depth[0] - depth[k]) * dbsfc[k]
-                      for k in range(nz)])
-    hbl, bfsfc, stable, casea, kbl, bulk_ri = diagnose_bl_depth(
-        dvsq, dbloc, Ritop, ustar, bo, bosol, coriol,
-        depth, cell_thickness, self.wmt, self.wst, params
-    )
-
-    # Step 6: Boundary layer mixing
-    blmc_visc, blmc_s, blmc_t, ghat, dkm1 = compute_bl_mixing(
-        ustar, bfsfc, hbl, stable, casea,
-        (diffus_visc_int, diffus_s_int, diffus_t_int),
-        kbl, depth, cell_thickness, self.wmt, self.wst, params
-    )
-
-    # Step 7: Interface enhancement
-    blmc_visc, blmc_s, blmc_t, ghat = enhance_at_interface(
-        dkm1, hbl, kbl, (diffus_visc_int, ...),
-        casea, depth, cell_thickness,
-        (blmc_visc, blmc_s, blmc_t), ghat
-    )
-
-    # Step 8: Combine interior and BL mixing
-    for k in range(nz):
-        if k < kbl:
-            visc_bot[k] = max(blmc_visc[k], background_visc)
-            diff_t_bot[k] = max(blmc_t[k], background_diff_t)
-        else:
-            visc_bot[k] = diffus_visc_int[k]
-            diff_t_bot[k] = diffus_t_int[k]
-
-    # Step 9: Re-index to top-of-cell
-    visc_az[1:] = visc_bot[:-1]
-    visc_az[0] = 0.0
-
-    # Step 10: Output
-    return KPPOutput(visc_az=visc_az, diff_kz_t=diff_t_az, ...)
-\end{lstlisting}
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Python uses JMD95 simplified equation of state
+    \item Fortran calls full MITgcm EOS (can be linear, JMD95, MDJWF, etc.)
+    \item Both compute potential density (not in-situ) for consistency
+\end{itemize}
 
 \subsection{Boundary Layer Depth Diagnosis}
 
-Core KPP algorithm: Find depth where bulk Richardson number equals critical value.
+\textbf{Purpose}: Diagnose the ocean boundary layer depth (hbl) by finding the depth where the bulk Richardson number exceeds a critical threshold. This determines the extent of surface-driven turbulent mixing.
 
-\begin{lstlisting}[language=Python, caption={Boundary layer depth diagnosis (simplified)}]
-def diagnose_bl_depth(dvsq, dbloc, Ritop, ustar, bo, bosol,
-                      coriol, zgrid, hwide, wmt, wst, config):
-    """
-    Diagnose boundary layer depth using bulk Richardson criterion.
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item Function: \verb|diagnose_bl_depth()| (lines 26-200+)
+    \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 210+)
+    \item Key computation: lines 94-144 (Rib loop and comparison to Ricr)
+    \item Interpolation: lines 146-180+ (linear interpolation to find exact hbl)
+    \item Returns: \verb|hbl|, \verb|bfsfc|, \verb|stable|, \verb|casea|, \verb|kbl|, \verb|Rib|
+\end{itemize}
 
-    Find depth where Rib(z) = Ri_crit.
-    """
-    nz = len(zgrid)
-    Rib = np.zeros(nz)
-    Rib[0] = 0.0
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Function: \verb|BLDEPTH| (internal to KPPMIX, lines 600-800+)
+    \item Called from: \verb|KPPMIX| (line 400+)
+    \item Richardson number loop: lines 630-700+
+    \item Interpolation: lines 660-680+
+    \item Returns: \verb|hbl(i)|, \verb|kbl(i)|
+\end{itemize}
 
-    # Initialize BL depth to bottom
-    kbl = nz
-    hbl = -zgrid[-1]
+\textbf{Key Computation}:
 
-    # Compute bulk Richardson number at each level
-    for kl in range(1, nz):
-        # Shortwave absorption (reduces buoyancy forcing at depth)
-        if config.shortwave_heating:
-            frac_absorbed = 1.0 - swfrac(-zgrid[kl], ...)[0]
-            bfsfc = bo + bosol * frac_absorbed
-        else:
-            bfsfc = bo
-
-        # Turbulent velocity scale at depth
-        ws, wm = wscale(zgrid[kl] / hbl_guess, hbl_guess,
-                        ustar, bfsfc, wmt, wst, config)
-
-        # Velocity term (shear + turbulent)
-        Vt2 = -zgrid[kl] * (ws * coriol * config.epsilon)**2
-        denom = dvsq[kl] + Vt2
-
-        # Bulk Richardson number
-        if denom > 1e-14:
-            Rib[kl] = Ritop[kl] / denom
-        else:
-            Rib[kl] = 1e10  # Very stable
-
-        # Check if Rib exceeds critical value
-        if Rib[kl] > config.Ricr:
-            kbl = kl
-            # Interpolate to exact depth where Rib = Ricr
-            hbl = interpolate_hbl(zgrid, Rib, kl, config.Ricr)
-            break
-
-    # Classify as stable (Case A) or unstable (Case B)
-    stable = 1.0 if bfsfc >= 0.0 else 0.0
-    casea = 1.0 if stable > 0.5 else 0.0
-
-    return hbl, bfsfc, stable, casea, kbl, Rib
-\end{lstlisting}
-
-\textbf{MITgcm comparison}: Corresponds to \verb|bldepth| routine in \verb|kpp_routines.F| (lines 500-700). Python implementation follows identical algorithm structure.
-
-\subsection{Boundary Layer Mixing Profiles}
-
-Within boundary layer, mixing coefficients follow shape function profiles:
-
-\begin{lstlisting}[language=Python, caption={Boundary layer mixing (simplified)}]
-def compute_bl_mixing(ustar, bfsfc, hbl, stable, casea,
-                      interior_mixing, kbl, zgrid, hwide,
-                      wmt, wst, config):
-    """
-    Compute mixing profiles within boundary layer.
-
-    Uses cubic shape functions: kappa(z) = hbl * w(zeta) * G(sigma)
-    """
-    blmc_visc = np.zeros(len(zgrid))
-    blmc_t = np.zeros(len(zgrid))
-    ghat = np.zeros(len(zgrid))
-
-    for k in range(kbl):
-        # Normalized depth
-        sigma = -zgrid[k] / hbl  # 0 at surface, 1 at BL base
-
-        # Turbulent velocity scales (Monin-Obukhov)
-        zeta = sigma * hbl  # Dimensional depth
-        ws, wm = wscale(sigma, hbl, ustar, bfsfc, wmt, wst, config)
-
-        # Shape functions (cubic polynomials)
-        G_m = compute_shape_function(sigma, config.shp_m)
-        G_s = compute_shape_function(sigma, config.shp_s)
-
-        # Mixing coefficients
-        blmc_visc[k] = hbl * wm * G_m
-        blmc_t[k] = hbl * ws * G_s
-
-        # Nonlocal transport (Case B: unstable only)
-        if casea < 0.5:  # Unstable
-            ghat[k] = config.kpp_nonlocal_coef * (1.0 - sigma)**2
-        else:
-            ghat[k] = 0.0
-
-    return blmc_visc, blmc_t, ghat, ...
-\end{lstlisting}
-
-\textbf{Shape function details}:
-
-Momentum shape function (default coefficients):
+Bulk Richardson number at depth z:
 \begin{equation}
-G_m(\sigma) = 1.0 - 2.0\sigma + 1.0\sigma^2
+\text{Ri}_b(z) = \frac{\text{Ritop}(z)}{\text{dvsq}(z) + V_t^2 + \phi_\epsilon}
 \end{equation}
 
-Scalar shape function:
+where:
+\begin{itemize}
+    \item $\text{Ritop}(z)$ = $(z_{\text{ref}} - z) \times$ buoyancy difference from surface
+    \item $\text{dvsq}(z)$ = velocity shear squared relative to surface
+    \item $V_t^2$ = unresolved turbulent shear contribution
+    \item $\phi_\epsilon$ = small regularization parameter
+\end{itemize}
+
+Boundary layer depth is where $\text{Ri}_b = \text{Ri}_c$ (typically 0.3):
 \begin{equation}
-G_s(\sigma) = 1.0 - 2.0\sigma + 1.0\sigma^2
+\text{hbl} = z \quad \text{where} \quad \text{Ri}_b(z) = \text{Ri}_c
 \end{equation}
 
-(Default: identical for momentum and scalars; can be tuned separately.)
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Linear interpolation between grid levels to find exact hbl
+    \item Shortwave penetration reduces effective surface buoyancy forcing at depth
+    \item Python port includes July 2026 fix for off-by-one interpolation guard
+    \item Stable vs. unstable forcing determines velocity scale computation
+\end{itemize}
 
-\subsection{Interface Enhancement}
+\subsection{Surface Forcing Calculation}
 
-Enhanced mixing at boundary layer base to ensure smooth transition:
+\textbf{Purpose}: Compute surface friction velocity (u$_*$) and surface buoyancy forcing (bo, bosol) from atmospheric fluxes. These drive the boundary layer turbulence.
 
-\begin{lstlisting}[language=Python, caption={Interface enhancement (simplified)}]
-def enhance_at_interface(dkm1, hbl, kbl, interior_mixing,
-                         casea, zgrid, hwide, bl_mixing, ghat):
-    """
-    Enhance mixing at boundary layer base interface.
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_core_driver.py|
+    \item Method: \verb|KPPDriver._compute_surface_forcing()| (lines 250-320+)
+    \item Called from: \verb|compute_mixing()| (lines 193-196)
+    \item Friction velocity: $u_*^2 = \sqrt{\tau_x^2 + \tau_y^2}$ (line 260+)
+    \item Buoyancy forcing: \verb|bo| (turbulent) and \verb|bosol| (radiative) (lines 280-310+)
+\end{itemize}
 
-    Ensures smooth transition to interior mixing.
-    """
-    blmc_visc, blmc_t = bl_mixing
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_forcing_surf.F|
+    \item Subroutine: \verb|KPP_FORCING_SURF| (lines 1-500+)
+    \item Called from: \verb|kpp_calc.F::KPP_CALC| (line 150+)
+    \item Friction velocity: lines 200-250+ (from wind stress)
+    \item Buoyancy forcing: lines 300-400+ (from heat/freshwater fluxes)
+\end{itemize}
 
-    if kbl > 0 and kbl < len(zgrid):
-        # Thickness of layer at BL base
-        delta = dkm1
+\textbf{Key Computations}:
 
-        # Match interior mixing at interface
-        blmc_visc[kbl-1] = max(blmc_visc[kbl-1],
-                               interior_mixing[0][kbl])
-        blmc_t[kbl-1] = max(blmc_t[kbl-1],
-                            interior_mixing[2][kbl])
-
-        # Enhance ghat at interface (Case B only)
-        if casea < 0.5:
-            ghat[kbl-1] = ghat[kbl-1] + delta / hbl
-
-    return blmc_visc, blmc_t, ghat
-\end{lstlisting}
-
-\subsection{Interior Richardson Number Mixing}
-
-Below boundary layer, enhanced mixing where $Ri < Ri_0$:
-
-\begin{lstlisting}[language=Python, caption={Interior Ri mixing (simplified)}]
-def ri_iwmix(shear_sq, dbloc, dbloc_smooth, diff_s_bg,
-             diff_t_bg, params, zgrid, visc_nr_bg):
-    """
-    Compute interior mixing from Richardson number.
-
-    Enhanced where Ri < Ri0 (shear instability).
-    """
-    nz = len(zgrid)
-    visc_int = np.copy(visc_nr_bg)
-    diff_s_int = np.copy(diff_s_bg)
-    diff_t_int = np.copy(diff_t_bg)
-
-    for k in range(nz):
-        # Richardson number
-        if shear_sq[k] > 1e-14:
-            Ri = dbloc[k] / shear_sq[k]
-        else:
-            Ri = 1e10  # Stable, no shear
-
-        # Enhanced mixing for Ri < Ri0
-        if Ri < params.Ri0:
-            fRi = (1.0 - Ri / params.Ri0)**2
-            visc_int[k] += params.visc_shear_max * fRi
-            diff_s_int[k] += params.diff_shear_max * fRi
-            diff_t_int[k] += params.diff_shear_max * fRi
-
-    return visc_int, diff_s_int, diff_t_int
-\end{lstlisting}
-
-\section{Numerical Methods and Time-Stepping}
-\label{sec:numerical-methods}
-
-\subsection{Diagnostic Recomputation}
-
-Unlike GGL90 (prognostic TKE), KPP is \textit{diagnostic}: mixing coefficients recomputed from scratch each timestep. No state variables persist between calls.
-
-\textbf{Advantage}: Simple implementation, no stability concerns from prognostic equation.
-
-\textbf{Disadvantage}: Cannot represent memory effects (e.g., TKE persistence after wind cessation).
-
-\subsection{Implicit Tracer Diffusion}
-
-Temperature and salinity evolved using KPP mixing coefficients:
+Friction velocity:
 \begin{equation}
-\frac{\partial \theta}{\partial t} = \frac{\partial}{\partial z}\left(\kappa_t \frac{\partial \theta}{\partial z} - \gamma \overline{w'\theta'}\right) + \text{forcing}
+u_* = \sqrt[4]{\tau_x^2 + \tau_y^2}
 \end{equation}
 
-where $\gamma$ is the nonlocal transport term (KPP-specific).
+Turbulent buoyancy forcing:
+\begin{equation}
+\text{bo} = g \left( \alpha \frac{Q_{\text{net}} - Q_{\text{sw}}}{\rho_0 c_p} - \beta S_{\text{surf}} (E - P - R) \right)
+\end{equation}
 
-Treated implicitly (tridiagonal solve in \verb|unified_driver.py|, same as GGL90).
+Radiative buoyancy forcing:
+\begin{equation}
+\text{bosol} = g \alpha \frac{Q_{\text{sw}}}{\rho_0 c_p}
+\end{equation}
 
-\subsection{Comparison to MITgcm Approach}
+where:
+\begin{itemize}
+    \item $\alpha$ = thermal expansion coefficient [1/K]
+    \item $\beta$ = haline contraction coefficient [1/psu]
+    \item $Q_{\text{net}}$ = net surface heat flux [W/m²]
+    \item $Q_{\text{sw}}$ = shortwave radiation [W/m²]
+    \item $E - P - R$ = freshwater flux [m/s]
+\end{itemize}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Positive heat flux = into ocean (warming)
+    \item Positive freshwater flux = into ocean (freshening)
+    \item \verb|bo| drives turbulent mixing (non-penetrating)
+    \item \verb|bosol| penetrates with shortwave radiation
+\end{itemize}
+
+\subsection{Interior Richardson Mixing}
+
+\textbf{Purpose}: Compute mixing coefficients in the ocean interior (below boundary layer) based on local Richardson number. This parameterizes shear instability and internal wave breaking.
+
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_routines.py|
+    \item Function: \verb|ri_iwmix()| (lines 100-250+)
+    \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 205+)
+    \item Richardson number: $\text{Ri} = N^2 / S^2$ (line 120+)
+    \item Diffusivity: $\kappa = \nu_0 / (1 + a \text{Ri})^n$ (lines 140-180+)
+\end{itemize}
+
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Function: \verb|RI_IWMIX| (internal to KPPMIX, lines 1450-1600+)
+    \item Called from: \verb|KPPMIX| (line 500+)
+    \item Richardson number: lines 1480-1510+
+    \item Diffusivity formula: lines 1520-1560+
+\end{itemize}
+
+\textbf{Key Computation}:
+
+Local Richardson number:
+\begin{equation}
+\text{Ri} = \frac{N^2}{S^2 + \epsilon}
+\end{equation}
+
+Interior diffusivity (Pacanowski \& Philander 1981 functional form):
+\begin{equation}
+\kappa = \frac{\nu_0}{(1 + a \text{Ri})^n} + \kappa_{\text{background}}
+\end{equation}
+
+Typical values:
+\begin{itemize}
+    \item $\nu_0$ = 5.0e-3 m²/s (maximum diffusivity)
+    \item $a$ = 5.0 (empirical coefficient)
+    \item $n$ = 2.0 (empirical exponent)
+    \item $\kappa_{\text{background}}$ = 1.0e-5 m²/s (background diffusivity)
+\end{itemize}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Applied only below boundary layer (z $<$ -hbl)
+    \item Small $\epsilon$ regularizes division by zero when S² = 0
+    \item Large Ri (stable) $\rightarrow$ small diffusivity
+    \item Small Ri (shear instability) $\rightarrow$ large diffusivity
+\end{itemize}
+
+\subsection{Boundary Layer Mixing (Shape Functions)}
+
+\textbf{Purpose}: Compute vertical profiles of mixing coefficients within the boundary layer using non-dimensional shape functions. This represents the structure of surface-driven turbulence.
+
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item Function: \verb|compute_bl_mixing()| (lines 200-400+)
+    \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 220+)
+    \item Velocity scales: \verb|wscale()| computes w$_m$, w$_s$ (lines 250-280+)
+    \item Shape functions: cubic polynomial $G(\sigma)$ (lines 300-350+)
+    \item Diffusivity: $\kappa(\sigma) = h \times w_s \times G(\sigma)$ (lines 360-390+)
+\end{itemize}
+
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Function: \verb|BLMIX| (internal to KPPMIX, lines 1050-1350+)
+    \item Called from: \verb|KPPMIX| (line 550+)
+    \item Function: \verb|WSCALE| (lines 900-1000+) computes velocity scales
+    \item Shape function: lines 1150-1250+ (cubic profile)
+    \item Diffusivity assembly: lines 1280-1330+
+\end{itemize}
+
+\textbf{Key Computations}:
+
+Non-dimensional depth within boundary layer:
+\begin{equation}
+\sigma = -z / h_{\text{bl}} \quad (0 \leq \sigma \leq 1)
+\end{equation}
+
+Cubic shape function (Large et al. 1994):
+\begin{equation}
+G(\sigma) = \sigma (1 - \sigma)^2
+\end{equation}
+
+Velocity scales (Monin-Obukhov similarity, from lookup tables):
+\begin{itemize}
+    \item $w_m(\sigma, \zeta)$ = turbulent velocity scale for momentum
+    \item $w_s(\sigma, \zeta)$ = turbulent velocity scale for scalars
+    \item $\zeta = -h_{\text{bl}} / L$ = stability parameter (L = Obukhov length)
+\end{itemize}
+
+Boundary layer diffusivity:
+\begin{equation}
+\kappa_{\text{BL}}(z) = h_{\text{bl}} \times w_s(\sigma, \zeta) \times G(\sigma)
+\end{equation}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Shape function peaks at $\sigma \approx 0.33$ (one-third depth)
+    \item Goes to zero at surface ($\sigma = 0$) and base ($\sigma = 1$)
+    \item Velocity scales vary with stability (stable vs. unstable forcing)
+    \item Lookup tables (wmt, wst) precomputed for efficiency
+\end{itemize}
+
+\subsection{Nonlocal Transport}
+
+\textbf{Purpose}: Compute the counter-gradient flux term (ghat) for scalars in the unstably-forced boundary layer. This represents large-eddy transport not captured by downgradient diffusion.
+
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item Computed within: \verb|compute_bl_mixing()| (lines 380-400+)
+    \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 220+)
+    \item Formula: $\gamma(\sigma) = c_s \times \sigma \times (1 - \sigma)^2$ (line 390+)
+    \item Applied when: unstable forcing (bo $>$ 0)
+\end{itemize}
+
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Function: \verb|BLMIX| (lines 1050-1350+)
+    \item Nonlocal term: lines 1200-1230+ (ghat computation)
+    \item Shape function: $\gamma(\sigma)$ same cubic form
+\end{itemize}
+
+\textbf{Key Computation}:
+
+Nonlocal transport shape function:
+\begin{equation}
+\gamma(\sigma) = c_s \times \sigma (1 - \sigma)^2
+\end{equation}
+
+Nonlocal flux:
+\begin{equation}
+\text{ghat}(z) = \gamma(\sigma) \times \frac{\text{bo}}{w_s \times h_{\text{bl}}}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $c_s$ = shape function coefficient (typically 10)
+    \item \verb|bo| = surface buoyancy forcing [m²/s³]
+    \item $w_s$ = turbulent velocity scale for scalars [m/s]
+    \item Applied only for unstable forcing (bo $>$ 0)
+\end{itemize}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Nonlocal transport carries heat/salt vertically in convective boundary layers
+    \item Represents counter-gradient flux (e.g., warm water transported downward in cooling conditions)
+    \item Set to zero for stable forcing (bo $<$ 0)
+    \item Peak at $\sigma \approx 0.33$ (same as shape function)
+\end{itemize}
+
+\subsection{Diffusivity Assembly}
+
+\textbf{Purpose}: Combine interior and boundary layer mixing coefficients into final vertical profiles, ensuring smooth transitions and applying physical constraints.
+
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_core_driver.py|
+    \item Assembly logic: \verb|compute_mixing()| (lines 230-270+)
+    \item Bottom-to-top indexing: lines 240-250+ (interior below hbl, BL above)
+    \item Re-indexing to top-of-cell: lines 260-270+ (MITgcm output convention)
+    \item Background floor: applied at lines 265-268+
+\end{itemize}
+
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Subroutine: \verb|KPPMIX| (lines 28-1765)
+    \item Assembly: lines 700-900+ (combine interior + BL)
+    \item File: \verb|pkg/kpp/kpp_calc.F|
+    \item Export to model arrays: lines 550-650+ (\verb|KPPviscAz|, \verb|KPPdiffKzS|, \verb|KPPdiffKzT|)
+\end{itemize}
+
+\textbf{Key Operations}:
+
+For each vertical level:
+\begin{equation}
+\kappa_{\text{total}}(z) = \begin{cases}
+\kappa_{\text{BL}}(z) & \text{if } z > -h_{\text{bl}} \\
+\kappa_{\text{interior}}(z) & \text{if } z \leq -h_{\text{bl}}
+\end{cases}
+\end{equation}
+
+Background floor:
+\begin{equation}
+\kappa_{\text{final}}(z) = \max(\kappa_{\text{total}}(z), \kappa_{\text{background}})
+\end{equation}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Boundary layer coefficients override interior coefficients above -hbl
+    \item Background diffusivity (MITgcm's \verb|diffKrNrS|, \verb|diffKrNrT|) applied as floor
+    \item Enhancement at interface (next step) adds discontinuity at -hbl
+    \item Python uses bottom-to-top assembly then re-indexes for MITgcm compatibility
+\end{itemize}
+
+\subsection{Enhancement at Interface}
+
+\textbf{Purpose}: Apply an additional enhancement to mixing coefficients at the boundary layer base to represent entrainment processes and ensure smooth transition to interior mixing.
+
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item Function: \verb|enhance_at_interface()| (lines 400-500+)
+    \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 240+)
+    \item Enhancement factor: $f_{\text{enh}} = 1 + $ enhancement (lines 420-450+)
+    \item Applied at: interface closest to -hbl (lines 460-480+)
+\end{itemize}
+
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Function: \verb|ENHANCE| (internal to KPPMIX, lines 1350-1450+)
+    \item Called from: \verb|KPPMIX| (line 600+)
+    \item Enhancement logic: lines 1380-1420+
+\end{itemize}
+
+\textbf{Key Computation}:
+
+Enhancement factor at boundary layer base:
+\begin{equation}
+f_{\text{enh}} = 1 + c_{\text{enh}} \times \delta
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $c_{\text{enh}}$ = enhancement coefficient (parameter)
+    \item $\delta$ = nondimensional function of shear and stratification at interface
+\end{itemize}
+
+Enhanced diffusivity:
+\begin{equation}
+\kappa_{\text{enhanced}} = f_{\text{enh}} \times \kappa_{\text{BL}}(z = -h_{\text{bl}})
+\end{equation}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Represents entrainment at boundary layer base
+    \item Creates discontinuity in mixing profile at -hbl
+    \item Applied only at the interface level (kbl in Fortran)
+    \item Can be disabled by setting enhancement coefficient to zero
+\end{itemize}
+
+\subsection{Double Diffusion (Optional)}
+
+\textbf{Purpose}: Add contributions from double-diffusive convection (salt fingering and diffusive convection) when temperature and salinity gradients have opposing effects on density.
+
+\textbf{Python Implementation}:
+\begin{itemize}
+    \item \textbf{Not implemented in 1D port} (excluded as not critical for validation)
+    \item Would be in: \verb|KPP_ML/KPP_PY/kpp_core.py| (if ported)
+\end{itemize}
+
+\textbf{Fortran Source}:
+\begin{itemize}
+    \item File: \verb|pkg/kpp/kpp_routines.F|
+    \item Subroutine: \verb|KPP_DOUBLEDIFF| (lines 1962-2121)
+    \item Called from: \verb|kpp_calc.F::KPP_CALC| (line 400+)
+    \item Computes: additional diffusivity for salt fingering / diffusive convection
+\end{itemize}
+
+\textbf{Implementation Notes}:
+\begin{itemize}
+    \item Salt fingering: warm, salty water over cool, fresh water
+    \item Diffusive convection: cool, fresh water over warm, salty water
+    \item Adds to diffusivity computed by main KPP scheme
+    \item Not implemented in Python 1D port (3D feature)
+\end{itemize}
+
+\section{Supporting Infrastructure}
+\label{sec:infrastructure}
+
+\subsection{Parameter Handling}
+
+\textbf{Python Approach}:
+\begin{itemize}
+    \item YAML-based configuration file in \verb|configuration_yamls/|
+    \item \verb|kpp_default.yaml|: MITgcm default parameters
+    \item Parameters loaded into \verb|KPPParameters| dataclass
+    \item All parameters have documented units and default values
+\end{itemize}
+
+\textbf{Fortran Approach}:
+\begin{itemize}
+    \item Namelist-based configuration (\verb|data.kpp| file)
+    \item Namelist group: \verb|KPP_PARM01|
+    \item Parameters read in \verb|kpp_readparms.F|
+    \item Defaults defined in \verb|KPP_PARAMS.h| header file
+    \item Parameters stored in COMMON blocks
+\end{itemize}
+
+\subsection{Grid and Coordinate System}
+
+\textbf{Coordinate Conventions (both implementations)}:
+\begin{itemize}
+    \item \textbf{z-axis}: Positive upward, z = 0 at surface
+    \item \textbf{depth}: Positive downward (depth = $-z$)
+    \item \textbf{Vertical index k}: k=0 is shallowest (surface), k=nz-1 is deepest (bottom)
+    \item \textbf{Vertical spacing}: \verb|dz[k]| or \verb|cell_thickness[k]| is thickness of cell k
+\end{itemize}
+
+\textbf{Staggering Conventions}:
+\begin{itemize}
+    \item Tracers (T, S) at cell centers
+    \item Velocities (u, v) at cell centers (1D column)
+    \item Mixing coefficients ($\kappa_m$, $\kappa_h$) at cell interfaces (top face)
+    \item Nonlocal term (ghat) at cell interfaces (bottom face)
+    \item Buoyancy gradients (dbloc) at cell interfaces
+\end{itemize}
+
+\textbf{Python vertical arrays}:
+\begin{itemize}
+    \item \verb|depth[k]|: depth of cell center k [m], positive
+    \item \verb|cell_thickness[k]|: thickness of cell k [m]
+    \item \verb|visc_az[k]|, \verb|diff_kz_s[k]|, \verb|diff_kz_t[k]|: mixing coefficients at top face of cell k [m²/s]
+    \item \verb|ghat[k]|: nonlocal transport at bottom face of cell k [s/m²]
+    \item Index 0 = surface face (set to 0)
+\end{itemize}
+
+\textbf{Fortran vertical arrays}:
+\begin{itemize}
+    \item \verb|rC(k)|: z-coordinate of cell center k [m]
+    \item \verb|rF(k)|: z-coordinate of cell interface k [m]
+    \item \verb|drF(k)|: thickness of cell k [m]
+    \item \verb|KPPviscAz(i,j,k)|, \verb|KPPdiffKzS(i,j,k)|, \verb|KPPdiffKzT(i,j,k)|: mixing coefficients at top face [m²/s]
+    \item \verb|KPPghat(i,j,k)|: nonlocal transport at bottom face [1/s]
+\end{itemize}
+
+\subsection{Physical Constants}
+
+\textbf{Common constants (both implementations)}:
+\begin{itemize}
+    \item \verb|gravity| (Python) = \verb|gravity| (Fortran) = 9.81 m/s²
+    \item \verb|rho_const| (Python) = \verb|rhoConst| (Fortran) = 1029.0 kg/m³
+    \item \verb|cp| = specific heat capacity = 3994.0 J/(kg K)
+\end{itemize}
+
+\textbf{KPP-specific constants}:
+\begin{itemize}
+    \item \verb|vonkarman| = von Kármán constant = 0.4
+    \item \verb|zref| = reference depth for bulk Ri = 10.0 m (typically surface layer)
+\end{itemize}
+
+\subsection{Boundary Condition Details}
+
+\textbf{Surface Boundary Conditions}:
+\begin{itemize}
+    \item Mixing coefficients: zero at surface (no surface diffusive flux)
+    \item Surface forcing drives boundary layer depth and velocity scales
+    \item Implemented by setting index 0 to zero
+\end{itemize}
+
+\textbf{Bottom Boundary Conditions}:
+\begin{itemize}
+    \item Interior mixing continues to bottom
+    \item No special boundary layer treatment at bottom (KPP is surface-forced)
+    \item Bottom stress could be included (not implemented in 1D port)
+\end{itemize}
+
+\textbf{No lateral boundaries in 1D column model}
+
+\section{File-to-File Correspondence Table}
+\label{sec:file_correspondence}
 
 \begin{table}[h]
 \centering
-\caption{Numerical Method Comparison}
-\begin{tabular}{lll}
+\small
+\begin{tabular}{lp{6cm}}
 \toprule
-\textbf{Aspect} & \textbf{MITgcm} & \textbf{Python Port} \\
+\textbf{Python Module} & \textbf{MITgcm Fortran File(s)} \\
 \midrule
-Mixing computation & Diagnostic & Diagnostic \\
-Tracer time-stepping & Implicit & Implicit \\
-Nonlocal transport & Explicit source & Explicit source \\
-Tridiagonal solver & Direct (custom) & Thomas algorithm \\
-State persistence & None & None \\
-Timestep restriction & CFL from advection & CFL from advection \\
+\verb|kpp_core_driver.py| & \verb|pkg/kpp/kpp_calc.F| (main orchestrator) \\
+\verb|kpp_scheme_specific.py| & \verb|pkg/kpp/kpp_routines.F| (BLDEPTH, BLMIX, ENHANCE) \\
+\verb|kpp_routines.py| & \verb|pkg/kpp/kpp_routines.F| (RI\_IWMIX, WSCALE, STATEKPP) \\
+\verb|kpp_shortwave.py| & \verb|pkg/kpp/kpp_calc.F| (shortwave penetration) \\
+\verb|kpp_parameters.py| & \verb|pkg/kpp/kpp_readparms.F|, \verb|pkg/kpp/KPP_PARAMS.h| \\
+\verb|main/eos.py| & \verb|pkg/kpp/kpp_routines.F::STATEKPP|, \verb|model/src/find_rho.F| \\
+\midrule
+\multicolumn{2}{l}{\textbf{Fortran files NOT ported (3D/horizontal features):}} \\
+— & \verb|pkg/kpp/kpp_routines.F::KPP_DOUBLEDIFF| (double diffusion) \\
+— & \verb|pkg/kpp/kpp_routines.F::SMOOTH_HORIZ| (horizontal smoothing) \\
+— & \verb|pkg/kpp/kpp_routines.F::Z121| (vertical smoothing, not needed in 1D) \\
 \bottomrule
 \end{tabular}
+\caption{Python-to-Fortran file correspondence for KPP port}
 \end{table}
 
-\textbf{Stability}: Implicit tracer diffusion ensures unconditional stability for vertical mixing. No timestep restrictions from KPP physics.
+\section{Quick Reference: Key Variables}
+\label{sec:variables}
 
-\subsection{Timestep Selection}
+\subsection{Variable Name Mappings}
 
-Same as GGL90: typical timestep range 300-3600 seconds, limited by surface forcing and advection (not present in 1D).
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llp{4.5cm}}
+\toprule
+\textbf{Python Name} & \textbf{Fortran Name} & \textbf{Description} \\
+\midrule
+\verb|visc_az| & \verb|KPPviscAz| & Vertical viscosity [m²/s] \\
+\verb|diff_kz_s| & \verb|KPPdiffKzS| & Vertical diffusivity for salt [m²/s] \\
+\verb|diff_kz_t| & \verb|KPPdiffKzT| & Vertical diffusivity for temperature [m²/s] \\
+\verb|ghat| & \verb|KPPghat| & Nonlocal transport [s/m²] (Python) vs. [1/s] (Fortran) \\
+\verb|hbl| & \verb|hbl| & Boundary layer depth [m] \\
+\verb|dbloc| & \verb|dbloc| & Local buoyancy gradient [m/s²] \\
+\verb|dvsq| & \verb|dVsq| & Velocity shear² relative to surface [(m/s)²] \\
+\verb|Ritop| & \verb|Ritop| & Numerator of bulk Ri [(m/s)²] \\
+\verb|ustar| & \verb|ustar| & Friction velocity [m/s] \\
+\verb|bo| & \verb|bo| & Surface buoyancy forcing [m²/s³] \\
+\verb|bosol| & \verb|bosol| & Radiative buoyancy forcing [m²/s³] \\
+\verb|Rib| & \verb|Rib| & Bulk Richardson number [-] \\
+\verb|kbl| & \verb|kbl| & Index of first level below hbl \\
+\verb|depth| & \verb|-rC| & Depth (positive downward) [m] \\
+\verb|cell_thickness| & \verb|drF| & Cell thickness [m] \\
+\midrule
+\multicolumn{3}{l}{\textbf{Parameters:}} \\
+\verb|Ricr| & \verb|KPPRicr| & Critical Richardson number (default: 0.3) \\
+\verb|cstar| & \verb|KPPcstar| & Shape function coefficient (default: 10) \\
+\verb|epsilon| & \verb|KPPepsilon| & Nondim. extent of surface layer (default: 0.1) \\
+\verb|Vtc| & \verb|KPPVtc| & Unresolved turbulence parameter (default: 1.8) \\
+\verb|nu0| & \verb|KPPnu0| & Maximum interior diffusivity [m²/s] (default: 5e-3) \\
+\verb|diff_min| & \verb|KPPdiffMin| & Minimum diffusivity [m²/s] \\
+\verb|diff_max| & \verb|KPPdiffMax| & Maximum diffusivity [m²/s] \\
+\bottomrule
+\end{tabular}
+\caption{Python-to-Fortran variable name mappings}
+\end{table}
 
-\section{Parameter Handling and Configuration}
-\label{sec:parameters}
+\subsection{Unit Conversions}
 
-\subsection{YAML Configuration System}
-
-Same YAML-based configuration system as GGL90 (see GGL90 port description §7.1).
-
-\subsection{KPP Parameter Sets}
-
-\textbf{Default parameters} (\verb|kpp_default.yaml|):
-
-Matches MITgcm defaults from \verb|KPP_PARAMS.h|:
-\begin{verbatim}
-# Critical Richardson number
-Ricr: 0.3
-
-# Shape function coefficients (momentum)
-shp_m: [1.0, -2.0, 1.0, 0.0]
-
-# Shape function coefficients (scalars)
-shp_s: [1.0, -2.0, 1.0, 0.0]
-
-# Nonlocal transport coefficient
-kpp_nonlocal_coef: 10.0
-
-# Interior Ri mixing
-Ri0: 0.7
-visc_shear_max: 0.01      # m²/s
-diff_shear_max: 0.005     # m²/s
-
-# Monin-Obukhov parameters
-vonk: 0.4                 # von Karman constant
-epsilon: 0.1              # Surface layer fraction
-
-# Lookup table dimensions
-nni: 90
-nnj: 90
-\end{verbatim}
-
-\textbf{ECCOv4 tuning}: KPP is used with default parameters in ECCOv4 (no special tuning like GGL90's $\alpha = 30$).
-
-\subsection{Physical Parameters (Shared)}
-
-Same \verb|physical_parameters.yaml| as GGL90 (gravity, reference density, etc.).
-
-\subsection{Parameter Loading}
-
-\begin{lstlisting}[language=Python, caption={YAML parameter loading (KPP)}]
-@dataclass
-class KPPParameters:
-    """KPP parameter dataclass."""
-    Ricr: float = 0.3
-    shp_m: tuple = (1.0, -2.0, 1.0, 0.0)
-    # ... (all parameters with defaults)
-
-    @classmethod
-    def from_yaml(cls, yaml_path=None):
-        """Load parameters from YAML, or use defaults if None."""
-        if yaml_path is None:
-            return cls()
-
-        with open(yaml_path, 'r') as f:
-            config = yaml.safe_load(f)
-
-        return cls(**{k: v for k, v in config.items()
-                     if hasattr(cls, k)})
-\end{lstlisting}
-
-\subsection{Command-Line Override}
-
-Both execution scripts support KPP parameter override:
-
-\begin{verbatim}
-# Use defaults
-python run_scenarios.py --scheme kpp
-
-# Use custom parameters
-python run_experiment_example.py \
-    --scheme kpp \
-    --kpp-yaml ../configuration_yamls/kpp_custom.yaml
-\end{verbatim}
-
-\section{Integration with Model Driver}
-\label{sec:integration}
-
-KPP uses the same unified driver architecture as GGL90. See GGL90 port description §8 for detailed discussion.
-
-\subsection{Mixing Adapter Interface}
-
-KPP integrates via \verb|MixingAdapter| class (same as GGL90):
-
-\begin{lstlisting}[language=Python, caption={KPP adapter initialization}]
-class MixingAdapter:
-    def __init__(self, scheme: str, params):
-        if scheme == "kpp":
-            self.driver = KPPDriver(params)
-            self.is_prognostic = False  # KPP is diagnostic
-
-    def compute_mixing(self, state, grid, forcing, dt):
-        """Compute mixing coefficients (KPP: diagnostic)."""
-        output = self.driver.compute_mixing(
-            theta=state.temperature,
-            salt=state.salinity,
-            u_vel=state.u,
-            v_vel=state.v,
-            depth=grid.depth,
-            cell_thickness=grid.dz,
-            tau_x=forcing.tau_x,
-            tau_y=forcing.tau_y,
-            q_net=forcing.q_net,
-            q_sw=forcing.q_sw,
-            fw_flux=forcing.fw_flux,
-            coriol=forcing.coriol,
-            ...
-        )
-        return output.diff_kz_t, output.diff_kz_t, output.to_dict()
-\end{lstlisting}
-
-\subsection{Time-Stepping Integration}
-
-Same time-stepping loop as GGL90 (see GGL90 port description §8.2):
-\begin{enumerate}
-    \item Compute mixing coefficients (call KPP)
-    \item Apply convective adjustment (if enabled)
-    \item Implicit tracer diffusion
-    \item Apply surface forcing
-    \item Save diagnostics
-\end{enumerate}
-
-\textbf{Key difference}: Step 1 for KPP recomputes mixing from scratch (no TKE update).
-
-\subsection{Nonlocal Transport Implementation}
-
-KPP-specific feature: nonlocal transport term $\gamma$ handled in tracer diffusion:
-
-\begin{lstlisting}[language=Python, caption={Tracer diffusion with nonlocal transport}]
-def _diffuse_tracer_kpp(self, tracer, kappa_h, ghat, dt):
-    """
-    Diffuse tracer with KPP nonlocal transport.
-
-    d(theta)/dt = d/dz (kappa * d(theta)/dz - gamma * w'theta')
-    """
-    # Standard implicit diffusion (tridiagonal solve)
-    tracer_new = self._solve_diffusion_implicit(
-        tracer, kappa_h, dt
-    )
-
-    # Add nonlocal transport (explicit source term)
-    for k in range(1, self.grid.nz-1):
-        flux_nonlocal = ghat[k] * self.forcing.surface_flux
-        tracer_new[k] += dt * flux_nonlocal / self.grid.dz[k]
-
-    return tracer_new
-\end{lstlisting}
-
-\subsection{Scenario Runner}
-
-Same \verb|run_scenarios.py| as GGL90 (see GGL90 port description §8.3), supporting:
-\begin{verbatim}
-python run_scenarios.py --scheme kpp
-python run_scenarios.py --scheme both  # Run KPP + GGL90
-\end{verbatim}
-
-\section{Testing and Validation}
-\label{sec:testing}
-
-\subsection{Unit Test Suite}
-
-KPP shares regression test suite with GGL90 (test\_staggering.py):
-
-\textbf{KPP-specific tests}:
-\begin{enumerate}
-    \item \textbf{Bulk Richardson number}: Validate sign convention, verify $Ri_b > 0$ for stable stratification
-    \item \textbf{Boundary layer depth}: Test triggering at correct depth for known profiles
-    \item \textbf{Shape functions}: Verify monotonic decrease, boundary conditions ($G(0)=1$, $G(1)=0$)
-    \item \textbf{Nonlocal transport}: Validate $\gamma$ profile in unstable case, zero in stable case
-    \item \textbf{Interior Ri mixing}: Check enhanced diffusivity for $Ri < Ri_0$
-\end{enumerate}
-
-\textbf{Status}: 8/8 tests passing as of 2026-07-16 (including shared GGL90 tests).
-
-\subsection{Scenario-Based Validation}
-
-Same 6 scenarios as GGL90 (see §2.6 for results table).
-
-\textbf{KPP-specific observations}:
+\textbf{Minor unit difference}:
 \begin{itemize}
-    \item \textbf{Weak forcing}: KPP $\approx$ GGL90 (differences $< 0.1°$C)
-    \item \textbf{Strong wind}: KPP produces deeper mixing (hurricane: 9.2°C vs.\ GGL90 13.5°C)
-    \item \textbf{Convection}: KPP less aggressive than GGL90 (Arctic: $-6.0°$C vs.\ $-8.5°$C)
+    \item \textbf{ghat (nonlocal transport)}:
+        \begin{itemize}
+            \item Python: [s/m²] (following dimensional analysis from Large et al. 1994)
+            \item Fortran: [1/s] (MITgcm convention)
+            \item Conversion: Multiply by layer thickness when applying flux
+        \end{itemize}
 \end{itemize}
 
-\textbf{Physical interpretation}:
+All other variables use consistent SI units:
 \begin{itemize}
-    \item KPP's bulk Richardson criterion diagnoses deep boundary layers under strong wind
-    \item GGL90's TKE persistence allows continued mixing after wind cessation
-    \item Both behaviors physically reasonable; differences reflect scheme philosophies
+    \item Length: meters [m]
+    \item Time: seconds [s]
+    \item Temperature: degrees Celsius [°C]
+    \item Salinity: practical salinity units [psu]
+    \item Velocity: meters per second [m/s]
+    \item Mixing coefficients: square meters per second [m²/s]
 \end{itemize}
 
-\subsection{Comparison to MITgcm Output}
+\subsection{Sign Convention Differences}
 
-\textbf{Current status}: Qualitative comparison completed; quantitative comparison in progress.
-
-\textbf{Approach}: Extract single-column KPP output from MITgcm run, compare:
+\textbf{No sign convention differences} between Python and Fortran implementations. Both use:
 \begin{itemize}
-    \item Boundary layer depth ($h_{bl}$)
-    \item Mixing coefficients (\verb|KPPdiffKzT|, \verb|KPPviscAz|)
-    \item Nonlocal transport (\verb|KPPghat|)
-    \item Final SST
-\end{itemize}
-
-\textbf{Challenges}: Same as GGL90 (1D vs.\ 3D, simplified EOS, numerical precision).
-
-\subsection{Known Limitations}
-
-\begin{enumerate}
-    \item \textbf{1D only}: No horizontal effects, lateral boundary conditions
-    \item \textbf{No double diffusion}: Salt-fingering, diffusive convection not implemented
-    \item \textbf{No Ekman layer}: Rotation effects simplified
-    \item \textbf{Simplified shortwave}: Single Jerlov water type; no time-varying attenuation
-    \item \textbf{No horizontal smoothing}: MITgcm applies horizontal smoothing to \verb|dbloc|; not available in 1D
-\end{enumerate}
-
-\section{Usage Examples and Workflows}
-\label{sec:usage}
-
-KPP uses the same execution scripts as GGL90, with scheme selection via \verb|--scheme| flag.
-
-\subsection{Running Single Experiments}
-
-\textbf{Basic usage} (default parameters):
-\begin{verbatim}
-cd main
-python run_experiment_example.py --scheme kpp
-\end{verbatim}
-
-\textbf{With custom parameters}:
-\begin{verbatim}
-python run_experiment_example.py \
-    --scheme kpp \
-    --kpp-yaml ../configuration_yamls/kpp_custom.yaml
-\end{verbatim}
-
-\textbf{Compare both schemes}:
-\begin{verbatim}
-python run_experiment_example.py --scheme both
-# Produces side-by-side KPP vs GGL90 comparison plots
-\end{verbatim}
-
-\subsection{Batch Scenario Execution}
-
-\textbf{Run all scenarios with KPP}:
-\begin{verbatim}
-cd main
-python run_scenarios.py --scheme kpp
-\end{verbatim}
-
-\textbf{Run both schemes for all scenarios}:
-\begin{verbatim}
-python run_scenarios.py --scheme both
-# Output: Summary table with KPP and GGL90 final SST for each scenario
-\end{verbatim}
-
-\subsection{Custom Configuration}
-
-\textbf{Create custom parameter file}:
-\begin{verbatim}
-# custom_kpp.yaml
-Ricr: 0.25                # Lower critical Ri (deeper BL)
-kpp_nonlocal_coef: 15.0   # Stronger nonlocal transport
-visc_shear_max: 0.02      # Enhanced interior mixing
-\end{verbatim}
-
-\textbf{Run with custom parameters}:
-\begin{verbatim}
-python run_experiment_example.py \
-    --scheme kpp \
-    --kpp-yaml custom_kpp.yaml
-\end{verbatim}
-
-\subsection{Sensitivity Studies}
-
-\textbf{Parameter sweep example} (vary $Ri_c$):
-\begin{verbatim}
-for Ricr in 0.1 0.2 0.3 0.4 0.5; do
-    cat > Ricr_${Ricr}.yaml <<EOF
-Ricr: $Ricr
-EOF
-    python run_scenarios.py \
-        --scheme kpp \
-        --kpp-yaml Ricr_${Ricr}.yaml \
-        --output-dir results_Ricr_${Ricr}
-done
-\end{verbatim}
-
-Produces separate result directories for each $Ri_c$ value, enabling systematic parameter sensitivity analysis.
-
-\subsection{Common Workflows}
-
-\textbf{1. Quick validation after code changes}:
-\begin{verbatim}
-# Run regression tests
-pytest test_staggering.py
-
-# Run single scenario
-python run_experiment_example.py --scheme kpp --no-plots
-\end{verbatim}
-
-\textbf{2. Full validation suite}:
-\begin{verbatim}
-# All tests + all scenarios + both schemes
-pytest test_staggering.py && python run_scenarios.py --scheme both
-\end{verbatim}
-
-\textbf{3. Scheme comparison}:
-\begin{verbatim}
-# Run both schemes, generate comparison plots
-python run_experiment_example.py --scheme both
-# Output: T(z,t), SST(t), hbl(t), mixing coefficients (KPP vs GGL90)
-\end{verbatim}
-
-\textbf{4. Parameter tuning}:
-\begin{verbatim}
-# Create parameter sweep
-python scripts/parameter_sweep.py \
-    --scheme kpp \
-    --param Ricr \
-    --values 0.2 0.3 0.4 \
-    --scenarios hurricane_wind combined_storm
-
-# Analyze results
-python scripts/analyze_sweep.py --sweep-dir results/sweep_Ricr
-\end{verbatim}
-
-\subsection{Output Files}
-
-Standard output structure (same as GGL90):
-\begin{verbatim}
-simulations/output/
-  <scenario_name>_kpp/
-    diagnostics.nc       # Full 3D (z,t,variable) diagnostics
-    timeseries.nc        # Scalar timeseries (SST, hbl, fluxes)
-    profiles.png         # T(z), S(z) initial/final comparison
-    timeseries.png       # SST(t), hbl(t) evolution
-    mixing_coeff.png     # KPPdiffKzT(z,t) heatmap
-\end{verbatim}
-
-\textbf{KPP-specific diagnostics}:
-\begin{itemize}
-    \item \verb|KPPhbl|: Boundary layer depth timeseries
-    \item \verb|KPPghat|: Nonlocal transport profile
-    \item \verb|KPPbfsfc|: Surface buoyancy forcing
-    \item \verb|KPPustar|: Friction velocity
-\end{itemize}
-
-\subsection{Command-Line Help}
-
-Both scripts provide comprehensive help:
-\begin{verbatim}
-python run_experiment_example.py --help
-python run_scenarios.py --help
-\end{verbatim}
-
-\section*{References}
-
-\begin{itemize}
-    \item Large, W. G., J. C. McWilliams, and S. C. Doney (1994). Oceanic vertical mixing: A review and a model with a nonlocal boundary layer parameterization. \textit{Reviews of Geophysics}, 32(4), 363-403.
-    \item Large, W. G., and S. Pond (1981). Open ocean momentum flux measurements in moderate to strong winds. \textit{Journal of Physical Oceanography}, 11(3), 324-336.
-    \item MITgcm Group (2024). MITgcm User Manual. \url{https://mitgcm.readthedocs.io/}
-    \item Jackett, D. R., and T. J. McDougall (1995). Minimal adjustment of hydrographic profiles to achieve static stability. \textit{Journal of Atmospheric and Oceanic Technology}, 12(4), 381-389.
+    \item z-axis positive upward (z = 0 at surface, z < 0 below surface)
+    \item depth positive downward (depth = $-z$)
+    \item hbl positive (represents positive depth below surface)
+    \item Positive buoyancy forcing = destabilizing (heating or freshening)
+    \item Negative buoyancy forcing = stabilizing (cooling or salting)
 \end{itemize}
 
 \end{document}
