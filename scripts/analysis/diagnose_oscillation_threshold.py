@@ -109,19 +109,27 @@ def compute_gradient_length_scale(field: np.ndarray, depth: np.ndarray) -> float
             L = np.abs(field[k]) / np.abs(df_dz[k])
             length_scales.append(L)
 
+    length_scales = np.array(length_scales)
     if len(length_scales) > 0:
-        # Minimum length scale (most restrictive)
         min_length_scale = np.min(length_scales)
         median_length_scale = np.median(length_scales)
+        # Fraction of sampled layers whose gradient is under-resolved (L < 2*dz).
+        under_resolved_fraction = float(np.mean(length_scales < 2.0 * np.mean(dz)))
     else:
         min_length_scale = np.inf
         median_length_scale = np.inf
+        under_resolved_fraction = 0.0
 
+    # Resolution ratio uses the MEDIAN length scale: the minimum is dominated by
+    # a single sharp transition point in a TKE profile spanning many orders of
+    # magnitude, which makes it ~0 regardless of alpha and thus uninformative.
     return {
         'min_length_scale': min_length_scale,
         'median_length_scale': median_length_scale,
         'grid_spacing_mean': np.mean(dz),
-        'resolution_ratio': min_length_scale / np.mean(dz),  # Should be >> 1
+        'resolution_ratio': median_length_scale / np.mean(dz),  # median-based; should be >~ 1
+        'min_resolution_ratio': min_length_scale / np.mean(dz),  # kept for reference
+        'under_resolved_fraction': under_resolved_fraction,
     }
 
 
@@ -426,7 +434,9 @@ def main():
         print(f"  TKE roughness:           {analysis['tke_roughness']:.2e}")
         print(f"  Normalized roughness:    {analysis['tke_normalized_roughness']:.3f}")
         print(f"  Oscillation count:       {analysis['tke_oscillation_count']}")
-        print(f"  Resolution ratio (L/Δz): {analysis['tke_length_scale']['resolution_ratio']:.2f}")
+        ls = analysis['tke_length_scale']
+        print(f"  Median L/Δz:             {ls['resolution_ratio']:.2f}  (min L/Δz={ls['min_resolution_ratio']:.3f})")
+        print(f"  Under-resolved fraction: {ls['under_resolved_fraction']:.2f}")
         print()
 
     # Create comprehensive diagnostic plot
@@ -454,12 +464,14 @@ def main():
             print(f"✓ First α with roughness < 10% max: α={alpha:.1f} (roughness={rough:.2e})")
             break
 
-    # Method 2: Resolution ratio
-    print("\nResolution Ratio (L_gradient / Δz):")
+    # Method 2: Resolution ratio (median-based) + under-resolved fraction
+    print("\nResolution Ratio (median L_gradient / Δz) and under-resolved fraction:")
     for alpha in alphas_to_test:
-        ratio = results_dict[alpha]['analysis']['tke_length_scale']['resolution_ratio']
+        ls = results_dict[alpha]['analysis']['tke_length_scale']
+        ratio = ls['resolution_ratio']
+        frac = ls['under_resolved_fraction']
         status = "✓" if ratio >= 2.0 else ("⚠" if ratio >= 1.0 else "✗")
-        print(f"  α={alpha:5.1f}:  L/Δz = {ratio:5.2f}  {status}")
+        print(f"  α={alpha:5.1f}:  median L/Δz = {ratio:6.2f}  {status}   under-resolved={frac:.2f}")
 
     print("\n" + "="*70)
     print("CONCLUSION")

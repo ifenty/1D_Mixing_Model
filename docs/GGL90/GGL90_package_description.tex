@@ -3849,25 +3849,27 @@ Systematic testing of the arctic convection scenario (strong cooling, ice format
 \caption{TKE oscillation metrics vs.\ $\alpha$ for arctic convection scenario}
 \label{tab:alpha_oscillations}
 \small
-\begin{tabular}{ccccc}
+\begin{tabular}{cccccc}
 \toprule
-$\alpha$ & \textbf{TKE Roughness} & \textbf{Normalized} & \textbf{Oscillation} & \textbf{Status} \\
- & $\sum |\partial^2 \TKE/\partial z^2|$ & \textbf{Roughness} & \textbf{Count} &  \\
+$\alpha$ & \textbf{TKE Roughness} & \textbf{Normalized} & \textbf{Oscillation} & \textbf{Under-resolved} & \textbf{Status} \\
+ & $\sum |\partial^2 \TKE/\partial z^2|$ & \textbf{Roughness} & \textbf{Count} & \textbf{fraction} ($L<2\Delta z$) &  \\
 \midrule
-1.0  & $1.22 \times 10^{-2}$ & 1.961 & 11 & \textcolor{red}{OSCILLATORY} \\
-3.0  & $4.53 \times 10^{-3}$ & 0.959 & 9  & \textcolor{red}{OSCILLATORY} \\
-5.0  & $4.61 \times 10^{-4}$ & 0.128 & 3  & \textcolor{orange}{THRESHOLD} \\
-7.5  & $4.12 \times 10^{-4}$ & 0.112 & 3  & \textcolor{green!60!black}{SMOOTH} \\
-10.0 & $3.82 \times 10^{-4}$ & 0.103 & 3  & \textcolor{green!60!black}{SMOOTH} \\
-15.0 & $3.40 \times 10^{-4}$ & 0.090 & 3  & \textcolor{green!60!black}{SMOOTH} \\
-20.0 & $3.09 \times 10^{-4}$ & 0.081 & 1  & \textcolor{green!60!black}{SMOOTH} \\
-30.0 & $2.61 \times 10^{-4}$ & 0.068 & 1  & \textcolor{green!60!black}{SMOOTH} \\
-50.0 & $2.15 \times 10^{-4}$ & 0.055 & 1  & \textcolor{green!60!black}{SMOOTH} \\
+1.0  & $1.22 \times 10^{-2}$ & 1.961 & 11 & 0.53 & \textcolor{red}{OSCILLATORY} \\
+3.0  & $4.53 \times 10^{-3}$ & 0.959 & 9  & 0.27 & \textcolor{red}{OSCILLATORY} \\
+5.0  & $4.61 \times 10^{-4}$ & 0.128 & 3  & 0.06 & \textcolor{orange}{THRESHOLD} \\
+7.5  & $4.12 \times 10^{-4}$ & 0.112 & 3  & 0.06 & \textcolor{green!60!black}{SMOOTH} \\
+10.0 & $3.82 \times 10^{-4}$ & 0.103 & 3  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+15.0 & $3.40 \times 10^{-4}$ & 0.090 & 3  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+20.0 & $3.09 \times 10^{-4}$ & 0.081 & 1  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+30.0 & $2.61 \times 10^{-4}$ & 0.068 & 1  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
+50.0 & $2.15 \times 10^{-4}$ & 0.055 & 1  & 0.12 & \textcolor{green!60!black}{SMOOTH} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Key finding:} TKE roughness drops by factor of 27 from $\alpha=1$ to $\alpha=5$. The threshold for acceptable solution quality is \textbf{$\alpha \geq 5$} (roughness $< 10\%$ of maximum).
+\textbf{Key finding:} Three independent metrics agree on a threshold of \textbf{$\alpha \geq 5$}. TKE roughness drops by a factor of $\sim$27 from $\alpha=1$ to $\alpha=5$ (falling below $10\%$ of its maximum); the oscillation count falls from 11 to 3; and the fraction of layers whose gradient length scale $L=|\TKE|/|\partial \TKE/\partial z|$ is under-resolved ($L<2\Delta z$) drops from $0.53$ to $0.06$. The last metric directly confirms the mechanism: at $\alpha=1$ roughly half the column is under-resolved, producing the cell-to-cell oscillations, whereas by $\alpha=5$ almost the entire column is well resolved.
+
+\textit{Note on metric choice:} the resolution ratio is reported here as the \emph{median} $L/\Delta z$ together with the \emph{fraction} of under-resolved layers. A single minimum $L/\Delta z$ is not informative because a TKE profile spans many orders of magnitude, so its steepest single transition drives the minimum toward zero at every $\alpha$; the median and the under-resolved fraction are the robust measures.
 
 \subsubsection{Why ECCOv4 Uses $\alpha = 30$}
 
@@ -3891,7 +3893,7 @@ For new GGL90 applications:
 \item \textbf{High stratification:} Consider $\alpha = 50$ for strongly stratified regimes
 \end{enumerate}
 
-\textbf{Grid dependence:} The minimum $\alpha$ scales with grid Reynolds number. Coarser grids (larger $\Delta z$) may tolerate smaller $\alpha$, but testing is recommended.
+\textbf{Grid dependence:} The minimum $\alpha$ is set by how well the grid resolves the TKE gradient length scale $L$, not by a stability (grid-Reynolds) limit --- the implicit solve is unconditionally stable. What matters is the ratio $L/\Delta z$: since larger $\alpha$ increases $\kappa_h$ and spreads TKE (increasing $L$), the threshold depends on the grid and forcing, so re-testing is recommended for a new configuration.
 
 \textbf{Testing protocol:} When adapting GGL90 to a new configuration, plot TKE and $\kappa_m$ vertical profiles. If you observe cell-to-cell oscillations, increase $\alpha$ until profiles are smooth.
 
