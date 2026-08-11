@@ -52,6 +52,29 @@ for k in range(Nr):
 - Check that special-case logic for first/last vertical levels translates correctly
 - Test with small Nr (e.g., 5 levels) to make index errors obvious
 
+### Verifying Units Against the Fortran Source
+
+**Lesson**: Trust the MITgcm Fortran source comments as the authoritative unit specification. Do not infer units from dimensional analysis alone, and never document a "unit difference" between Python and Fortran without confirming it in the source.
+
+**Context**: MITgcm consistently documents variable units in the header comment blocks of each subroutine (e.g., `pkg/kpp/kpp_routines.F` documents every argument with its units in parentheses). These comments are the ground truth. When porting, the Python variable should carry the *same* units as the Fortran variable it replaces — a genuine unit difference is rare and almost always a documentation mistake, not an intentional design choice.
+
+**Concrete Example (ghat)**: The KPP nonlocal transport coefficient `ghat` was at one point documented as `[1/s]` in Fortran and `[s/m²]` in Python, implying a conversion was needed. Checking the source settled it immediately:
+```fortran
+c     ghat   (imt)    - nonlocal transport coefficient                  (s/m^2)
+```
+Both implementations use `[s/m²]`. The "difference" was purely a documentation error. Dimensional analysis confirms it: `ghat = cg / (ws × hbl)` gives `[1] / ([m/s] × [m]) = [s/m²]`.
+
+**Why It Matters**:
+- A wrongly documented unit invites a "fix" (spurious multiply/divide by a length or time scale) that silently corrupts results.
+- Unit mismatches between coupled terms are a leading cause of physically plausible but quantitatively wrong output — the model runs, but the answer is off by a factor.
+
+**Verification Strategy**:
+- For every ported variable, locate its unit in the Fortran subroutine header comment and copy that unit verbatim into the Python docstring / documentation.
+- Cross-check dimensional consistency of each equation as a *secondary* confirmation, not the primary source.
+- When a term combines several variables, verify the composite units resolve to the expected result (e.g., all terms in the TKE budget must be `[m²/s³]`).
+- Treat any claimed Python-vs-Fortran unit difference as a red flag: confirm it in the source before documenting it, since the ports are meant to preserve physics exactly.
+- Grep the Fortran headers directly: `grep -n "variable_name" pkg/<scheme>/*.F` usually lands on the documented unit.
+
 ---
 
 ## GGL90 Porting Lessons
