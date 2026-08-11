@@ -15,6 +15,43 @@ This document captures key insights and lessons learned from porting MITgcm's GG
 
 **Impact**: Incorrect signs can produce physically unrealistic results (e.g., stable stratification appearing unstable).
 
+### Array Indexing: Fortran 1-based vs Python 0-based
+
+**Lesson**: MITgcm Fortran uses 1-based indexing with k=1 at the surface, while Python uses 0-based indexing with index 0 at the surface.
+
+**Context**: 
+- **Fortran**: Vertical levels indexed k=1 (surface) to k=Nr (bottom), where Nr is the total number of levels
+- **Python**: Vertical levels indexed k=0 (surface) to k=Nr-1 (bottom)
+- **MITgcm convention**: k increases downward (k=1 is shallowest, k=Nr is deepest)
+
+**Common Translation Patterns**:
+```fortran
+! Fortran: Surface boundary condition at k=1
+DO k=1,Nr
+  IF (k .EQ. 1) THEN
+    ! Surface layer special case
+  ENDIF
+ENDDO
+```
+
+```python
+# Python: Surface boundary condition at k=0
+for k in range(Nr):
+    if k == 0:
+        # Surface layer special case
+```
+
+**Why It Matters**: 
+- Hardcoded `k=1` in Fortran must become `k=0` in Python
+- Loop ranges `1:Nr` in Fortran become `0:Nr` or `range(Nr)` in Python
+- Array slicing differs: Fortran `array(2:Nr)` excludes surface; Python `array[1:]` excludes surface
+- Off-by-one errors in boundary conditions are common if this isn't carefully handled
+
+**Verification Strategy**: 
+- Always verify surface (k=0 Python, k=1 Fortran) and bottom (k=Nr-1 Python, k=Nr Fortran) boundary conditions separately
+- Check that special-case logic for first/last vertical levels translates correctly
+- Test with small Nr (e.g., 5 levels) to make index errors obvious
+
 ---
 
 ## GGL90 Porting Lessons
