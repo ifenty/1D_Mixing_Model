@@ -75,6 +75,24 @@ Both implementations use `[s/m²]`. The "difference" was purely a documentation 
 - Treat any claimed Python-vs-Fortran unit difference as a red flag: confirm it in the source before documenting it, since the ports are meant to preserve physics exactly.
 - Grep the Fortran headers directly: `grep -n "variable_name" pkg/<scheme>/*.F` usually lands on the documented unit.
 
+### Vertical Grid Staggering (Cell Centers vs Interfaces)
+
+**Lesson**: Reproduce MITgcm's vertical staggering *exactly* so ported output arrays overlay MITgcm output index-for-index — no re-indexing, no interpolation, no half-cell averaging. Decide up front which quantities live at cell centers and which live at interfaces (W-points), and preserve that placement end-to-end.
+
+**Context**:
+- **Cell-centered quantities** (tracers, velocities): `theta[k]`, `salt[k]`, `u_vel[k]` sit at the center of cell `k` (MITgcm `rC(k)`).
+- **Interface (W-point) quantities** (diffusivities, viscosities, mixing length, N²): index `k` = **top face of cell k**, i.e. the interface between cell `k-1` (above) and cell `k` (below). Index `k=0` is the ocean surface face (MITgcm `rF(k)` layout).
+- **Surface face carries no diffusive flux**: `diffKz[0] = viscAz[0] = 0` (MITgcm `KPPdiffKzT(1)=0`).
+- Combined with 1-based↔0-based indexing: `PythonArray[k] ↔ MITgcmArray(k+1)` for both center and interface quantities. No half-cell shift for these.
+- The vertical diffusive flux through the top face of cell `k` is `-K[k] * (C[k] - C[k-1]) / drC[k]`, where `drC[k] = depth[k-1] - depth[k]` is the center-to-center distance (MITgcm `gad_diff_r.F`).
+
+**Why It Matters**: If centers and interfaces are conflated, or an array is silently shifted, the model still runs and produces plausible profiles — but fluxes are computed across the wrong faces and comparison against MITgcm output requires ad hoc re-indexing that masks real discrepancies.
+
+**Verification Strategy**:
+- Encode the intended placement of every array as explicit assertions in a staggering test (see `tests/test_staggering.py`), and confirm output overlays a MITgcm baseline with `max|Δ| = 0`.
+- The staggering map is documented in `docs/dev_notes/MITGCM_STAGGERING.md` — keep it in sync when adding new output fields.
+- EOS choice is orthogonal to staggering: the grid layout is identical for linear and JMD95 EOS.
+
 ---
 
 ## GGL90 Porting Lessons
@@ -161,7 +179,23 @@ else:
 
 **Why It Matters**: Nonlocal transport is essential for capturing convective plumes and other non-gradient-flux processes. Omitting or mis-signing this term produces incorrect tracer profiles.
 
-### 4. Diagnostic vs Prognostic State
+### 4. The `ghat` Half-Level Offset (Do Not "Fix" It)
+
+**Issue**: In MITgcm, `ghat` (nonlocal transport) is deliberately staggered half a level away from the diffusivities: `diffKz` lives at the **top** face of cell `k`, while `ghat[k]` lives at the **bottom** face of cell `k` (`kpp_transport_t.F:21-25`). The diffusion flux through the top face of cell `k` pairs `diffKz[k]` with `ghat[k-1]`.
+
+**Correct Implementation**: Preserve this offset exactly. In the Python port, `ghat` is **not** shifted onto the same grid as `diffKz`; the solver pairs `diffKz[k]` with `ghat[k-1]` (`kpp_core_driver.py`).
+
+**Why It Matters**: This looks like an inconsistency and invites a well-meaning "fix" that re-aligns `ghat` with `diffKz`. Doing so silently changes the tracer tendencies. The offset is intentional MITgcm design, not a bug.
+
+### 5. KPP Internal Grid vs Output Grid (+1 Shift)
+
+**Issue**: KPP internally computes diffusivities on a **bottom-of-cell** grid (MITgcm `kpp_routines.F`, `diffus(i,k,mr)`), then **shifts by +1 on output** (`kpp_calc.F:574-588`, `vddiff(k-1) -> KPPdiffKzT(k)`).
+
+**Correct Implementation**: The Python port mirrors this: internal computation on the bottom-of-cell grid, then a +1 shift on output (`kpp_core.py` Step 9). Always compare against MITgcm's **output** arrays (`KPPdiffKzT`, etc.), never its internal `diffus`.
+
+**Why It Matters**: Comparing the Python output against MITgcm's *internal* `diffus` array (rather than its output arrays) will show a spurious one-level mismatch and lead to chasing a nonexistent bug. The relabel is a pure index shift plus a symmetric solver update, provably leaving the time-stepped tracer solution unchanged.
+
+### 6. Diagnostic vs Prognostic State
 
 **Issue**: Unlike GGL90 (which carries prognostic TKE), KPP is fully diagnostic and recomputes all mixing coefficients each timestep.
 
