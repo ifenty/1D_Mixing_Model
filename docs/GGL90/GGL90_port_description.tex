@@ -183,8 +183,7 @@ This section provides detailed line-by-line mapping for each major computational
 \textbf{Implementation Notes}:
 \begin{itemize}
     \item Both implementations use potential density gradients (MITgcm's \verb|sigmaR|), not in-situ density
-    \item This is critical for avoiding spurious mixing from compressibility effects
-    \item Python port was corrected in July 2026 to match this convention
+    \item This is critical for avoiding spurious mixing from compressibility effects in deep water columns
 \end{itemize}
 
 \subsection{Mixing Length Calculation}
@@ -596,7 +595,5 @@ No unit conversions are needed between the Python and Fortran implementations. B
     \item Vertical gradients computed consistently
     \item Buoyancy term B = $-\kappa_h N^2$ (negative for stable stratification)
 \end{itemize}
-
-\textbf{Critical fix (July 2026)}: The Python port initially used in-situ density gradients for N², which introduced spurious compressibility effects. The port was corrected to use potential density gradients (MITgcm's \verb|sigmaR|), matching the Fortran implementation exactly.
 
 \end{document}

@@ -258,7 +258,7 @@ Boundary layer depth is where $\text{Ri}_b = \text{Ri}_c$ (typically 0.3):
 \begin{itemize}
     \item Linear interpolation between grid levels to find exact hbl
     \item Shortwave penetration reduces effective surface buoyancy forcing at depth
-    \item Python port includes July 2026 fix for off-by-one interpolation guard
+    \item Interpolation includes guard to prevent accessing array bounds beyond bottom level
     \item Stable vs. unstable forcing determines velocity scale computation
 \end{itemize}
 
