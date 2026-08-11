@@ -331,6 +331,127 @@ These arrays are computed by \texttt{KPP\_CALC} and subsequently consumed
 by the tracer and momentum advection--diffusion solvers each timestep.  
   
 % ============================================================  
+% ============================================================  
+\section{Governing Equations}  
+% ============================================================  
+\label{sec:governing_equations}  
+  
+This section summarizes the governing equations for vertical mixing  
+in the KPP scheme. The complete mathematical derivation is provided  
+in Large, McWilliams, and Doney (1994).  
+  
+\begin{longtable}{p{2.8cm} p{2.8cm} p{5cm} l}  
+\toprule  
+\textbf{Variable} & \textbf{Origin} & \textbf{Role / Transformation} &  
+\textbf{Consumer} \\  
+\midrule  
+\endhead  
+\texttt{theta, salt} &  
+  MITgcm dynamics &  
+  Temperature, salinity used in EOS &  
+  \texttt{STATEKPP} \\[4pt]  
+\texttt{DBLOC} &  
+  \texttt{STATEKPP} &  
+  Local buoyancy gradient; smoothed $\to$ \texttt{ghat} temporarily &  
+  \texttt{bldepth}, \texttt{Ri\_iwmix} \\[4pt]  
+\texttt{Ritop} &  
+  \texttt{STATEKPP} via \texttt{KPP\_CALC} &  
+  Buoyancy deficit $\times$ depth; numerator of bulk Ri &  
+  \texttt{bldepth} \\[4pt]  
+\texttt{TTALPHA, SSBETA} &  
+  \texttt{STATEKPP} &  
+  Expansion coefficients; used for \texttt{bo}, \texttt{bosol},  
+  \texttt{KPP\_DOUBLEDIFF} &  
+  \texttt{KPP\_FORCING\_SURF} \\[4pt]  
+\texttt{ustar} &  
+  \texttt{KPP\_FORCING\_SURF} &  
+  Surface friction velocity; enters all turbulent scale calculations &  
+  \texttt{bldepth}, \texttt{blmix} \\[4pt]  
+\texttt{bo} &  
+  \texttt{KPP\_FORCING\_SURF} &  
+  Total (non-radiative) surface buoyancy flux &  
+  \texttt{bldepth} \\[4pt]  
+\texttt{bosol} &  
+  \texttt{KPP\_FORCING\_SURF} &  
+  Radiative surface buoyancy flux; added to \texttt{bfsfc} &  
+  \texttt{bldepth} \\[4pt]  
+\texttt{shsq} &  
+  \texttt{KPP\_CALC} (from \texttt{uVel, vVel}) &  
+  Local vertical shear; denominator of interior Ri &  
+  \texttt{Ri\_iwmix} \\[4pt]  
+\texttt{dVsq} &  
+  \texttt{KPP\_FORCING\_SURF} &  
+  Surface-ref.\ shear; denominator of bulk Ri &  
+  \texttt{bldepth} \\[4pt]  
+\texttt{diffusKzS/T} &  
+  \texttt{CALC\_3D\_DIFFUSIVITY} $\pm$ \texttt{KPP\_DOUBLEDIFF} &  
+  Background + double-diffusion diffusivities;  
+  used as interior baseline in \texttt{Ri\_iwmix} and as matching value  
+  in \texttt{blmix} &  
+  \texttt{Ri\_iwmix}, \texttt{blmix} \\[4pt]  
+\texttt{diffus(:,:,1:3)} &  
+  \texttt{Ri\_iwmix} &  
+  Interior mixing coefficients; overwritten in BL above \texttt{kbl} &  
+  \texttt{KPPMIX} (combine step) \\[4pt]  
+\texttt{hbl, kbl} &  
+  \texttt{bldepth} &  
+  OBL depth and index; control BL/interior partitioning &  
+  \texttt{blmix}, \texttt{enhance}, \texttt{KPP\_CALC} \\[4pt]  
+\texttt{bfsfc} &  
+  \texttt{bldepth} &  
+  Effective surface buoyancy forcing at $z = -\hbl$ including SW &  
+  \texttt{blmix} (via \texttt{wscale}) \\[4pt]  
+\texttt{blmc(:,:,1:3)} &  
+  \texttt{blmix} $\to$ \texttt{enhance} &  
+  BL mixing coefficients; blend with interior at OBL base &  
+  \texttt{KPPMIX} (combine step) \\[4pt]  
+\texttt{ghat} &  
+  \texttt{blmix} (zeroed below \texttt{kbl}) &  
+  Non-local transport coefficient &  
+  \texttt{KPP\_TRANSPORT\_T/S/PTR} \\[4pt]  
+\texttt{KPPviscAz} &  
+  \texttt{KPP\_CALC} (from \texttt{vddiff(:,:,:,1)}) &  
+  Final 3D viscosity; averaged to u,v grid &  
+  \texttt{KPP\_CALC\_VISC} \\[4pt]  
+\texttt{KPPdiffKzT} &  
+  \texttt{KPP\_CALC} (from \texttt{vddiff(:,:,:,3)}) &  
+  Final 3D temperature diffusivity &  
+  \texttt{KPP\_CALC\_DIFF\_T}, \texttt{KPP\_TRANSPORT\_T} \\[4pt]  
+\texttt{KPPdiffKzS} &  
+  \texttt{KPP\_CALC} (from \texttt{vddiff(:,:,:,2)}) &  
+  Final 3D salt/tracer diffusivity &  
+  \texttt{KPP\_CALC\_DIFF\_S/PTR}, \texttt{KPP\_TRANSPORT\_S/PTR} \\[4pt]  
+\texttt{KPPghat} &  
+  \texttt{KPP\_CALC} (from \texttt{ghat}) &  
+  Final 3D non-local coefficient &  
+  \texttt{KPP\_TRANSPORT\_T/S/PTR} \\[4pt]  
+\texttt{KPPhbl} &  
+  \texttt{KPP\_CALC} (from \texttt{hbl}) &  
+  OBL depth; used for \texttt{KPPfrac}, \texttt{KPPplumefrac} &  
+  \texttt{KPP\_OUTPUT}, user diagnostics \\[4pt]  
+\texttt{KPPfrac} &  
+  \texttt{KPP\_CALC} via \texttt{SWFRAC} &  
+  SW fraction penetrating OBL; modifies effective surface $Q_T$ &  
+  \texttt{KPP\_TRANSPORT\_T} \\[4pt]  
+\texttt{KappaRT, KappaRS} &  
+  \texttt{KPP\_CALC\_DIFF\_T/S} &  
+  Diffusivity passed to tracer implicit solver &  
+  \texttt{CALC\_DIFFUSIVITY} \\[4pt]  
+\texttt{KappaRU, KappaRV} &  
+  \texttt{KPP\_CALC\_VISC} &  
+  Viscosity passed to momentum implicit solver &  
+  \texttt{CALC\_DIFFUSIVITY} \\[4pt]  
+\texttt{df} &  
+  \texttt{KPP\_TRANSPORT\_T/S/PTR} &  
+  Non-local diffusive flux added to tracer tendency &  
+  \texttt{GAD\_DIFF\_X} family \\  
+\bottomrule  
+\caption{Evolution of key variables through the KPP computation chain.}  
+\label{tab:varflow}  
+\end{longtable}  
+  
+% ============================================================  
+  
 \section{Package Architecture and Call Flow}  
 % ============================================================  
   
@@ -826,7 +947,8 @@ ensures that diffusivities are zero at interfaces adjacent to land
 or seafloor cells.  
   
 % ============================================================  
-\section{Density and Buoyancy: \texttt{STATEKPP}}  
+\section{Stratification and Buoyancy: \texttt{STATEKPP}}  
+\label{sec:stratification_buoyancy}  
 % ============================================================  
   
 Located in \texttt{kpp\_routines.F}, \texttt{STATEKPP} computes all  
@@ -998,55 +1120,6 @@ top model level:
 \end{equation}  
   
 % ============================================================  
-\section{Core Solver: \texttt{KPPMIX}}  
-% ============================================================  
-  
-\texttt{KPPMIX} is the master driver for the one-dimensional KPP column  
-calculations. It calls the four core physics routines in sequence and  
-combines their outputs.  
-  
-The data flow through \texttt{KPPMIX} is:  
-  
-\begin{enumerate}[leftmargin=*, label=\textbf{\arabic*.}]  
-  \item \texttt{Ri\_iwmix} $\rightarrow$ interior mixing coefficients  
-        in \texttt{diffus(:,:,1:3)}  
-  \item Set seafloor and sub-bottom values to zero in \texttt{diffus}  
-  \item \texttt{bldepth} $\rightarrow$ boundary layer depth \texttt{hbl},  
-        stability flags, bulk Richardson numbers  
-  \item \texttt{blmix} $\rightarrow$ boundary layer mixing \texttt{blmc}  
-        and non-local term \texttt{ghat}  
-  \item \texttt{enhance} $\rightarrow$ smooth diffusivity at $z = -\hbl$  
-  \item Combine: use \texttt{blmc} above \texttt{kbl}, \texttt{diffus}  
-        below; zero \texttt{ghat} below \texttt{kbl}  
-\end{enumerate}  
-  
-\begin{lstlisting}[  
-  language=Fortran90KPP,  
-  caption={\texttt{kpp\_routines.F} (\texttt{KPPMIX}) -- Final combination  
-           of interior and boundary layer diffusivities.},  
-  label={lst:kppmix_combine}  
-]  
-      DO k = 1, Nr  
-       DO i = 1, imt  
-        IF (k .LT. kbl(i)) THEN  
-c          Within boundary layer: use blmix result  
-           diffus(i,k,1) = MAX ( blmc(i,k,1), viscArNr(1) )  
-           diffus(i,k,2) = MAX ( blmc(i,k,2), diffusKzS(i,Nr) )  
-           diffus(i,k,3) = MAX ( blmc(i,k,3), diffusKzT(i,Nr) )  
-        ELSE  
-c          Below boundary layer: ghat is zero  
-           ghat(i,k) = 0. _d 0  
-        ENDIF  
-       ENDDO  
-      ENDDO  
-\end{lstlisting}  
-  
-Note the use of \texttt{MAX}: this ensures the boundary layer  
-diffusivity is never less than the background viscosity  
-(\texttt{viscArNr(1)}) or the deep interior diffusivity. This is a  
-numerical safeguard for shallow mixed layers.  
-  
-% ============================================================  
 \section{Interior Mixing: \texttt{Ri\_iwmix}}  
 % ============================================================  
   
@@ -1177,7 +1250,18 @@ This prevents smoothing from contaminating convectively unstable regions
 or quiescent stratified regions.  
   
 % ============================================================  
-\section{Boundary Layer Depth: \texttt{bldepth}}  
+% ============================================================  
+\section{Boundary / Surface Layer Mixing}  
+% ============================================================  
+\label{sec:boundary_layer_mixing}  
+  
+The oceanic boundary layer (OBL) mixing is computed through a sequence  
+of four subroutines that diagnose the boundary layer depth, compute  
+turbulent velocity scales, construct shape functions, and enhance the  
+profiles at the boundary layer interface.  
+  
+\subsection{Boundary Layer Depth Diagnosis: \texttt{bldepth}}  
+\label{subsec:bldepth}  
 % ============================================================  
   
 \texttt{bldepth} determines the depth of the oceanic planetary boundary  
@@ -1304,7 +1388,8 @@ layer and interior diffusivities is handled in \texttt{blmix}:
 \end{equation}  
   
 % ============================================================  
-\section{Turbulent Velocity Scales: \texttt{wscale}}  
+\subsection{Turbulent Velocity Scales: \texttt{wscale}}  
+\label{subsec:wscale}  
 % ============================================================  
   
 Given $\sigma$ (normalized depth), $\hbl$, $\ustar$, and the total  
@@ -1350,7 +1435,8 @@ c           Stable conditions outside table range
 \end{lstlisting}  
   
 % ============================================================  
-\section{Boundary Layer Mixing: \texttt{blmix}}  
+\subsection{Boundary Layer Mixing Coefficients: \texttt{blmix}}  
+\label{subsec:blmix}  
 % ============================================================  
   
 \texttt{blmix} computes turbulent diffusivities and viscosities  
@@ -1468,7 +1554,8 @@ term is applied in \texttt{KPP\_TRANSPORT\_T}, \texttt{\_S}, and
 \texttt{\_PTR}.  
   
 % ============================================================  
-\section{Interface Enhancement: \texttt{enhance}}  
+\subsection{Interface Enhancement: \texttt{enhance}}  
+\label{subsec:enhance}  
 % ============================================================  
   
 At the interface $k = k_{\rm bl} - 1$ (the cell just above the  
@@ -1514,7 +1601,67 @@ the cell:
 \end{lstlisting}  
   
 % ============================================================  
-\section{Double Diffusion: \texttt{KPP\_DOUBLEDIFF}}  
+\section{Core Diffusivity and Prognostic Update: \texttt{KPPMIX}}  
+\label{sec:core_diffusivity}  
+% ============================================================  
+  
+\texttt{KPPMIX} is the master driver for the one-dimensional KPP column  
+calculations. It calls the four core physics routines in sequence and  
+combines their outputs.  
+  
+The data flow through \texttt{KPPMIX} is:  
+  
+\begin{enumerate}[leftmargin=*, label=\textbf{\arabic*.}]  
+  \item \texttt{Ri\_iwmix} $\rightarrow$ interior mixing coefficients  
+        in \texttt{diffus(:,:,1:3)}  
+  \item Set seafloor and sub-bottom values to zero in \texttt{diffus}  
+  \item \texttt{bldepth} $\rightarrow$ boundary layer depth \texttt{hbl},  
+        stability flags, bulk Richardson numbers  
+  \item \texttt{blmix} $\rightarrow$ boundary layer mixing \texttt{blmc}  
+        and non-local term \texttt{ghat}  
+  \item \texttt{enhance} $\rightarrow$ smooth diffusivity at $z = -\hbl$  
+  \item Combine: use \texttt{blmc} above \texttt{kbl}, \texttt{diffus}  
+        below; zero \texttt{ghat} below \texttt{kbl}  
+\end{enumerate}  
+  
+\begin{lstlisting}[  
+  language=Fortran90KPP,  
+  caption={\texttt{kpp\_routines.F} (\texttt{KPPMIX}) -- Final combination  
+           of interior and boundary layer diffusivities.},  
+  label={lst:kppmix_combine}  
+]  
+      DO k = 1, Nr  
+       DO i = 1, imt  
+        IF (k .LT. kbl(i)) THEN  
+c          Within boundary layer: use blmix result  
+           diffus(i,k,1) = MAX ( blmc(i,k,1), viscArNr(1) )  
+           diffus(i,k,2) = MAX ( blmc(i,k,2), diffusKzS(i,Nr) )  
+           diffus(i,k,3) = MAX ( blmc(i,k,3), diffusKzT(i,Nr) )  
+        ELSE  
+c          Below boundary layer: ghat is zero  
+           ghat(i,k) = 0. _d 0  
+        ENDIF  
+       ENDDO  
+      ENDDO  
+\end{lstlisting}  
+  
+Note the use of \texttt{MAX}: this ensures the boundary layer  
+diffusivity is never less than the background viscosity  
+(\texttt{viscArNr(1)}) or the deep interior diffusivity. This is a  
+numerical safeguard for shallow mixed layers.  
+  
+% ============================================================  
+% ============================================================  
+\section{Additional Mixing Processes}  
+% ============================================================  
+\label{sec:additional_mixing}  
+  
+Beyond the primary shear-driven and convective mixing mechanisms,  
+KPP includes parameterizations for double diffusion, shortwave  
+penetration, and salt plume effects.  
+  
+\subsection{Double Diffusion: \texttt{KPP\_DOUBLEDIFF}}  
+\label{subsec:double_diffusion}  
 % ============================================================  
   
 When \texttt{KPPuseDoubleDiff = .TRUE.}, double-diffusive contributions  
@@ -1576,7 +1723,38 @@ c         b. Diffusive convection
 \end{lstlisting}  
   
 % ============================================================  
-\section{Model Interface Routines}  
+\subsection{Shortwave and Salt Plume Fraction Diagnostics}  
+\label{subsec:shortwave_salt_plume}  
+% ============================================================  
+  
+After \texttt{KPPMIX} returns, \texttt{KPP\_CALC} computes two  
+fractional penetration fields.  
+  
+\subsection{\texttt{KPPfrac} -- Shortwave Penetration Fraction}  
+  
+This is the fraction of shortwave radiation that \textit{does not}  
+contribute to heating within the mixed layer (i.e., passes through it):  
+  
+\begin{equation}  
+\texttt{KPPfrac} = 1 - I(\hbl)  
+\end{equation}  
+  
+where $I(\hbl)$ is the fraction of surface shortwave radiation that  
+has been absorbed above depth $\hbl$, computed via \texttt{SWFRAC}.  
+  
+\subsection{\texttt{KPPplumefrac} -- Salt Plume Penetration Fraction}  
+  
+Similarly, for the salt plume parameterization:  
+\begin{equation}  
+\texttt{KPPplumefrac} = 1 - P(\hbl)  
+\end{equation}  
+  
+where $P(\hbl)$ is the fraction of brine rejection flux that has been  
+distributed above $\hbl$.  
+  
+% ============================================================  
+\section{Eddy Coefficients and Model Interface}  
+\label{sec:model_interface}  
 % ============================================================  
   
 These routines are called \textit{every model timestep} by the  
@@ -1736,186 +1914,182 @@ penetrated below the mixed layer:
 \end{lstlisting}  
   
 % ============================================================  
-\section{Shortwave and Salt Plume Fraction Diagnostics}  
 % ============================================================  
-  
-After \texttt{KPPMIX} returns, \texttt{KPP\_CALC} computes two  
-fractional penetration fields.  
-  
-\subsection{\texttt{KPPfrac} -- Shortwave Penetration Fraction}  
-  
-This is the fraction of shortwave radiation that \textit{does not}  
-contribute to heating within the mixed layer (i.e., passes through it):  
-  
-\begin{equation}  
-\texttt{KPPfrac} = 1 - I(\hbl)  
-\end{equation}  
-  
-where $I(\hbl)$ is the fraction of surface shortwave radiation that  
-has been absorbed above depth $\hbl$, computed via \texttt{SWFRAC}.  
-  
-\subsection{\texttt{KPPplumefrac} -- Salt Plume Penetration Fraction}  
-  
-Similarly, for the salt plume parameterization:  
-\begin{equation}  
-\texttt{KPPplumefrac} = 1 - P(\hbl)  
-\end{equation}  
-  
-where $P(\hbl)$ is the fraction of brine rejection flux that has been  
-distributed above $\hbl$.  
-  
+% NEW SECTION 13: Inserted from NEW_SECTION_13_INIT_RESTART.tex  
 % ============================================================  
-\section{Package Validation: \texttt{KPP\_CHECK}}  
-% ============================================================  
-  
-\texttt{KPP\_CHECK} validates the model configuration at startup.  
-It enforces the following requirements:  
-  
-\begin{longtable}{ll}  
-\toprule  
-\textbf{Requirement} & \textbf{Reason} \\  
-\midrule  
-\endhead  
-\texttt{implicitDiffusion = .TRUE.} &  
-  KPP diffusivities must be applied implicitly \\  
-\texttt{implicitViscosity = .TRUE.} &  
-  KPP viscosity must be applied implicitly \\  
-\texttt{cAdjFreq = 0} &  
-  KPP handles all convection internally \\  
-\texttt{ivdc\_kappa = 0} &  
-  No convective adjustment allowed with KPP \\  
-\texttt{OLx = OLy = 4} &  
-  Required when horizontal smoothing is enabled \\  
-\bottomrule  
-\end{longtable}  
-  
-\begin{warnbox}  
-\textbf{Convection handling:} KPP handles static instability via the  
-$f_{\rm con}$ function in \texttt{Ri\_iwmix}, which sets very large  
-diffusivities (\texttt{difmcon}, \texttt{difscon}, \texttt{diftcon}  
-$\sim 0.1$~m$^2$/s) when $N^2 < 0$. Therefore, any other convective  
-parameterization (\texttt{convAdjFreq}, \texttt{ivdc\_kappa}) must  
-be disabled to avoid double-counting.  
-\end{warnbox}  
-  
-% ============================================================  
-\section{Summary of Variable Evolution}  
-% ============================================================  
-  
-Table~\ref{tab:varflow} traces how the most important variables evolve  
-through the KPP computation chain.  
-  
-\begin{longtable}{p{2.8cm} p{2.8cm} p{5cm} l}  
-\toprule  
-\textbf{Variable} & \textbf{Origin} & \textbf{Role / Transformation} &  
-\textbf{Consumer} \\  
-\midrule  
-\endhead  
-\texttt{theta, salt} &  
-  MITgcm dynamics &  
-  Temperature, salinity used in EOS &  
-  \texttt{STATEKPP} \\[4pt]  
-\texttt{DBLOC} &  
-  \texttt{STATEKPP} &  
-  Local buoyancy gradient; smoothed $\to$ \texttt{ghat} temporarily &  
-  \texttt{bldepth}, \texttt{Ri\_iwmix} \\[4pt]  
-\texttt{Ritop} &  
-  \texttt{STATEKPP} via \texttt{KPP\_CALC} &  
-  Buoyancy deficit $\times$ depth; numerator of bulk Ri &  
-  \texttt{bldepth} \\[4pt]  
-\texttt{TTALPHA, SSBETA} &  
-  \texttt{STATEKPP} &  
-  Expansion coefficients; used for \texttt{bo}, \texttt{bosol},  
-  \texttt{KPP\_DOUBLEDIFF} &  
-  \texttt{KPP\_FORCING\_SURF} \\[4pt]  
-\texttt{ustar} &  
-  \texttt{KPP\_FORCING\_SURF} &  
-  Surface friction velocity; enters all turbulent scale calculations &  
-  \texttt{bldepth}, \texttt{blmix} \\[4pt]  
-\texttt{bo} &  
-  \texttt{KPP\_FORCING\_SURF} &  
-  Total (non-radiative) surface buoyancy flux &  
-  \texttt{bldepth} \\[4pt]  
-\texttt{bosol} &  
-  \texttt{KPP\_FORCING\_SURF} &  
-  Radiative surface buoyancy flux; added to \texttt{bfsfc} &  
-  \texttt{bldepth} \\[4pt]  
-\texttt{shsq} &  
-  \texttt{KPP\_CALC} (from \texttt{uVel, vVel}) &  
-  Local vertical shear; denominator of interior Ri &  
-  \texttt{Ri\_iwmix} \\[4pt]  
-\texttt{dVsq} &  
-  \texttt{KPP\_FORCING\_SURF} &  
-  Surface-ref.\ shear; denominator of bulk Ri &  
-  \texttt{bldepth} \\[4pt]  
-\texttt{diffusKzS/T} &  
-  \texttt{CALC\_3D\_DIFFUSIVITY} $\pm$ \texttt{KPP\_DOUBLEDIFF} &  
-  Background + double-diffusion diffusivities;  
-  used as interior baseline in \texttt{Ri\_iwmix} and as matching value  
-  in \texttt{blmix} &  
-  \texttt{Ri\_iwmix}, \texttt{blmix} \\[4pt]  
-\texttt{diffus(:,:,1:3)} &  
-  \texttt{Ri\_iwmix} &  
-  Interior mixing coefficients; overwritten in BL above \texttt{kbl} &  
-  \texttt{KPPMIX} (combine step) \\[4pt]  
-\texttt{hbl, kbl} &  
-  \texttt{bldepth} &  
-  OBL depth and index; control BL/interior partitioning &  
-  \texttt{blmix}, \texttt{enhance}, \texttt{KPP\_CALC} \\[4pt]  
-\texttt{bfsfc} &  
-  \texttt{bldepth} &  
-  Effective surface buoyancy forcing at $z = -\hbl$ including SW &  
-  \texttt{blmix} (via \texttt{wscale}) \\[4pt]  
-\texttt{blmc(:,:,1:3)} &  
-  \texttt{blmix} $\to$ \texttt{enhance} &  
-  BL mixing coefficients; blend with interior at OBL base &  
-  \texttt{KPPMIX} (combine step) \\[4pt]  
-\texttt{ghat} &  
-  \texttt{blmix} (zeroed below \texttt{kbl}) &  
-  Non-local transport coefficient &  
-  \texttt{KPP\_TRANSPORT\_T/S/PTR} \\[4pt]  
-\texttt{KPPviscAz} &  
-  \texttt{KPP\_CALC} (from \texttt{vddiff(:,:,:,1)}) &  
-  Final 3D viscosity; averaged to u,v grid &  
-  \texttt{KPP\_CALC\_VISC} \\[4pt]  
-\texttt{KPPdiffKzT} &  
-  \texttt{KPP\_CALC} (from \texttt{vddiff(:,:,:,3)}) &  
-  Final 3D temperature diffusivity &  
-  \texttt{KPP\_CALC\_DIFF\_T}, \texttt{KPP\_TRANSPORT\_T} \\[4pt]  
-\texttt{KPPdiffKzS} &  
-  \texttt{KPP\_CALC} (from \texttt{vddiff(:,:,:,2)}) &  
-  Final 3D salt/tracer diffusivity &  
-  \texttt{KPP\_CALC\_DIFF\_S/PTR}, \texttt{KPP\_TRANSPORT\_S/PTR} \\[4pt]  
-\texttt{KPPghat} &  
-  \texttt{KPP\_CALC} (from \texttt{ghat}) &  
-  Final 3D non-local coefficient &  
-  \texttt{KPP\_TRANSPORT\_T/S/PTR} \\[4pt]  
-\texttt{KPPhbl} &  
-  \texttt{KPP\_CALC} (from \texttt{hbl}) &  
-  OBL depth; used for \texttt{KPPfrac}, \texttt{KPPplumefrac} &  
-  \texttt{KPP\_OUTPUT}, user diagnostics \\[4pt]  
-\texttt{KPPfrac} &  
-  \texttt{KPP\_CALC} via \texttt{SWFRAC} &  
-  SW fraction penetrating OBL; modifies effective surface $Q_T$ &  
-  \texttt{KPP\_TRANSPORT\_T} \\[4pt]  
-\texttt{KappaRT, KappaRS} &  
-  \texttt{KPP\_CALC\_DIFF\_T/S} &  
-  Diffusivity passed to tracer implicit solver &  
-  \texttt{CALC\_DIFFUSIVITY} \\[4pt]  
-\texttt{KappaRU, KappaRV} &  
-  \texttt{KPP\_CALC\_VISC} &  
-  Viscosity passed to momentum implicit solver &  
-  \texttt{CALC\_DIFFUSIVITY} \\[4pt]  
-\texttt{df} &  
-  \texttt{KPP\_TRANSPORT\_T/S/PTR} &  
-  Non-local diffusive flux added to tracer tendency &  
-  \texttt{GAD\_DIFF\_X} family \\  
-\bottomrule  
-\caption{Evolution of key variables through the KPP computation chain.}  
-\label{tab:varflow}  
-\end{longtable}  
-  
-% ============================================================  
+\section{Initialization and Restart}
+\label{sec:init_restart}
+
+\subsection{KPP is Diagnostic, Not Prognostic}
+
+A critical characteristic of the KPP scheme is that it is \textbf{diagnostic}
+rather than \textbf{prognostic}. This distinction has important implications
+for initialization, restart procedures, and model behavior.
+
+\subsubsection{What ``Diagnostic'' Means}
+
+In KPP, all mixing coefficients---vertical eddy viscosity (\texttt{KPPviscAz}),
+temperature diffusivity (\texttt{KPPdiffKzT}), and salinity diffusivity
+(\texttt{KPPdiffKzS})---are \textit{recomputed from scratch} at each time
+step based solely on the \textit{instantaneous ocean state}:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Current velocity field} (\texttt{UVEL}, \texttt{VVEL}) determines shear
+  \item \textbf{Current temperature and salinity} (\texttt{THETA}, \texttt{SALT})
+        determine stratification
+  \item \textbf{Current surface forcing} (wind stress, heat flux, freshwater flux)
+        determines boundary layer depth and turbulent velocity scales
+\end{itemize}
+
+There is \textit{no memory} of previous mixing coefficients or turbulent
+quantities. Each call to \texttt{KPP\_CALC} is independent of the previous call,
+except insofar as the ocean state itself has evolved due to the mixing applied
+in previous time steps.
+
+\subsubsection{No State Persistence Between Time Steps}
+
+Unlike prognostic turbulence schemes (such as GGL90, which solves a transport
+equation for turbulent kinetic energy), KPP has \textbf{no prognostic state
+variables}. Specifically:
+
+\begin{itemize}[leftmargin=*]
+  \item KPP does not carry any turbulence-related field (e.g., TKE, dissipation rate,
+        mixing length) from one time step to the next
+  \item The boundary layer depth $h_{\text{bl}}$ is \textit{diagnosed} each time step
+        from the bulk Richardson number criterion, not predicted by a temporal evolution
+        equation
+  \item The turbulent velocity scales $w_m$ and $w_s$ are looked up from pre-computed
+        tables based on instantaneous forcing, not integrated forward in time
+\end{itemize}
+
+\subsubsection{No Pickup/Restart Files for KPP}
+
+Because KPP maintains no prognostic state, \textbf{KPP requires no pickup or
+restart files}. When restarting a MITgcm simulation:
+
+\begin{infobox}
+\textbf{Restart Procedure:}
+\begin{enumerate}[leftmargin=*]
+  \item Read ocean state pickup files: \texttt{pickup.*.data}
+        (contains \texttt{THETA}, \texttt{SALT}, \texttt{UVEL}, \texttt{VVEL},
+        sea surface height, etc.)
+  \item \textbf{KPP arrays are recomputed} immediately on the first time step
+        after restart by calling \texttt{KPP\_CALC}
+  \item No KPP-specific pickup file is needed or written
+\end{enumerate}
+\end{infobox}
+
+This contrasts sharply with GGL90, which writes a \texttt{pickup\_ggl90.*.data}
+file containing the prognostic TKE field at every checkpoint. Without this pickup
+file, a GGL90 simulation cannot be restarted accurately because the TKE history
+is lost.
+
+\subsection{Initialization}
+
+KPP initialization occurs in three stages, as described in detail in
+Section~\ref{sec:param_init}:
+
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{KPP\_READPARMS}: Read runtime parameters from \texttt{data.kpp}
+  \item \texttt{KPP\_INIT\_FIXED}: Build turbulent velocity scale lookup tables
+        and compute derived constants (one-time, independent of ocean state)
+  \item \texttt{KPP\_INIT\_VARIA}: Initialize KPP diagnostic arrays
+        (\texttt{KPPhbl}, \texttt{KPPviscAz}, etc.) to default background values
+\end{enumerate}
+
+Critically, \texttt{KPP\_INIT\_VARIA} does \textit{not} set meaningful mixing
+coefficients---it merely initializes arrays to avoid undefined values. The
+\textit{first call} to \texttt{KPP\_CALC} at $t = 0$ computes physically
+consistent mixing coefficients based on the initial ocean state.
+
+\subsection{Implications of Diagnostic Formulation}
+
+\subsubsection{Advantages}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Rapid initialization}: No need to spin up turbulent quantities;
+        ocean simulations can start immediately from rest or from observed profiles
+  \item \textbf{No pickup file complexity}: Simplifies restart logistics and
+        reduces I/O burden
+  \item \textbf{Instantaneous response to forcing}: Changes in wind stress or
+        surface heat flux immediately affect mixing (within one time step), which
+        can be desirable for process studies
+  \item \textbf{No spurious transients}: Restarting a simulation produces
+        bit-identical results (modulo floating-point order differences) because
+        there is no turbulent state to reconstruct
+\end{itemize}
+
+\subsubsection{Limitations}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{No memory of past forcing}: Turbulent mixing depends only on
+        the instantaneous forcing, not on the integrated history of wind and buoyancy
+        forcing. This can under-represent the persistence of boundary layer turbulence
+        after a wind event
+  \item \textbf{Sharp threshold behavior}: The boundary layer depth diagnosis from
+        bulk Richardson number can lead to discontinuous changes in $h_{\text{bl}}$
+        when stratification changes abruptly (e.g., during restratification events)
+  \item \textbf{Less suitable for transient phenomena}: Short-timescale turbulent
+        processes (e.g., spin-up/spin-down of TKE during diurnal cycles) are not
+        explicitly resolved
+\end{itemize}
+
+\subsection{Contrast with GGL90 (Prognostic TKE Scheme)}
+
+For reference, Table~\ref{tab:kpp_ggl90_restart} compares restart behavior
+between KPP and GGL90.
+
+\begin{table}[h!]
+\centering
+\caption{Initialization and restart: KPP vs.\ GGL90.}
+\label{tab:kpp_ggl90_restart}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Aspect} & \textbf{KPP (Diagnostic)} & \textbf{GGL90 (Prognostic)} \\
+\midrule
+Prognostic variables & None & TKE$(x,y,z,t)$ \\
+Pickup file needed? & No & Yes (\texttt{pickup\_ggl90.*.data}) \\
+Restart without pickup & Exact continuation & Incorrect (cold start) \\
+Initialization spin-up & Not needed & TKE equilibrates over $\sim$10 days \\
+Memory of past forcing & None & Integrated through TKE PDE \\
+Transient response & Instantaneous & Gradual (governed by TKE timescales) \\
+Boundary layer depth & Diagnosed from $\text{Ri}_{\text{cr}}$ & Implicit in TKE decay scale \\
+Computational cost & Lower & Higher (implicit PDE solve) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Practical Restart Workflow}
+
+When restarting a KPP-based MITgcm simulation, the following files are sufficient:
+
+\begin{lstlisting}[language=bash, caption={Typical restart file list for KPP simulation.}]
+pickup.0000036000.data      # Ocean state (T, S, U, V, eta, etc.)
+pickup.0000036000.meta      # Metadata for ocean state
+pickup_seaice.0000036000.*  # If using pkg/seaice
+pickup_obcs.0000036000.*    # If using pkg/obcs
+# NO pickup_kpp.*.data needed
+\end{lstlisting}
+
+Upon restart, \texttt{KPP\_CALC} is called on the first time step and recomputes
+all mixing coefficients. The simulation continues exactly as if it had not been
+interrupted, with no loss of accuracy.
+
+\subsection{Recommendations}
+
+\begin{itemize}[leftmargin=*]
+  \item For \textbf{long climate integrations}, consider using a prognostic scheme
+        (GGL90 or similar) to capture turbulent memory effects
+  \item For \textbf{process studies} or \textbf{rapid initialization scenarios}
+        (data assimilation, idealized experiments), KPP's diagnostic formulation is
+        advantageous
+  \item If using KPP in a state estimation context, be aware that the lack of
+        turbulent state means mixing responds instantaneously to control adjustments,
+        which can accelerate convergence but may also introduce unphysical
+        responsiveness
+\end{itemize}
+
+% End of Section 13
 \section{Compile-Time Options}  
 % ============================================================  
   
@@ -2034,69 +2208,42 @@ package and can be requested via \texttt{data.diagnostics}:
 \end{longtable}  
   
 % ============================================================  
-\section{Complete Package Input/Output Summary}  
+\section{Package Validation: \texttt{KPP\_CHECK}}  
 % ============================================================  
   
-\subsection{Package-Level Inputs}  
+\texttt{KPP\_CHECK} validates the model configuration at startup.  
+It enforces the following requirements:  
   
-\begin{longtable}{p{3.5cm} p{3cm} p{5cm} l}  
+\begin{longtable}{ll}  
 \toprule  
-\textbf{Input} & \textbf{Source} & \textbf{Description} & \textbf{Units} \\  
+\textbf{Requirement} & \textbf{Reason} \\  
 \midrule  
 \endhead  
-\texttt{uVel, vVel} & \texttt{DYNVARS} & Horizontal velocity & m/s \\  
-\texttt{theta} & \texttt{DYNVARS} & Potential temperature & °C \\  
-\texttt{salt} & \texttt{DYNVARS} & Salinity & g/kg \\  
-\texttt{surfaceForcingU/V} & \texttt{FFIELDS} & Wind stress / $\rho$ & m$^2$/s$^2$ \\  
-\texttt{surfaceForcingT} & \texttt{FFIELDS} & Net heat flux forcing & K$\cdot$m/s \\  
-\texttt{surfaceForcingS} & \texttt{FFIELDS} & Net salt flux forcing & (g/kg)$\cdot$m/s \\  
-\texttt{adjustColdSST\_diag} & \texttt{FFIELDS} & Sea-ice heat flux correction & K$\cdot$m/s \\  
-\texttt{Qsw} & \texttt{FFIELDS} & Shortwave radiation & W/m$^2$ \\  
-\texttt{fCori} & \texttt{GRID} & Coriolis parameter & 1/s \\  
-\texttt{maskC} & \texttt{GRID} & Land/ocean mask at t-points & -- \\  
-\texttt{kLowC} & \texttt{GRID} & Index of deepest wet level & -- \\  
-\texttt{rC, drF} & \texttt{GRID} & Vertical grid & m \\  
-\texttt{viscArNr} & \texttt{PARAMS} & Background vertical viscosity & m$^2$/s \\  
-\texttt{saltPlumeFlux} & \texttt{SALT\_PLUME} & Brine rejection flux & kg/m$^2$/s \\  
-\texttt{SaltPlumeDepth} & \texttt{SALT\_PLUME} & Salt plume penetration depth & m \\  
-\texttt{SWFrac3D} & \texttt{FFIELDS} & 3D SW attenuation profile & -- \\  
+\texttt{implicitDiffusion = .TRUE.} &  
+  KPP diffusivities must be applied implicitly \\  
+\texttt{implicitViscosity = .TRUE.} &  
+  KPP viscosity must be applied implicitly \\  
+\texttt{cAdjFreq = 0} &  
+  KPP handles all convection internally \\  
+\texttt{ivdc\_kappa = 0} &  
+  No convective adjustment allowed with KPP \\  
+\texttt{OLx = OLy = 4} &  
+  Required when horizontal smoothing is enabled \\  
 \bottomrule  
 \end{longtable}  
   
-\subsection{Package-Level Outputs}  
-  
-\begin{longtable}{p{3.5cm} p{3cm} p{4.5cm} l}  
-\toprule  
-\textbf{Output} & \textbf{Consumed by} & \textbf{Description} & \textbf{Units} \\  
-\midrule  
-\endhead  
-\texttt{KPPviscAz} & \texttt{KPP\_CALC\_VISC} $\to$ \texttt{CALC\_DIFFUSIVITY} &  
-  Vertical eddy viscosity & m$^2$/s \\  
-\texttt{KPPdiffKzT} & \texttt{KPP\_CALC\_DIFF\_T} $\to$ \texttt{GAD\_DIFF} &  
-  Temperature diffusivity & m$^2$/s \\  
-\texttt{KPPdiffKzS} & \texttt{KPP\_CALC\_DIFF\_S/PTR} $\to$ \texttt{GAD\_DIFF} &  
-  Salt/tracer diffusivity & m$^2$/s \\  
-\texttt{KPPghat} & \texttt{KPP\_TRANSPORT\_T/S/PTR} &  
-  Non-local coefficient & s/m$^2$ \\  
-\texttt{KPPhbl} & \texttt{KPP\_OUTPUT}, diagnostics &  
-  Boundary layer depth & m \\  
-\texttt{KPPfrac} & \texttt{KPP\_TRANSPORT\_T} &  
-  SW fraction penetrating OBL & -- \\  
-\texttt{KPPplumefrac} & \texttt{KPP\_TRANSPORT\_S} &  
-  Salt plume fraction & -- \\  
-\texttt{KappaRT} & \texttt{CALC\_DIFFUSIVITY} &  
-  Temperature diffusivity work array & m$^2$/s \\  
-\texttt{KappaRS} & \texttt{CALC\_DIFFUSIVITY} &  
-  Salinity diffusivity work array & m$^2$/s \\  
-\texttt{KappaRU, KappaRV} & \texttt{CALC\_DIFFUSIVITY} &  
-  Momentum viscosity work arrays & m$^2$/s \\  
-\texttt{df (T,S,PTR)} & \texttt{GAD\_DIFF} family &  
-  Non-local tracer flux & tracer$\cdot$m$^3$/s \\  
-\bottomrule  
-\end{longtable}  
+\begin{warnbox}  
+\textbf{Convection handling:} KPP handles static instability via the  
+$f_{\rm con}$ function in \texttt{Ri\_iwmix}, which sets very large  
+diffusivities (\texttt{difmcon}, \texttt{difscon}, \texttt{diftcon}  
+$\sim 0.1$~m$^2$/s) when $N^2 < 0$. Therefore, any other convective  
+parameterization (\texttt{convAdjFreq}, \texttt{ivdc\_kappa}) must  
+be disabled to avoid double-counting.  
+\end{warnbox}  
   
 % ============================================================  
-\section{Frequently Encountered Issues and Notes}  
+\section{Numerical Considerations \& Frequently Encountered Issues}  
+\label{sec:numerical_considerations}  
 % ============================================================  
   
 \begin{enumerate}[leftmargin=*, label=\textbf{\arabic*.}]  
@@ -2174,8 +2321,8 @@ to modify, e.g., to implement alternative OBL depth criteria or
 different interior mixing parameterizations.  
   
 % ============================================================  
-\appendix  
-\section{Glossary of Frequently Used Symbols}  
+\section{Glossary of Symbols}  
+\label{sec:glossary}  
 % ============================================================  
   
 \begin{longtable}{llp{7cm}}  
@@ -2211,5 +2358,453 @@ $\epsilon$ & \texttt{epsilon} & Nondimensional surface layer fraction (= 0.1) \\
 \end{longtable}  
   
 % ============================================================  
+  
+% ============================================================  
+% APPENDICES  
+% ============================================================  
+\appendix  
+  
+\section{Complete Input/Output Mapping}  
+\label{app:io_mapping}  
+% ============================================================  
+  
+\subsection{Package-Level Inputs}  
+  
+\begin{longtable}{p{3.5cm} p{3cm} p{5cm} l}  
+\toprule  
+\textbf{Input} & \textbf{Source} & \textbf{Description} & \textbf{Units} \\  
+\midrule  
+\endhead  
+\texttt{uVel, vVel} & \texttt{DYNVARS} & Horizontal velocity & m/s \\  
+\texttt{theta} & \texttt{DYNVARS} & Potential temperature & °C \\  
+\texttt{salt} & \texttt{DYNVARS} & Salinity & g/kg \\  
+\texttt{surfaceForcingU/V} & \texttt{FFIELDS} & Wind stress / $\rho$ & m$^2$/s$^2$ \\  
+\texttt{surfaceForcingT} & \texttt{FFIELDS} & Net heat flux forcing & K$\cdot$m/s \\  
+\texttt{surfaceForcingS} & \texttt{FFIELDS} & Net salt flux forcing & (g/kg)$\cdot$m/s \\  
+\texttt{adjustColdSST\_diag} & \texttt{FFIELDS} & Sea-ice heat flux correction & K$\cdot$m/s \\  
+\texttt{Qsw} & \texttt{FFIELDS} & Shortwave radiation & W/m$^2$ \\  
+\texttt{fCori} & \texttt{GRID} & Coriolis parameter & 1/s \\  
+\texttt{maskC} & \texttt{GRID} & Land/ocean mask at t-points & -- \\  
+\texttt{kLowC} & \texttt{GRID} & Index of deepest wet level & -- \\  
+\texttt{rC, drF} & \texttt{GRID} & Vertical grid & m \\  
+\texttt{viscArNr} & \texttt{PARAMS} & Background vertical viscosity & m$^2$/s \\  
+\texttt{saltPlumeFlux} & \texttt{SALT\_PLUME} & Brine rejection flux & kg/m$^2$/s \\  
+\texttt{SaltPlumeDepth} & \texttt{SALT\_PLUME} & Salt plume penetration depth & m \\  
+\texttt{SWFrac3D} & \texttt{FFIELDS} & 3D SW attenuation profile & -- \\  
+\bottomrule  
+\end{longtable}  
+  
+\subsection{Package-Level Outputs}  
+  
+\begin{longtable}{p{3.5cm} p{3cm} p{4.5cm} l}  
+\toprule  
+\textbf{Output} & \textbf{Consumed by} & \textbf{Description} & \textbf{Units} \\  
+\midrule  
+\endhead  
+\texttt{KPPviscAz} & \texttt{KPP\_CALC\_VISC} $\to$ \texttt{CALC\_DIFFUSIVITY} &  
+  Vertical eddy viscosity & m$^2$/s \\  
+\texttt{KPPdiffKzT} & \texttt{KPP\_CALC\_DIFF\_T} $\to$ \texttt{GAD\_DIFF} &  
+  Temperature diffusivity & m$^2$/s \\  
+\texttt{KPPdiffKzS} & \texttt{KPP\_CALC\_DIFF\_S/PTR} $\to$ \texttt{GAD\_DIFF} &  
+  Salt/tracer diffusivity & m$^2$/s \\  
+\texttt{KPPghat} & \texttt{KPP\_TRANSPORT\_T/S/PTR} &  
+  Non-local coefficient & s/m$^2$ \\  
+\texttt{KPPhbl} & \texttt{KPP\_OUTPUT}, diagnostics &  
+  Boundary layer depth & m \\  
+\texttt{KPPfrac} & \texttt{KPP\_TRANSPORT\_T} &  
+  SW fraction penetrating OBL & -- \\  
+\texttt{KPPplumefrac} & \texttt{KPP\_TRANSPORT\_S} &  
+  Salt plume fraction & -- \\  
+\texttt{KappaRT} & \texttt{CALC\_DIFFUSIVITY} &  
+  Temperature diffusivity work array & m$^2$/s \\  
+\texttt{KappaRS} & \texttt{CALC\_DIFFUSIVITY} &  
+  Salinity diffusivity work array & m$^2$/s \\  
+\texttt{KappaRU, KappaRV} & \texttt{CALC\_DIFFUSIVITY} &  
+  Momentum viscosity work arrays & m$^2$/s \\  
+\texttt{df (T,S,PTR)} & \texttt{GAD\_DIFF} family &  
+  Non-local tracer flux & tracer$\cdot$m$^3$/s \\  
+\bottomrule  
+\end{longtable}  
+  
+% ============================================================  
+  
+% ============================================================  
+% NEW APPENDIX C: Inserted from NEW_APPENDIX_C_ADJOINT.tex  
+% ============================================================  
+
+\section{Adjoint Model Considerations}
+\label{app:adjoint_considerations}
+
+The KPP package supports adjoint-based optimization through MITgcm's automatic
+differentiation (AD) framework, making it suitable for gradient-based data
+assimilation, parameter estimation, and sensitivity studies. This appendix
+documents adjoint-specific features, configuration options, and best practices
+for using KPP in adjoint mode.
+
+\subsection{Overview: KPP in Adjoint Mode}
+
+MITgcm's automatic differentiation tool (primarily TAF, Transformation of
+Algorithms in Fortran) generates adjoint code from the forward model source.
+The adjoint model propagates sensitivities backward in time, computing gradients
+of a cost function (e.g., misfit to observations) with respect to control
+parameters (e.g., initial conditions, surface forcing, mixing parameters).
+
+\subsubsection{KPP's Adjoint Characteristics}
+
+KPP's diagnostic formulation presents both advantages and challenges for adjoint
+applications compared to prognostic schemes like GGL90:
+
+\begin{description}
+  \item[\textbf{Advantages:}]
+  \begin{itemize}[leftmargin=*]
+    \item \textbf{Lower memory requirements}: No prognostic TKE field to checkpoint,
+          reducing tape storage needs
+    \item \textbf{Simpler forward computation}: Diagnostic calculation is faster
+          than implicit PDE solve, reducing adjoint recomputation cost
+    \item \textbf{No spin-up artifacts}: Instantaneous response to forcing changes
+          means adjoint sensitivities propagate directly without turbulent memory
+  \end{itemize}
+
+  \item[\textbf{Challenges:}]
+  \begin{itemize}[leftmargin=*]
+    \item \textbf{Many conditional branches}: Boundary layer depth search
+          (\texttt{bldepth}) and profile shape function matching (\texttt{enhance})
+          involve \texttt{IF} statements that create gradient discontinuities
+    \item \textbf{Lookup table interpolation}: Turbulent velocity scales ($w_m$, $w_s$)
+          are computed via bilinear interpolation from pre-tabulated functions, which
+          TAF must differentiate carefully
+    \item \textbf{Non-smooth dependencies}: The bulk Richardson number criterion
+          ($\text{Ri}_b = \text{Ri}_{\text{cr}}$) produces a sharp threshold in
+          $h_{\text{bl}}$, leading to potentially noisy adjoint gradients near the
+          transition
+  \end{itemize}
+\end{description}
+
+\subsection{Adjoint-Specific Implementation}
+
+\subsubsection{TAF Directives in KPP Source Code}
+
+The KPP source files contain extensive \texttt{CADJ} directives that guide TAF's
+code generation. These directives fall into three categories:
+
+\paragraph{1. Checkpointing Directives (\texttt{CADJ STORE})}
+
+Intermediate variables that are recomputed during the adjoint backward sweep
+must be stored (checkpointed) on ``tapes.'' The primary KPP tape is
+\texttt{comlev1\_kpp}, indexed by \texttt{ikey} (depends on tile indices).
+
+\textbf{Example from \texttt{kpp\_routines.F}:}
+\begin{lstlisting}[language=Fortran90KPP, caption={TAF checkpoint directives in \texttt{KPPMIX}.}]
+CADJ STORE ghat  = comlev1_kpp, key=ikey, kind=isbyte
+CADJ STORE dbloc = comlev1_kpp, key=ikey, kind=isbyte
+...
+CADJ STORE hbl,bfsfc,stable,casea,kbl = comlev1_kpp,
+CADJ &     key=ikey, kind=isbyte
+\end{lstlisting}
+
+Key variables stored on tape include:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{hbl}: Boundary layer depth (controls profile shape)
+  \item \texttt{ghat}: Non-local transport coefficient (used in tracer fluxes)
+  \item \texttt{dbloc}: Local buoyancy gradient (affects Richardson number)
+  \item \texttt{bfsfc}: Surface buoyancy forcing at $z = -h_{\text{bl}}$ (affects
+        turbulent velocity scales)
+  \item \texttt{stable}: Stability flag (determines lookup table branch)
+  \item \texttt{kbl}: Grid index of boundary layer base (affects stencil loops)
+\end{itemize}
+
+\paragraph{2. Incomplete Variable Declarations (\texttt{CADJ INCOMPLETE})}
+
+Some intermediate work arrays are declared \texttt{INCOMPLETE} to suppress TAF
+warnings about uninitialized variables. This is safe when the array is fully
+populated before use.
+
+\textbf{Example from \texttt{kpp\_routines.F}:}
+\begin{lstlisting}[language=Fortran90KPP]
+CADJ INCOMPLETE worka
+CADJ INCOMPLETE blmc
+\end{lstlisting}
+
+\textit{Usage note:} \texttt{worka} is a temporary array for shortwave penetration
+and salt plume calculations; \texttt{blmc} holds boundary layer mixing coefficients
+computed by \texttt{blmix}.
+
+\paragraph{3. Vertical-Level-Dependent Keys}
+
+When looping over vertical levels within a tile, TAF requires a finer-grained
+tape key to handle dependencies correctly:
+
+\begin{lstlisting}[language=Fortran90KPP]
+C     kkey :: tape key TAF-AD simulations (depends on vertical levels and tiles)
+      INTEGER kkey
+...
+      kkey = (ikey-1)*Nr + k
+CADJ STORE worka = comlev1_kpp_k, key = kkey, kind=isbyte
+\end{lstlisting}
+
+This pattern appears in \texttt{KPPMIX}, \texttt{Ri\_iwmix}, and \texttt{blmix}
+where vertical loops have inter-level dependencies.
+
+\subsubsection{Adjoint Differentiation List}
+
+The file \texttt{kpp\_ad\_diff.list} specifies which KPP routines are differentiated
+by TAF. Contents:
+
+\begin{lstlisting}[language=bash, caption={\texttt{pkg/kpp/kpp\_ad\_diff.list}}]
+kpp_calc.f
+kpp_calc_diff_t.f
+kpp_calc_diff_s.f
+kpp_calc_diff_ptr.f
+kpp_calc_visc.f
+kpp_output.f
+kpp_do_exch.f
+kpp_init_varia.f
+kpp_routines.f
+kpp_transport_s.f
+kpp_transport_t.f
+kpp_transport_ptr.f
+kpp_forcing_surf.f
+\end{lstlisting}
+
+Notably \textit{excluded} from differentiation:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{kpp\_readparms.f}: Parameter initialization (no state dependence)
+  \item \texttt{kpp\_init\_fixed.f}: Lookup table generation (one-time setup)
+  \item \texttt{kpp\_check.f}: Validation checks (diagnostic only)
+  \item \texttt{kpp\_diagnostics\_init.f}: Diagnostics registration (no state)
+\end{itemize}
+
+\subsection{Adjoint-Specific CPP Flags}
+
+\subsubsection{KPP\_AUTODIFF\_EXCESSIVE\_STORE}
+
+\textbf{Location:} \texttt{KPP\_OPTIONS.h}, line 72
+
+\textbf{Purpose:} Store additional intermediate variables on tape to avoid
+extensive recomputations during the adjoint backward sweep.
+
+\textbf{Default:} \texttt{\#undef} (minimal checkpointing)
+
+\textbf{Effect when defined:} Increases memory usage but reduces adjoint runtime
+by avoiding recomputation of:
+\begin{itemize}[leftmargin=*]
+  \item Intermediate buoyancy gradients in \texttt{STATEKPP}
+  \item Shape function coefficients in \texttt{blmix}
+  \item Richardson number profiles in \texttt{Ri\_iwmix}
+\end{itemize}
+
+\textbf{Trade-offs:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Pro:} Faster adjoint execution ($\sim$20--30\% speedup)
+  \item \textbf{Con:} Larger checkpoint files ($\sim$1.5--2$\times$ memory)
+  \item \textbf{Pro:} Reduces cumulative floating-point error from recomputation
+\end{itemize}
+
+\textbf{Recommendation:} Enable for production adjoint runs with sufficient memory.
+Leave undefined for testing and memory-constrained systems.
+
+\textbf{Code reference:} \texttt{kpp\_routines.F} (multiple \texttt{\#ifdef
+KPP\_AUTODIFF\_EXCESSIVE\_STORE} blocks around \texttt{CADJ STORE} directives)
+
+\subsection{Known Adjoint Issues and Workarounds}
+
+\subsubsection{Issue 1: Gradient Noise at Boundary Layer Depth Transitions}
+
+\textbf{Symptom:} Adjoint gradients exhibit noise (large oscillations) when
+$h_{\text{bl}}$ transitions between grid levels, particularly in regions with
+marginal stratification (bulk Richardson number near $\text{Ri}_{\text{cr}} = 0.3$).
+
+\textbf{Cause:} The linear interpolation in \texttt{bldepth} to find
+$h_{\text{bl}}$ is piecewise linear but not smooth. When $\text{Ri}_b$ crosses
+$\text{Ri}_{\text{cr}}$, the derivative $\partial h_{\text{bl}} / \partial
+\text{forcing}$ can be large or discontinuous.
+
+\textbf{Workarounds:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Increase \texttt{minKPPhbl}}: Setting a larger minimum boundary
+        layer depth (e.g., \texttt{minKPPhbl = 5.0} m instead of 1.0 m) reduces
+        shallow-layer sensitivity
+  \item \textbf{Use \texttt{KPP\_SMOOTH\_REGULARISATION}}: When defined in
+        \texttt{KPP\_OPTIONS.h}, this replaces some \texttt{MAX(var, epsilon)} with
+        \texttt{var + epsilon}, providing smoother gradients (but changes forward
+        results slightly)
+  \item \textbf{Horizontal smoothing}: Enable \texttt{KPP\_SMOOTH\_DBLOC} and
+        \texttt{KPP\_SMOOTH\_SHSQ} to reduce grid-scale noise in buoyancy and shear
+        fields that feed into $\text{Ri}_b$
+  \item \textbf{Cost function design}: Avoid cost terms that depend directly on
+        $h_{\text{bl}}$ (e.g., ``boundary layer depth matches observed MLD''); instead
+        use integrated quantities like heat content or temperature profile misfits
+\end{itemize}
+
+\subsubsection{Issue 2: Conditional Branch Discontinuities}
+
+\textbf{Symptom:} Finite-difference gradient checks fail at specific locations
+(usually related to \texttt{IF} statements in \texttt{enhance}, \texttt{blmix},
+or stability flag logic).
+
+\textbf{Cause:} TAF generates adjoint code for both branches of an \texttt{IF},
+but the choice of branch depends on state variables. Small perturbations can
+flip branches, causing gradient discontinuities.
+
+\textbf{Workarounds:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Accept finite-difference mismatch}: In practice, optimization
+        algorithms (L-BFGS, conjugate gradient) are robust to small gradient errors
+  \item \textbf{Use smooth activation functions}: If modifying KPP source, replace
+        sharp \texttt{IF (condition)} with smooth transitions (e.g., sigmoid or
+        hyperbolic tangent), but this changes physics
+  \item \textbf{Stabilize stratification}: Ensure model resolution and time stepping
+        are adequate to avoid rapid stratification changes that trigger branch flips
+\end{itemize}
+
+\subsubsection{Issue 3: Lookup Table Interpolation Artifacts}
+
+\textbf{Symptom:} Adjoint sensitivities to surface forcing ($u_*$, $B_0$) show
+structured patterns corresponding to lookup table grid spacing.
+
+\textbf{Cause:} Turbulent velocity scales $w_m$ and $w_s$ are computed via
+bilinear interpolation in \texttt{wscale} from pre-tabulated 2D arrays
+(functions of $\zeta$ and $\sigma$). TAF differentiates the interpolation
+stencil, which can amplify discretization errors.
+
+\textbf{Workarounds:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Increase lookup table resolution}: Recompile with finer $\zeta$
+        spacing in \texttt{kpp\_init\_fixed.F} (requires modifying hardcoded table
+        generation)
+  \item \textbf{Use cubic interpolation}: Modify \texttt{wscale} to use cubic
+        splines instead of bilinear (smoother derivatives but higher cost)
+  \item \textbf{Limit parameter search range}: Constrain forcing perturbations
+        to stay within well-sampled regions of the lookup table
+\end{itemize}
+
+\subsection{KPP vs.\ GGL90: Adjoint Complexity Comparison}
+
+Table~\ref{tab:kpp_ggl90_adjoint_comparison} compares adjoint characteristics
+of KPP and GGL90.
+
+\begin{table}[h!]
+\centering
+\caption{Adjoint complexity comparison: KPP vs.\ GGL90.}
+\label{tab:kpp_ggl90_adjoint_comparison}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Aspect} & \textbf{KPP} & \textbf{GGL90} \\
+\midrule
+Primary equation type & Diagnostic (BL depth search) & PDE (TKE transport) \\
+Conditional branches & Many ($\sim$30--50) & Few ($\sim$5--10) \\
+Gradient smoothness & Moderate (discontinuous at $h_{\text{bl}}$) & High (smooth PDEs) \\
+Parameter count & $\sim$15 profile coefficients & 3--4 core params \\
+Adjoint memory & Low (no prognostic state) & Moderate (TKE field) \\
+Adjoint runtime & $\sim$1.3$\times$ forward & $\sim$1.5$\times$ forward \\
+Gradient check pass rate & Moderate (70--90\%) & High ($>$95\%) \\
+Optimization convergence & Slower (many iterations) & Fast (few iterations) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key takeaway:} GGL90's prognostic formulation generally provides better
+gradient quality and faster optimization convergence, but KPP's lower memory
+footprint and simpler forward calculation can be advantageous in memory-constrained
+or rapid-turnaround scenarios.
+
+\subsection{Best Practices for Adjoint Runs with KPP}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Start with forward-validated parameters}: Tune KPP in forward mode
+        first to match observations. Only then enable adjoint optimization.
+
+  \item \textbf{Gradient checking}: Run manual finite-difference gradient checks
+        for key cost function components. Expect agreement to 4--8 significant digits
+        (less than GGL90 due to discontinuities).
+
+  \item \textbf{Parameter bounds}: Constrain optimization parameters to physical ranges:
+  \begin{itemize}
+    \item $0.2 < \text{Ricr} < 0.5$
+    \item $0.5 < \text{Riinfty} < 1.0$
+    \item $0.001 < \text{difm0} < 0.01$ m$^2$/s
+    \item $5 < \text{cstar} < 15$ (nonlocal transport strength)
+  \end{itemize}
+
+  \item \textbf{Cost function design}: Use integrated/smoothed quantities
+        (e.g., mixed layer heat content, time-averaged SST) rather than instantaneous
+        point values. Avoid cost terms that depend on sharp thresholds.
+
+  \item \textbf{Smoothing options}: Enable \texttt{KPP\_SMOOTH\_DBLOC} and
+        \texttt{KPP\_SMOOTH\_SHSQ} to reduce input noise. Consider
+        \texttt{KPP\_SMOOTH\_REGULARISATION} if gradient checks reveal discontinuity
+        issues.
+
+  \item \textbf{Checkpoint frequency}: Balance checkpoint frequency against memory
+        constraints. For KPP, checkpointing every 10--50 timesteps is typical.
+        Enable \texttt{KPP\_AUTODIFF\_EXCESSIVE\_STORE} if memory permits.
+
+  \item \textbf{Optimization algorithm}: Use quasi-Newton methods (L-BFGS) or
+        conjugate gradient, which are robust to moderate gradient noise. Avoid
+        methods requiring Hessian information (Newton, trust-region) due to second-
+        derivative discontinuities.
+\end{enumerate}
+
+\subsection{Adjoint Validation Test Cases}
+
+When enabling KPP in adjoint mode for a new configuration, perform the following
+validation tests:
+
+\begin{description}
+  \item[\textbf{Test 1: Gradient Check (Finite Difference)}]
+  \begin{itemize}[leftmargin=*]
+    \item Perturb a control variable (e.g., \texttt{difm0}) by $\epsilon = 10^{-6}$
+    \item Compute finite-difference gradient: $\frac{J(\text{difm0} + \epsilon) - J(\text{difm0})}{\epsilon}$
+    \item Compare to adjoint gradient: expect agreement to 4--8 digits
+    \item Repeat for multiple control variables and multiple perturbation sizes
+  \end{itemize}
+
+  \item[\textbf{Test 2: Adjoint-Forward Consistency}]
+  \begin{itemize}[leftmargin=*]
+    \item Run forward model, save state at checkpoints
+    \item Run adjoint model backward from $t = T$ to $t = 0$
+    \item Verify adjoint state is consistent with forward state at checkpoints
+    \item Check for NaNs, Infs, or abnormally large values
+  \end{itemize}
+
+  \item[\textbf{Test 3: Optimization Convergence}]
+  \begin{itemize}[leftmargin=*]
+    \item Set up a simple twin experiment: generate synthetic observations from
+          a forward run with known parameters
+    \item Perturb parameters by $\sim$20\%
+    \item Run optimization to recover true parameters
+    \item Check convergence within 50--100 iterations
+  \end{itemize}
+\end{description}
+
+\subsection{References for Adjoint Modeling}
+
+For further background on adjoint methods and their application to ocean mixing
+parameterizations:
+
+\begin{itemize}[leftmargin=*]
+  \item Marotzke, J., R.\ Giering, K.\ Q.\ Zhang, D.\ Stammer, C.\ Hill, and T.\ Lee (1999).
+        \textit{Construction of the adjoint MIT ocean general circulation model and
+        application to Atlantic heat transport sensitivity}. Journal of Geophysical
+        Research, 104(C12), 29,529--29,547.
+
+  \item Heimbach, P., C.\ Hill, and R.\ Giering (2005).
+        \textit{An efficient exact adjoint of the parallel MIT General Circulation Model,
+        generated via automatic differentiation}. Future Generation Computer Systems,
+        21(8), 1356--1371.
+
+  \item Forget, G., J.-M.\ Campin, P.\ Heimbach, C.\ N.\ Hill, R.\ M.\ Ponte, and C.\ Wunsch (2015).
+        \textit{ECCO version 4: An integrated framework for non-linear inverse modeling
+        and global ocean state estimation}. Geoscientific Model Development, 8, 3071--3104.
+
+  \item Ferreira, D., J.\ Marshall, and P.\ Heimbach (2005).
+        \textit{Estimating eddy stresses by fitting dynamics to observations using a
+        residual-mean ocean circulation model and its adjoint}. Journal of Physical
+        Oceanography, 35(10), 1891--1910.
+\end{itemize}
+
+% End of Appendix C
+  
+% ============================================================  
 \end{document}  
-% ============================================================ 
+% ============================================================  
