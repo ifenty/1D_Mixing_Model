@@ -5,16 +5,13 @@
 # GGL90Parameters.from_yaml(this_file).
 #
 # A physically realistic set following the standard Gaspar et al. (1990)
-# formulation, sitting between the bare defaults (near-molecular interior
-# mixing) and the strongly-tuned ECCOv4 R4 configuration.
+# formulation, sitting between the bare defaults and the strongly-tuned ECCOv4
+# R4 configuration. It differs from the defaults only in the mixing-length
+# treatment (alpha=10.0 is already the built-in default, so it is not repeated
+# here).
 #
-#   alpha = 10.0        TKE transport multiplier. MITgcm applies alpha to the
-#                       TKE diffusion coefficient (KappaE), while tracer
-#                       diffusivity is controlled by the turbulent Prandtl
-#                       number derived from local Richardson number.
 #   mxl_max_flag = 2    smooth two-way-sweep mixing length (Blanke & Delecluse).
 #   mxl_surf_flag = true  enforce mixing between the first and second level.
 
-alpha: 10.0
 mxl_max_flag: 2
 mxl_surf_flag: true
