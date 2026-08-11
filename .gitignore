@@ -6,3 +6,16 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Generated experiment output and figures (regenerable; not version-controlled)
+output/
+visualizations/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fdb_latexmk
+*.fls
+*.synctex.gz

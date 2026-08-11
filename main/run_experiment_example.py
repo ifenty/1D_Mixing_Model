@@ -114,7 +114,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=Path, default=None,
-        help="Directory for output files (default: config-dir/../output).",
+        help=f"Directory for output files (default: {PKG_DIR / 'output'}).",
     )
     parser.add_argument(
         "--n-profiles", type=int, default=5,
@@ -145,7 +145,7 @@ def main():
     # Resolve paths
     args.config_dir = args.config_dir.expanduser().resolve()
     if args.output_dir is None:
-        args.output_dir = args.config_dir / ".." / "output"
+        args.output_dir = PKG_DIR / "output"
     args.output_dir = args.output_dir.expanduser().resolve()
 
     # Validate config directory

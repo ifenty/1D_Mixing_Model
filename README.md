@@ -55,11 +55,15 @@ python main/run_experiment_example.py --scheme ggl90
 ```
 
 ### 3. Results
-`run_scenarios.py` writes to an `output/` directory (by default one level above the
-package; use `--output-dir` to choose a location). Each scenario/scheme produces:
+Results are written to an `output/` directory in the repository root by default
+(git-ignored); pass `--output-dir PATH` to choose another location. Each
+scenario/scheme produces, under `output/<scenario_name>/`:
 - `<scheme>_experiment.npz`: full time series data (load with `numpy.load()`)
 - `<scheme>_profiles.png`: snapshot profiles of T, S, velocity, mixing coefficients
 - `<scheme>_contours.png`: time-depth contours of key variables
+
+Generated `output/` and `visualizations/` directories are git-ignored, so experiment
+results and figures never clutter the repository.
 
 ## Requirements
 

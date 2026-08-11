@@ -74,7 +74,7 @@ All commands in this guide assume you are in the repository root (`1D_Mixing_Mod
 └── docs/                     # LaTeX references, porting lessons, dev notes
 ```
 
-Output is written to an `output/` directory (see §3 for exact location).
+Output is written to an `output/` directory in the repository root by default (git-ignored; see §3).
 
 ---
 
@@ -97,10 +97,10 @@ python main/run_scenarios.py
 
 This runs every scenario with both KPP and GGL90, writing results to `output/<scenario_name>/`.
 
-**Output location**: `run_scenarios.py` writes to an `output/` directory one level
-above the package (i.e., alongside `1D_Mixing_Model/`, not inside it). Use
-`--output-dir PATH` to place results wherever you like. `run_experiment_example.py`
-instead defaults to `<config-dir>/../output`.
+**Output location**: both `run_scenarios.py` and `run_experiment_example.py` write to
+an `output/` directory in the repository root by default (i.e., `1D_Mixing_Model/output/`,
+which is `./output` when you run from the repo root). This directory is git-ignored, so
+results never clutter the repository. Use `--output-dir PATH` to place results anywhere else.
 
 ### Run Specific Scenarios
 ```bash
@@ -141,7 +141,7 @@ python main/run_experiment_example.py --ivdc-kappa 10.0
 **`run_scenarios.py` options:**
 - `--scheme {kpp,ggl90,both}`: which mixing scheme(s) to run (default: both)
 - `--scenario NAME [NAME ...]`: run only specified scenarios (default: all)
-- `--output-dir PATH`: output directory root (default: `../output/`)
+- `--output-dir PATH`: output directory root (default: `./output/` in the repo root)
 - `--n-profiles INT`: number of profile snapshots per plot (default: 5)
 - `--ggl90-yaml PATH`: GGL90 parameter override file (data.ggl90-style)
 - `--kpp-yaml PATH`: KPP parameter override file (data.kpp-style)
@@ -151,7 +151,7 @@ python main/run_experiment_example.py --ivdc-kappa 10.0
 **`run_experiment_example.py` options:**
 - `--scheme {kpp,ggl90,both}`: which mixing scheme(s) to run (default: both)
 - `--config-dir PATH`: configuration directory (default: `configuration_yamls/`)
-- `--output-dir PATH`: output directory (default: `<config-dir>/../output`)
+- `--output-dir PATH`: output directory (default: `./output/` in the repo root)
 - `--n-profiles INT`: number of profile snapshots in plots (default: 5)
 - `--no-plots`: skip figure generation
 - `--kpp-yaml PATH`: KPP parameter override file
