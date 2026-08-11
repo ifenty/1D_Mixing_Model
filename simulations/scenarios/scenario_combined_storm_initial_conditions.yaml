@@ -2,7 +2,7 @@ metadata:
   name: scenario_combined_storm_ic
   description: 'Initial conditions for extreme scenario ''combined_storm'': Cold-front
     passage: strong wind + strong cooling. Realistic North Atlantic ocean profile
-    (~40-50°N). Shared by KPP_PY and GGL90_PY.'
+    (~40-50°N). Shared by KPP and GGL90.'
   source: realistic North Atlantic climatology
   scenario: combined_storm
   conventions:

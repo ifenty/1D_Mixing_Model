@@ -1,6 +1,6 @@
 metadata:
   name: shared_time_integration
-  description: Shared time stepping controls for KPP_PY and GGL90_PY
+  description: Shared time stepping controls for KPP and GGL90
 
 time_integration:
   dt_seconds: 600

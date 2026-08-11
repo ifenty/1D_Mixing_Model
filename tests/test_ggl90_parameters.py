@@ -13,13 +13,13 @@ SCENARIO_DIR = PKG_DIR / "simulations" / "scenarios"
 CONFIG_DIR = PKG_DIR / "configuration_yamls"
 PHYSICAL_YAML = CONFIG_DIR / "physical_parameters.yaml"
 GGL90_ECCOV4R4_YAML = CONFIG_DIR / "ggl90_eccov4r4.yaml"
-GGL90_DEFAULT_YAML = PKG_DIR / "GGL90_ML" / "GGL90_PY" / "ggl90_default_parameters.yaml"
+GGL90_DEFAULT_YAML = PKG_DIR / "GGL90" / "ggl90_default_parameters.yaml"
 
 os.environ["KPP_PHYSICAL_PARAMETERS_YAML"] = str(PHYSICAL_YAML)
 sys.path.insert(0, str(PKG_DIR))
 
 from main import UnifiedColumnDriver, ConfigManager, GGL90Adapter
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_parameters import GGL90Parameters
 
 
 def run_arctic_with_params(ggl90_yaml_path):

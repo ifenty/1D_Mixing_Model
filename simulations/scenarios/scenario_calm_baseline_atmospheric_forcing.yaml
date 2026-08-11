@@ -1,8 +1,8 @@
 metadata:
   name: scenario_calm_baseline_forcing
   description: 'Atmospheric forcing for extreme scenario ''calm_baseline'': Calm baseline
-    (control case). Shared by KPP_PY and GGL90_PY.'
-  source: generated from KPP_PY/extreme_scenarios.py
+    (control case). Shared by KPP and GGL90.'
+  source: generated from KPP/extreme_scenarios.py
   scenario: calm_baseline
   time_dependence: invariant
   provenance:

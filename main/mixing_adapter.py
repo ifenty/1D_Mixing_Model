@@ -113,7 +113,7 @@ class KPPAdapter(MixingSchemeAdapter):
                  background_diff: float = 1.0e-5):
         """
         Args:
-            kpp_driver: Instance of KPPDriver from KPP_PY
+            kpp_driver: Instance of KPPDriver from KPP
             background_visc: Background viscosity [m²/s]
             background_diff: Background diffusivity [m²/s]
         """
@@ -189,7 +189,7 @@ class GGL90Adapter(MixingSchemeAdapter):
     def __init__(self, ggl90_driver, physical_params: Dict[str, float]):
         """
         Args:
-            ggl90_driver: Instance of GGL90Driver from GGL90_PY
+            ggl90_driver: Instance of GGL90Driver from GGL90
             physical_params: Dict with 'gravity', 'rho_const', 'heat_capacity_cp',
                 and optionally 'background_viscosity'/'background_diffusivity'
                 (MITgcm's viscArNr(k)/diffKrNrS(k) background floor; default 0.0

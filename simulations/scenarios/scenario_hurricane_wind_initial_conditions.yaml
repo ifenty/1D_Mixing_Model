@@ -3,7 +3,7 @@ metadata:
   description: 'Initial conditions for extreme scenario ''hurricane_wind'': Category-5
     hurricane winds, overcast. Realistic tropical ocean pre-hurricane profile with
     warm mixed layer (~28°C), strong thermocline, and cold deep water. Shared by
-    KPP_PY and GGL90_PY.'
+    KPP and GGL90.'
   source: generated from realistic tropical climatology
   scenario: hurricane_wind
   conventions:

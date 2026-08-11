@@ -1,8 +1,8 @@
 metadata:
   name: scenario_heavy_rain_freshening_ic
   description: 'Initial conditions for extreme scenario ''heavy_rain_freshening'':
-    Tropical downpour under moderate wind. Shared by KPP_PY and GGL90_PY.'
-  source: generated from KPP_PY/extreme_scenarios.py
+    Tropical downpour under moderate wind. Shared by KPP and GGL90.'
+  source: generated from KPP/extreme_scenarios.py
   scenario: heavy_rain_freshening
   conventions:
     depth_sign: negative_downward_cell_centers

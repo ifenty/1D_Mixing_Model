@@ -20,8 +20,8 @@ import numpy as np
 from typing import Dict, Tuple
 
 # Import both schemes and shared physics
-from GGL90_ML.GGL90_PY import GGL90Driver, GGL90Parameters
-from KPP_ML.KPP_PY import KPPDriver, KPPParameters
+from GGL90 import GGL90Driver, GGL90Parameters
+from KPP import KPPDriver, KPPParameters
 from main.physics_basis import (
     compute_buoyancy_frequency_squared,
     compute_vertical_shear_squared,
@@ -303,8 +303,8 @@ def test_imports():
     """Test that all modules import correctly."""
     print("=== Import Validation ===")
     try:
-        from GGL90_ML.GGL90_PY import GGL90Driver as GGL90_test
-        from KPP_ML.KPP_PY import KPPDriver as KPP_test
+        from GGL90 import GGL90Driver as GGL90_test
+        from KPP import KPPDriver as KPP_test
         from main.physics_basis import compute_buoyancy_frequency_squared as N2_test
         print("✓ All imports successful")
         return True

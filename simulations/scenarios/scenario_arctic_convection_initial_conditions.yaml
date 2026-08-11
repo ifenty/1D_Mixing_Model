@@ -1,8 +1,8 @@
 metadata:
   name: scenario_arctic_convection_ic
   description: 'Initial conditions for extreme scenario ''arctic_convection'': Extreme
-    radiative cooling (polynya / cold-air outbreak). Shared by KPP_PY and GGL90_PY.'
-  source: generated from KPP_PY/extreme_scenarios.py
+    radiative cooling (polynya / cold-air outbreak). Shared by KPP and GGL90.'
+  source: generated from KPP/extreme_scenarios.py
   scenario: arctic_convection
   conventions:
     depth_sign: negative_downward_cell_centers

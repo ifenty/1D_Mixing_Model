@@ -1,7 +1,7 @@
 """
-Phase 3 KPP_PY refactoring validation.
+Phase 3 KPP refactoring validation.
 
-Validates that the refactored KPP_PY modules work correctly after
+Validates that the refactored KPP modules work correctly after
 reorganization. Old kpp_core.py and kpp_boundary_layer.py have been
 replaced with:
   - kpp_core_driver.py (orchestration)
@@ -10,16 +10,16 @@ replaced with:
 
 Run this to validate the refactored code:
     cd 1D_Mixing_Model
-    python -m KPP_ML.KPP_PY.test_phase3_refactor
+    python -m KPP.test_phase3_refactor
 """
 
 import sys
 import numpy as np
 from pathlib import Path
 
-# Import from KPP_PY as a package
-from KPP_ML.KPP_PY.kpp_parameters import KPPParameters
-from KPP_ML.KPP_PY.kpp_core_driver import KPPDriver as KPPDriver_NEW
+# Import from KPP as a package
+from KPP.kpp_parameters import KPPParameters
+from KPP.kpp_core_driver import KPPDriver as KPPDriver_NEW
 
 
 def create_test_column(nz: int = 20):
@@ -110,7 +110,7 @@ def test_single_step():
 
 
 if __name__ == '__main__':
-    print("KPP_PY Phase 3 Refactoring Validation")
+    print("KPP Phase 3 Refactoring Validation")
     print("=" * 50)
 
     test_import()

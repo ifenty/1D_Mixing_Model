@@ -34,8 +34,8 @@ from main import (
 )
 from main.eos import jmd95_eos
 from main.physics_basis import compute_density_gradient
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_core_driver import GGL90Driver
+from GGL90.ggl90_parameters import GGL90Parameters
 
 
 def get_config_manager(scenario_name: str) -> ConfigManager:

@@ -1,5 +1,5 @@
 """
-GGL90_PY: Python Implementation of GGL90 Vertical Mixing
+GGL90: Python Implementation of GGL90 Vertical Mixing
 
 A Python implementation of the GGL90 turbulent kinetic energy (TKE) mixing
 scheme as used in MITgcm and ECCOv4.

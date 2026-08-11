@@ -89,7 +89,7 @@ The KPP scheme computes vertical mixing coefficients through the following seque
 
 \textbf{Python:}
 \begin{itemize}
-    \item Module: \verb|KPP_ML/KPP_PY/kpp_core_driver.py|
+    \item Module: \verb|KPP/kpp_core_driver.py|
     \item Class: \verb|KPPDriver| (lines 80-400+)
     \item Method: \verb|compute_mixing()| (lines 105-400+)
     \item Called from: \verb|main/mixing_adapter.py| via unified interface
@@ -145,7 +145,7 @@ This section provides detailed line-by-line mapping for each major computational
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_parameters.py|
+    \item File: \verb|KPP/kpp_parameters.py|
     \item Class: \verb|KPPParameters| (lines 1-300+)
     \item Configuration files: \verb|configuration_yamls/kpp_default.yaml|
     \item Key parameters loaded: \verb|Ricr|, \verb|cstar|, \verb|epsilon|, \verb|Vtc|, \verb|nu0|, \verb|diff_min|, \verb|diff_max|
@@ -216,7 +216,7 @@ Surface buoyancy difference (numerator of bulk Ri):
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item File: \verb|KPP/kpp_scheme_specific.py|
     \item Function: \verb|diagnose_bl_depth()| (lines 26-200+)
     \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 210+)
     \item Key computation: lines 94-144 (Rib loop and comparison to Ricr)
@@ -268,7 +268,7 @@ Boundary layer depth is where $\text{Ri}_b = \text{Ri}_c$ (typically 0.3):
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_core_driver.py|
+    \item File: \verb|KPP/kpp_core_driver.py|
     \item Method: \verb|KPPDriver._compute_surface_forcing()| (lines 250-320+)
     \item Called from: \verb|compute_mixing()| (lines 193-196)
     \item Friction velocity: $u_*^2 = \sqrt{\tau_x^2 + \tau_y^2}$ (line 260+)
@@ -324,7 +324,7 @@ where:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_routines.py|
+    \item File: \verb|KPP/kpp_routines.py|
     \item Function: \verb|ri_iwmix()| (lines 100-250+)
     \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 205+)
     \item Richardson number: $\text{Ri} = N^2 / S^2$ (line 120+)
@@ -374,7 +374,7 @@ Typical values:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item File: \verb|KPP/kpp_scheme_specific.py|
     \item Function: \verb|compute_bl_mixing()| (lines 200-400+)
     \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 220+)
     \item Velocity scales: \verb|wscale()| computes w$_m$, w$_s$ (lines 250-280+)
@@ -430,7 +430,7 @@ Boundary layer diffusivity:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item File: \verb|KPP/kpp_scheme_specific.py|
     \item Computed within: \verb|compute_bl_mixing()| (lines 380-400+)
     \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 220+)
     \item Formula: $\gamma(\sigma) = c_s \times \sigma \times (1 - \sigma)^2$ (line 390+)
@@ -479,7 +479,7 @@ where:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_core_driver.py|
+    \item File: \verb|KPP/kpp_core_driver.py|
     \item Assembly logic: \verb|compute_mixing()| (lines 230-270+)
     \item Bottom-to-top indexing: lines 240-250+ (interior below hbl, BL above)
     \item Re-indexing to top-of-cell: lines 260-270+ (MITgcm output convention)
@@ -524,7 +524,7 @@ Background floor:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|KPP_ML/KPP_PY/kpp_scheme_specific.py|
+    \item File: \verb|KPP/kpp_scheme_specific.py|
     \item Function: \verb|enhance_at_interface()| (lines 400-500+)
     \item Called from: \verb|kpp_core_driver.py::compute_mixing()| (line 240+)
     \item Enhancement factor: $f_{\text{enh}} = 1 + $ enhancement (lines 420-450+)
@@ -572,7 +572,7 @@ Enhanced diffusivity:
 \textbf{Python Implementation}:
 \begin{itemize}
     \item \textbf{Not implemented in 1D port} (excluded as not critical for validation)
-    \item Would be in: \verb|KPP_ML/KPP_PY/kpp_core.py| (if ported)
+    \item Would be in: \verb|KPP/kpp_core.py| (if ported)
 \end{itemize}
 
 \textbf{Fortran Source}:

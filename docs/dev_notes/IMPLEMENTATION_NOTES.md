@@ -1,4 +1,4 @@
-# GGL90_PY Implementation Notes
+# GGL90 Implementation Notes
 
 ## Overview
 
@@ -9,7 +9,7 @@ This document describes the Python implementation of the GGL90 vertical mixing s
 ### Module Organization
 
 ```
-GGL90_PY/
+GGL90/
 ├── __init__.py                        # Package initialization
 ├── ggl90_parameters.py                # Parameter configuration
 ├── ggl90_core_driver.py               # Main orchestrator (imports physics from main)
@@ -49,8 +49,8 @@ GGL90_PY/
 
 **Python:**
 ```python
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_core_driver import GGL90Driver
+from GGL90.ggl90_parameters import GGL90Parameters
 
 params = GGL90Parameters.from_yaml('path/to/ggl90.yaml')
 driver = GGL90Driver(params)

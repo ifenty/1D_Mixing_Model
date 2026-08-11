@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-# Make 1D_Mixing_Model the import root (so `main`, `KPP_ML`, `GGL90_ML` resolve),
+# Make 1D_Mixing_Model the import root (so `main`, `KPP`, `GGL90` resolve),
 # and point KPP at the shared physical-parameters YAML.
 import os
 _ROOT = Path(__file__).resolve().parent.parent
@@ -34,9 +34,9 @@ os.environ.setdefault(
 
 from main.shared_column_solver import solve_diffusion_implicit
 from main.column_grid import ColumnGrid
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
-from GGL90_ML.GGL90_PY.ggl90_mixing_coefficients import compute_viscosity_diffusivity
+from GGL90.ggl90_core_driver import GGL90Driver
+from GGL90.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_mixing_coefficients import compute_viscosity_diffusivity
 from main.eos import compute_ggl90_buoyancy_frequency_squared
 from main.physics_basis import compute_vertical_shear_squared
 
@@ -148,7 +148,7 @@ def test_ggl90_N2_shear_at_top_face():
 def test_ggl90_unstable_N2_drives_tke_production():
     """MITgcm retains signed N² in -KappaH*N², so an unstable interface
     (N² < 0) produces TKE rather than being silently neutralized."""
-    from GGL90_ML.GGL90_PY.ggl90_scheme_specific import compute_tke_buoyancy
+    from GGL90.ggl90_scheme_specific import compute_tke_buoyancy
 
     # Create an unstable profile: warmer/lighter water below colder/denser water
     depth = np.array([0., -10.])  # negative-down
@@ -217,7 +217,7 @@ def test_kpp_output_top_face_and_surface_zero():
     """KPP output diffusivities must be on the top-of-cell convention: index 0
     (surface) is 0, and interior faces are the internal bottom-of-cell values
     shifted by +1 (MITgcm vddiff(k-1)->KPPdiffKzT(k))."""
-    from KPP_ML.KPP_PY.kpp_core_driver import KPPDriver
+    from KPP.kpp_core_driver import KPPDriver
 
     drv = KPPDriver()
     nz = 12

@@ -1,8 +1,8 @@
 metadata:
   name: scenario_tropical_heating_diurnal_forcing
   description: 'Atmospheric forcing for extreme scenario ''tropical_heating_diurnal'':
-    Intense daytime solar heating, light wind. Shared by KPP_PY and GGL90_PY.'
-  source: generated from KPP_PY/extreme_scenarios.py
+    Intense daytime solar heating, light wind. Shared by KPP and GGL90.'
+  source: generated from KPP/extreme_scenarios.py
   scenario: tropical_heating_diurnal
   time_dependence: invariant
   provenance:

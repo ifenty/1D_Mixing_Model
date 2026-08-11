@@ -1,7 +1,7 @@
 """
 Shared implicit vertical-diffusion solver for the 1D column models.
 
-Both KPP_PY and GGL90_PY advance tracers/velocities through time by solving the
+Both KPP and GGL90 advance tracers/velocities through time by solving the
 same 1D vertical diffusion equation
 
     d C / d t = d/dz ( K dC/dz )  (+ surface flux BC, + optional KPP nonlocal term)
@@ -12,8 +12,8 @@ CFL limit dt < dz^2 / (2 K) that made the old example_usage.py stepper blow up
 (negative salinity -> sqrt NaN) on thin near-surface cells.
 
 This module is the SINGLE SOURCE OF TRUTH for that time-stepping method: every
-model (KPP_PY/example_usage.py, KPP_PY/extreme_scenarios.py,
-GGL90_PY/example_1d_column.py) calls solve_diffusion_implicit() here, so all of
+model (KPP/example_usage.py, KPP/extreme_scenarios.py,
+GGL90/example_1d_column.py) calls solve_diffusion_implicit() here, so all of
 them use bit-for-bit the same solver.
 
 Vertical staggering (MITgcm-faithful "top-of-cell" interface convention):

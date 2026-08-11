@@ -19,8 +19,8 @@ Python ports of MITgcm's KPP and GGL90 vertical mixing schemes, designed for sce
 ├── user_guide.md          # Complete end-to-end usage documentation
 ├── conftest.py            # Pytest configuration
 ├── main/                  # Unified driver, adapters, config manager, EOS, physics basis, solver, plotter
-├── GGL90_ML/GGL90_PY/     # GGL90 turbulence closure implementation + default parameter YAML
-├── KPP_ML/KPP_PY/         # KPP boundary layer mixing implementation + default parameter YAML
+├── GGL90/     # GGL90 turbulence closure implementation + default parameter YAML
+├── KPP/         # KPP boundary layer mixing implementation + default parameter YAML
 ├── configuration_yamls/   # Shared physical parameters + example GGL90 override configs
 ├── simulations/scenarios/ # Built-in scenario configuration files (6 scenarios × 3 files each)
 ├── tests/                 # All test modules

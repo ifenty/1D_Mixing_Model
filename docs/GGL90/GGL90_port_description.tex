@@ -84,7 +84,7 @@ The GGL90 scheme computes vertical mixing coefficients through the following seq
 
 \textbf{Python:}
 \begin{itemize}
-    \item Module: \verb|GGL90_ML/GGL90_PY/ggl90_core_driver.py|
+    \item Module: \verb|GGL90/ggl90_core_driver.py|
     \item Class: \verb|GGL90Driver| (lines 81-356)
     \item Method: \verb|compute_mixing()| (lines 230-356)
     \item Called from: \verb|main/mixing_adapter.py| via unified interface
@@ -128,7 +128,7 @@ This section provides detailed line-by-line mapping for each major computational
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|GGL90_ML/GGL90_PY/ggl90_parameters.py|
+    \item File: \verb|GGL90/ggl90_parameters.py|
     \item Class: \verb|GGL90Parameters| (lines 1-300+)
     \item Configuration files: \verb|configuration_yamls/ggl90_default.yaml|, \verb|ggl90_eccov4r4.yaml|
     \item Key parameters loaded: \verb|ck|, \verb|ceps|, \verb|alpha|, \verb|tke_min|, \verb|mixing_length_min|, \verb|mxl_max_flag|, \verb|mxl_surf_flag|
@@ -192,7 +192,7 @@ This section provides detailed line-by-line mapping for each major computational
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|GGL90_ML/GGL90_PY/ggl90_scheme_specific.py|
+    \item File: \verb|GGL90/ggl90_scheme_specific.py|
     \item Class: \verb|GGL90MixingLength| (lines 21-231)
     \item Method: \verb|compute()| (lines 37-101)
     \item Called from: \verb|ggl90_core_driver.py::compute_mixing()| (lines 323-325)
@@ -238,7 +238,7 @@ Limiting ensures physical constraints:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|GGL90_ML/GGL90_PY/ggl90_core_driver.py|
+    \item File: \verb|GGL90/ggl90_core_driver.py|
     \item Method: \verb|GGL90Driver.step_tke_forward()| (lines 104-228)
     \item Called from: \verb|compute_mixing()| (lines 339-342)
     \item Tridiagonal solver: \verb|main/shared_column_solver.py::solve_tridiagonal()|
@@ -288,7 +288,7 @@ where:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|GGL90_ML/GGL90_PY/ggl90_mixing_coefficients.py|
+    \item File: \verb|GGL90/ggl90_mixing_coefficients.py|
     \item Function: \verb|compute_viscosity_diffusivity()| (lines 17-111)
     \item Called from: \verb|ggl90_core_driver.py::compute_mixing()| (lines 328-331)
     \item Main loop: lines 96-109 (compute coefficients for each vertical level)
@@ -345,7 +345,7 @@ where Richardson number:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|GGL90_ML/GGL90_PY/ggl90_core_driver.py|
+    \item File: \verb|GGL90/ggl90_core_driver.py|
     \item Surface TKE: \verb|step_tke_forward()| lines 205-210
     \item Formula: \verb|surf_tke = max(m2 * u_star_sq, tke_surf_min)|
     \item Parameter \verb|m2| $\approx$ 3.75 (default)
@@ -364,7 +364,7 @@ where Richardson number:
 
 \textbf{Python Implementation}:
 \begin{itemize}
-    \item File: \verb|GGL90_ML/GGL90_PY/ggl90_core_driver.py|
+    \item File: \verb|GGL90/ggl90_core_driver.py|
     \item Bottom TKE: \verb|step_tke_forward()| lines 214-218
     \item Two options controlled by \verb|use_dirichlet| parameter:
         \begin{itemize}

@@ -53,12 +53,12 @@ All commands in this guide assume you are in the repository root (`1D_Mixing_Mod
 │   ├── unified_plotter.py        # Profile + contour figure generation
 │   ├── run_scenarios.py          # Run all built-in scenarios
 │   └── run_experiment_example.py # Example single-experiment runner
-├── GGL90_ML/GGL90_PY/        # GGL90 turbulence closure
+├── GGL90/        # GGL90 turbulence closure
 │   ├── ggl90_core_driver.py
 │   ├── ggl90_parameters.py
 │   ├── ggl90_default_parameters.yaml   # Built-in GGL90 defaults
 │   └── ggl90_*.py (scheme-specific modules)
-├── KPP_ML/KPP_PY/            # KPP boundary layer mixing
+├── KPP/            # KPP boundary layer mixing
 │   ├── kpp_core_driver.py
 │   ├── kpp_parameters.py
 │   └── kpp_*.py (scheme-specific modules)
@@ -176,7 +176,7 @@ The `.npz` file contains these arrays (time-by-depth unless noted):
 ### KPP (K-Profile Parameterization)
 - **Best for**: surface boundary layer mixing, wind-driven entrainment, convective adjustment
 - **Physics**: determines boundary layer depth from a bulk Richardson number criterion, applies cubic shape functions for mixing within the boundary layer, and handles interior shear and double-diffusive mixing. KPP is **diagnostic** — it recomputes all mixing coefficients each time step and carries no state between steps.
-- **Key parameters** (see `KPP_ML/KPP_PY/kpp_parameters.py` for the full list):
+- **Key parameters** (see `KPP/kpp_parameters.py` for the full list):
   - `Ricr`: critical bulk Richardson number for boundary layer depth (default: 0.3)
   - `epsilon`: surface layer extent fraction (default: 0.1)
   - `vonk`: von Karman constant (default: 0.4)
@@ -188,7 +188,7 @@ The `.npz` file contains these arrays (time-by-depth unless noted):
 ### GGL90 (Turbulence Closure)
 - **Best for**: interior turbulence, stratified shear layers, time-evolving turbulent kinetic energy
 - **Physics**: solves a **prognostic** TKE equation, applies local mixing based on TKE and a mixing length, and handles stable and unstable stratification. Because TKE is prognostic, GGL90 carries state between time steps.
-- **Key parameters** (see `GGL90_ML/GGL90_PY/ggl90_parameters.py`):
+- **Key parameters** (see `GGL90/ggl90_parameters.py`):
   - `alpha`: TKE diffusivity multiplier, KappaE/KappaM (default: **10.0**)
   - `ck`: viscosity coefficient (default: 0.1)
   - `ceps`: dissipation coefficient (default: 0.7)

@@ -1,8 +1,8 @@
 metadata:
   name: scenario_hurricane_wind_time_integration
   description: 'Time-integration controls for extreme scenario ''hurricane_wind'':
-    Category-5 hurricane winds, overcast. Shared by KPP_PY and GGL90_PY.'
-  source: generated from KPP_PY/extreme_scenarios.py
+    Category-5 hurricane winds, overcast. Shared by KPP and GGL90.'
+  source: generated from KPP/extreme_scenarios.py
   scenario: hurricane_wind
   provenance:
     duration_hours: 24.0

@@ -11,8 +11,8 @@ Two comprehensive, unified LaTeX technical reports have been created documenting
 ## File Locations
 
 ```
-GGL90_ML/GGL90_REPORT/GGL90_Report.tex      (Main GGL90 comprehensive report)
-KPP_ML/KPP_REPORT/KPP_Report.tex           (Main KPP comprehensive report)
+GGL90/GGL90_REPORT/GGL90_Report.tex      (Main GGL90 comprehensive report)
+KPP/KPP_REPORT/KPP_Report.tex           (Main KPP comprehensive report)
 ```
 
 ## Report Structure (Unified Across Both Schemes)
@@ -175,13 +175,13 @@ Install a modern LaTeX distribution (TeX Live, MiKTeX, MacTeX, etc.)
 ### On macOS (with MacTeX installed)
 
 ```bash
-cd /Users/ifenty/Library/CloudStorage/Box-Box/ifenty/Projects/ECCO/1D_Mixing_Experiments/1D_Mixing_Model/GGL90_ML/GGL90_REPORT
+cd /Users/ifenty/Library/CloudStorage/Box-Box/ifenty/Projects/ECCO/1D_Mixing_Experiments/1D_Mixing_Model/GGL90/GGL90_REPORT
 
 # Compile GGL90 report to PDF
 pdflatex -interaction=nonstopmode GGL90_Report.tex
 
 # Compile KPP report to PDF
-cd ../../KPP_ML/KPP_REPORT
+cd ../../KPP/KPP_REPORT
 pdflatex -interaction=nonstopmode KPP_Report.tex
 ```
 

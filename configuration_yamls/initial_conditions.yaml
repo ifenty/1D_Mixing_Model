@@ -1,6 +1,6 @@
 metadata:
   name: shared_column_ic
-  description: Shared 1D initial conditions for KPP_PY and GGL90_PY
+  description: Shared 1D initial conditions for KPP and GGL90
   conventions:
     depth_sign: negative_downward_cell_centers
     velocity_units: m_s
@@ -17,5 +17,5 @@ initial_conditions:
   u_vel: [0.14, 0.13, 0.12, 0.11, 0.095, 0.080, 0.064, 0.050, 0.036, 0.025, 0.015, 0.008]
   v_vel: [0.07, 0.065, 0.060, 0.054, 0.047, 0.040, 0.033, 0.026, 0.020, 0.014, 0.009, 0.005]
 
-  # Optional scalar field used directly by KPP_PY and ignored by GGL90_PY.
+  # Optional scalar field used directly by KPP and ignored by GGL90.
   coriol: 1.0e-4

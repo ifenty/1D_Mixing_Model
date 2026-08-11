@@ -1,5 +1,5 @@
 """
-Validate shared YAML files used by KPP_PY and GGL90_PY.
+Validate shared YAML files used by KPP and GGL90.
 
 Checks performed:
 1. Shared initial conditions schema and profile lengths vs drF.
@@ -215,10 +215,10 @@ def main() -> int:
     default_forcing = here / "shared_atmospheric_forcing.yaml"
     default_runtime = here / "shared_time_integration.yaml"
     default_physical = here / "physical_parameters.yaml"
-    default_kpp_fields = here.parent / "KPP_PY" / "kpp_output_fields.yaml"
-    default_ggl_fields = here.parent.parent / "GGL90_ML" / "GGL90_PY" / "ggl90_output_fields.yaml"
+    default_kpp_fields = here.parent / "KPP" / "kpp_output_fields.yaml"
+    default_ggl_fields = here.parent.parent / "GGL90" / "ggl90_output_fields.yaml"
 
-    parser = argparse.ArgumentParser(description="Validate shared YAML files for KPP_PY and GGL90_PY")
+    parser = argparse.ArgumentParser(description="Validate shared YAML files for KPP and GGL90")
     parser.add_argument("--initial-condition-yaml", type=str, default=str(default_ic))
     parser.add_argument("--forcing-yaml", type=str, default=str(default_forcing))
     parser.add_argument("--runtime-yaml", type=str, default=str(default_runtime))

@@ -40,7 +40,7 @@ COMPARISON_DIR = OUTPUT_DIR / "scenario_comparison"  # all artifacts land here
 CONFIG_DIR = PKG_DIR / "configuration_yamls"
 PHYSICAL_YAML = CONFIG_DIR / "physical_parameters.yaml"
 GGL90_ECCOV4R4_YAML = CONFIG_DIR / "ggl90_eccov4r4.yaml"
-GGL90_DEFAULT_YAML = PKG_DIR / "GGL90_ML" / "GGL90_PY" / "ggl90_default_parameters.yaml"
+GGL90_DEFAULT_YAML = PKG_DIR / "GGL90" / "ggl90_default_parameters.yaml"
 
 os.environ["KPP_PHYSICAL_PARAMETERS_YAML"] = str(PHYSICAL_YAML)
 sys.path.insert(0, str(PKG_DIR))
@@ -54,10 +54,10 @@ from main import (
 from main.eos import jmd95_eos
 from main.physics_basis import compute_density_gradient
 from main.unified_plotter import make_figures
-from KPP_ML.KPP_PY.kpp_core_driver import KPPDriver
-from KPP_ML.KPP_PY.kpp_parameters import KPPParameters
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
+from KPP.kpp_core_driver import KPPDriver
+from KPP.kpp_parameters import KPPParameters
+from GGL90.ggl90_core_driver import GGL90Driver
+from GGL90.ggl90_parameters import GGL90Parameters
 
 
 def discover_scenarios() -> List[str]:

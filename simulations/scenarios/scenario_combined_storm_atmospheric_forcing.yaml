@@ -1,8 +1,8 @@
 metadata:
   name: scenario_combined_storm_forcing
   description: 'Atmospheric forcing for extreme scenario ''combined_storm'': Cold-front
-    passage: strong wind + strong cooling. Shared by KPP_PY and GGL90_PY.'
-  source: generated from KPP_PY/extreme_scenarios.py
+    passage: strong wind + strong cooling. Shared by KPP and GGL90.'
+  source: generated from KPP/extreme_scenarios.py
   scenario: combined_storm
   time_dependence: invariant
   provenance:

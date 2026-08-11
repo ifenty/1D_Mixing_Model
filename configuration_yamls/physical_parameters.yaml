@@ -1,7 +1,7 @@
-# Shared physical constants used by KPP_PY and GGL90_PY.
+# Shared physical constants used by KPP and GGL90.
 #
 # This file is the SINGLE SOURCE OF TRUTH for these constants. Both codebases
-# read them from here (KPP via KPP_PY/constants.py -> KPPConfig defaults; GGL90
+# read them from here (KPP via KPP/constants.py -> KPPConfig defaults; GGL90
 # via load_physical_parameters_yaml). Do not hardcode these values in code.
 physical_parameters:
   gravity: 9.81            # Gravitational acceleration [m/s^2]

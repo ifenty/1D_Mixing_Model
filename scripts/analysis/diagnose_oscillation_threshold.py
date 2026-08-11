@@ -36,8 +36,8 @@ from main import (
     ConfigManager,
     GGL90Adapter,
 )
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_core_driver import GGL90Driver
+from GGL90.ggl90_parameters import GGL90Parameters
 
 
 def compute_oscillation_metrics(field: np.ndarray) -> dict:

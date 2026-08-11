@@ -20,8 +20,8 @@ import sys
 # Add repo root to path to import packages
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from KPP_ML.KPP_PY.kpp_parameters import KPPParameters
-from KPP_ML.KPP_PY.kpp_core_driver import KPPDriver
+from KPP.kpp_parameters import KPPParameters
+from KPP.kpp_core_driver import KPPDriver
 
 
 def resolve_shared_physical_yaml(explicit_path: str | None = None) -> Path:

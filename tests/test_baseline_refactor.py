@@ -1,7 +1,7 @@
 """
-Phase 2 refactoring validation for GGL90_PY.
+Phase 2 refactoring validation for GGL90.
 
-Validates that the refactored GGL90_PY modules work correctly after
+Validates that the refactored GGL90 modules work correctly after
 consolidation. Old ggl90_core.py and ggl90_mixing_length.py have been
 replaced with:
   - ggl90_core_driver.py (orchestration)
@@ -13,7 +13,7 @@ deleting the old files and verified byte-identical output.
 
 Run this to validate the refactored code:
     cd 1D_Mixing_Model
-    python -m GGL90_ML.GGL90_PY.test_baseline_refactor
+    python -m GGL90.test_baseline_refactor
 """
 
 import sys
@@ -21,9 +21,9 @@ import numpy as np
 import json
 from pathlib import Path
 
-# Import from GGL90_PY as a package
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver as GGL90Driver_NEW
+# Import from GGL90 as a package
+from GGL90.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_core_driver import GGL90Driver as GGL90Driver_NEW
 
 
 def create_test_column(nz: int = 20):
@@ -113,7 +113,7 @@ def test_single_step():
 
 
 if __name__ == '__main__':
-    print("GGL90_PY Phase 2 Baseline Test")
+    print("GGL90 Phase 2 Baseline Test")
     print("=" * 50)
 
     test_import()

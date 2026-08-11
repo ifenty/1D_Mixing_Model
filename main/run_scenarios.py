@@ -57,10 +57,10 @@ from main import (  # noqa: E402
     KPPAdapter,
     GGL90Adapter,
 )
-from KPP_ML.KPP_PY.kpp_core_driver import KPPDriver  # noqa: E402
-from KPP_ML.KPP_PY.kpp_parameters import KPPParameters  # noqa: E402
-from GGL90_ML.GGL90_PY.ggl90_core_driver import GGL90Driver  # noqa: E402
-from GGL90_ML.GGL90_PY.ggl90_parameters import GGL90Parameters  # noqa: E402
+from KPP.kpp_core_driver import KPPDriver  # noqa: E402
+from KPP.kpp_parameters import KPPParameters  # noqa: E402
+from GGL90.ggl90_core_driver import GGL90Driver  # noqa: E402
+from GGL90.ggl90_parameters import GGL90Parameters  # noqa: E402
 
 
 def discover_scenarios() -> List[str]:
