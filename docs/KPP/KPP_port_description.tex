@@ -647,7 +647,7 @@ Enhanced diffusivity:
     \item \verb|rF(k)|: z-coordinate of cell interface k [m]
     \item \verb|drF(k)|: thickness of cell k [m]
     \item \verb|KPPviscAz(i,j,k)|, \verb|KPPdiffKzS(i,j,k)|, \verb|KPPdiffKzT(i,j,k)|: mixing coefficients at top face [m²/s]
-    \item \verb|KPPghat(i,j,k)|: nonlocal transport at bottom face [1/s]
+    \item \verb|KPPghat(i,j,k)|: nonlocal transport at bottom face [s/m²]
 \end{itemize}
 
 \subsection{Physical Constants}
@@ -724,7 +724,7 @@ Enhanced diffusivity:
 \verb|visc_az| & \verb|KPPviscAz| & Vertical viscosity [m²/s] \\
 \verb|diff_kz_s| & \verb|KPPdiffKzS| & Vertical diffusivity for salt [m²/s] \\
 \verb|diff_kz_t| & \verb|KPPdiffKzT| & Vertical diffusivity for temperature [m²/s] \\
-\verb|ghat| & \verb|KPPghat| & Nonlocal transport [s/m²] (Python) vs. [1/s] (Fortran) \\
+\verb|ghat| & \verb|KPPghat| & Nonlocal transport [s/m²] \\
 \verb|hbl| & \verb|hbl| & Boundary layer depth [m] \\
 \verb|dbloc| & \verb|dbloc| & Local buoyancy gradient [m/s²] \\
 \verb|dvsq| & \verb|dVsq| & Velocity shear² relative to surface [(m/s)²] \\
@@ -752,17 +752,7 @@ Enhanced diffusivity:
 
 \subsection{Unit Conversions}
 
-\textbf{Minor unit difference}:
-\begin{itemize}
-    \item \textbf{ghat (nonlocal transport)}:
-        \begin{itemize}
-            \item Python: [s/m²] (following dimensional analysis from Large et al. 1994)
-            \item Fortran: [1/s] (MITgcm convention)
-            \item Conversion: Multiply by layer thickness when applying flux
-        \end{itemize}
-\end{itemize}
-
-All other variables use consistent SI units:
+All variables use consistent units between Python and Fortran:
 \begin{itemize}
     \item Length: meters [m]
     \item Time: seconds [s]
