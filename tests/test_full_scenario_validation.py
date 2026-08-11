@@ -1,19 +1,23 @@
 """
-Cross-scheme validation: Full scenario comparison at mid-point and final timestep.
+Cross-scheme validation: full scenario comparison at 25%, 50%, 75%, and 100%
+of each scenario's completion.
 
 This test suite:
   1. Discovers all available scenarios (from simulations/scenarios/)
   2. Runs both GGL90 and KPP for each scenario's full duration
-  3. Compares outputs at mid-point and final timestep
+  3. Compares outputs at 25%, 50%, 75%, and 100% completion
   4. Generates a comprehensive comparison report
   5. Creates visualization dashboard with:
      - MLD time series (GGL90 vs KPP evolution)
      - Mixing coefficient profiles and time evolution
      - Cross-scenario summary dashboard
 
+All artifacts (NPZ files, plots, report) are written under
+output/scenario_comparison/ in the repository root.
+
 Run this test:
     cd 1D_Mixing_Model
-    python -m main.test_full_scenario_validation
+    python tests/test_full_scenario_validation.py
 """
 
 import sys
@@ -30,9 +34,9 @@ from matplotlib.patches import Rectangle
 
 # Setup paths
 PKG_DIR = Path(__file__).resolve().parent.parent  # 1D_Mixing_Model/
-REPO_DIR = PKG_DIR.parent  # 1D_Mixing_Experiments/
 SCENARIO_DIR = PKG_DIR / "simulations" / "scenarios"
-OUTPUT_DIR = REPO_DIR / "output"
+OUTPUT_DIR = PKG_DIR / "output"                    # repo-root/output (./output)
+COMPARISON_DIR = OUTPUT_DIR / "scenario_comparison"  # all artifacts land here
 CONFIG_DIR = PKG_DIR / "configuration_yamls"
 PHYSICAL_YAML = CONFIG_DIR / "physical_parameters.yaml"
 GGL90_ECCOV4R4_YAML = CONFIG_DIR / "ggl90_eccov4r4.yaml"
@@ -129,8 +133,8 @@ def run_scenario_scheme(
     
     driver = UnifiedColumnDriver(adapter, config_mgr, physical)
     
-    # Create output directory for NPZ files
-    npz_dir = REPO_DIR / "1D_Mixing_Model" / "visualizations" / scenario_name
+    # Create output directory for NPZ files (under output/scenario_comparison/)
+    npz_dir = COMPARISON_DIR / scenario_name
     npz_dir.mkdir(parents=True, exist_ok=True)
     
     # Run simulation and save NPZ file for unified plotter
@@ -307,6 +311,22 @@ def compute_mld_timeseries(result: Dict, background_visc: float = 1e-4) -> np.nd
     
     return mld_series
 
+
+
+def completion_step_indices(n_steps: int) -> List[int]:
+    """Output-frame indices at 25%, 50%, 75%, and 100% of completion.
+
+    Fractions are taken of the last available index (n_steps - 1) so that
+    100% maps exactly onto the final frame. Duplicate indices (possible for
+    very short runs) are collapsed, so fewer than four indices may be
+    returned when the run has too few frames to resolve all quartiles.
+    """
+    if n_steps <= 1:
+        return [0]
+    last = n_steps - 1
+    fractions = [0.25, 0.50, 0.75, 1.00]
+    idxs = sorted({int(round(f * last)) for f in fractions})
+    return idxs
 
 
 def compare_at_timesteps(
@@ -687,9 +707,9 @@ def generate_visualizations(all_results: Dict, output_base: Path):
     all_results : Dict
         Results from test_all_scenarios with all scenarios
     output_base : Path
-        Base directory for visualization output
+        Directory for visualization output (plots are written directly here)
     """
-    viz_dir = output_base / "visualizations"
+    viz_dir = Path(output_base)
     viz_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"\n{'='*70}")
@@ -718,10 +738,10 @@ def generate_visualizations(all_results: Dict, output_base: Path):
         except Exception as e:
             print(f"  ✗ Coefficients plot failed: {e}")
         
-        # Temperature profiles (custom)
+        # Temperature profiles (custom) at 25/50/75/100% completion
         try:
             n_steps = min(ggl90['n_steps'], kpp['n_steps'])
-            timesteps = [n_steps // 2, n_steps - 1]
+            timesteps = completion_step_indices(n_steps)
             temp_path = plot_temperature_profiles(scenario_name, ggl90, kpp, timesteps, viz_dir)
             print(f"  ✓ Temperature profiles: {temp_path.name if temp_path else 'N/A'}")
         except Exception as e:
@@ -883,16 +903,15 @@ def test_all_scenarios(save_report: bool = True):
             kpp_result = run_scenario_scheme(scenario_name, "kpp", verbose=False)
             print(f"✓ ({kpp_result['n_steps']} steps, {kpp_result['duration']/3600:.1f} h)")
             
-            # Determine comparison timesteps
+            # Compare at 25%, 50%, 75%, and 100% completion
             n_steps = min(ggl90_result['n_steps'], kpp_result['n_steps'])
-            mid_step = n_steps // 2
-            final_step = n_steps - 1
-            
+            comparison_steps = completion_step_indices(n_steps)
+
             # Compare (with background viscosity for MLD computation)
             comparison = compare_at_timesteps(
                 ggl90_result,
                 kpp_result,
-                [mid_step, final_step],
+                comparison_steps,
                 background_visc=1e-4,
             )
             
@@ -928,13 +947,14 @@ def test_all_scenarios(save_report: bool = True):
     
     # Save markdown report
     if save_report and all_results and success:
-        report_path = REPO_DIR / "1D_Mixing_Model" / "PHASE4_FULL_SCENARIO_VALIDATION_REPORT.md"
+        COMPARISON_DIR.mkdir(parents=True, exist_ok=True)
+        report_path = COMPARISON_DIR / "scenario_comparison_report.md"
         _save_markdown_report(report_path, all_results)
         print(f"\n✓ Report saved to: {report_path}")
-        
+
         # Generate visualizations
         try:
-            generate_visualizations(all_results, REPO_DIR / "1D_Mixing_Model")
+            generate_visualizations(all_results, COMPARISON_DIR)
         except Exception as e:
             print(f"\n✗ Visualization generation failed: {e}")
             import traceback
@@ -951,7 +971,7 @@ def _save_markdown_report(report_path: Path, all_results: Dict):
         "## Executive Summary",
         "",
         f"This report documents a comprehensive validation of the refactored GGL90 and KPP mixing schemes",
-        f"across all available scenarios, comparing solutions at mid-point and final time steps.",
+        f"across all available scenarios, comparing solutions at 25%, 50%, 75%, and 100% of completion.",
         f"Comparison includes temperature, salinity, mixing coefficients (viscosity and diffusivity), and mixed layer depth.",
         "",
         f"**Scenarios Tested:** {len(all_results)}",
