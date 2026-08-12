@@ -8,8 +8,16 @@ Tests:
 4. Cross-scheme consistency
 """
 
+import sys
+from pathlib import Path
+
 import pytest
 import numpy as np
+
+# Make the repo root importable so `python tests/<file>.py` works standalone
+# (pytest resolves this via the root conftest.py instead).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from main.physics_basis import (
     compute_buoyancy_frequency_squared,
     compute_vertical_shear_squared,

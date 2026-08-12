@@ -16,8 +16,13 @@ Run this test:
 """
 
 import sys
+from pathlib import Path
 import numpy as np
 from typing import Dict, Tuple
+
+# Make the repo root importable so `python tests/<file>.py` works standalone
+# (pytest resolves this via the root conftest.py instead).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import both schemes and shared physics
 from GGL90 import GGL90Driver, GGL90Parameters

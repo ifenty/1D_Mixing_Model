@@ -10,7 +10,15 @@ Run:
     python -m main.test_potential_density_gradient
 """
 
+import sys
+from pathlib import Path
+
 import numpy as np
+
+# Make the repo root importable so `python tests/<file>.py` works standalone
+# (pytest resolves this via the root conftest.py instead).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from main.eos import compute_ggl90_buoyancy_frequency_squared, jmd95_eos
 from main.physics_basis import compute_buoyancy_frequency_squared
 
