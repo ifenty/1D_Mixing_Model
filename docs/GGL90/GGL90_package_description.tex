@@ -23,7 +23,11 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds, calc}
+% Allow bare "_" in prose (filenames/variables) to print literally; still a
+% subscript in math mode. Must load after hyperref. Preserves underscores in
+% \label/\ref/\cite and in \verb / listings.
+\usepackage{underscore}
 
 % ============================================================
 % COLORS
@@ -3964,7 +3968,8 @@ Figure~\ref{fig:ggl90_dataflow} illustrates the complete data flow between the m
 \draw[arrow] (eos.east) -- node[above, datalabel] {$\partial\rho/\partial z$\\(density gradient)} ++(1.5cm,0) |- (ggl90.west);
 
 % Surface forcing input (from above)
-\draw[arrow] ($(mom.north) + (1.5cm,0)$) -- node[right, datalabel] {$\tau_x$, $\tau_y$\\(wind stress)} ($(mom.north) + (1.5cm,0) |- (ggl90.north)$) -- (ggl90.north);
+\coordinate (momtop) at ($(mom.north) + (1.5cm,0)$);
+\draw[arrow] (momtop) -- node[right, datalabel] {$\tau_x$, $\tau_y$\\(wind stress)} (momtop |- ggl90.north) -- (ggl90.north);
 
 % Arrows: Outputs from GGL90
 \draw[arrow] (ggl90.east) -- ++(1.5cm,0) |- (visc.west);
