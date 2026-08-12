@@ -85,9 +85,10 @@ class TestBuoyancyFrequencySquared:
         
         n2_earth = compute_buoyancy_frequency_squared(rho, z, gravity=9.81)
         n2_moon = compute_buoyancy_frequency_squared(rho, z, gravity=1.62)
-        
-        # Moon gravity should scale the result
-        assert abs(n2_moon / n2_earth - (1.62 / 9.81)) < 0.01
+
+        # Index 0 is the surface face (N²=0); compare the interior interface.
+        # Moon gravity should scale N² linearly with g.
+        assert abs(n2_moon[1] / n2_earth[1] - (1.62 / 9.81)) < 0.01
 
     def test_custom_rho_0(self):
         """Test with custom reference density."""
@@ -245,9 +246,11 @@ class TestRichardsonNumber:
         shear_square = np.array([0.0])
         
         ri = compute_richardson_number(n_square, shear_square, epsilon=1e-14)
-        
-        # Should not be inf, but very large
-        assert ri[0] > 1e10
+
+        # Should not be inf, but very large. With N²=1e-4 and epsilon=1e-14
+        # the result is exactly N²/epsilon = 1e10, so assert finite and >= that.
+        assert np.isfinite(ri[0])
+        assert ri[0] >= 1e10
 
 
 class TestCrossSchemeConsistency:
