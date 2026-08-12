@@ -859,9 +859,9 @@ def create_summary_dashboard(all_results: Dict, output_dir: Path) -> Path:
     return dashboard_path
 
 
-def test_all_scenarios(save_report: bool = True):
+def run_all_scenarios(save_report: bool = True):
     """Run all scenarios with both schemes and compare.
-    
+
     Parameters
     ----------
     save_report : bool
@@ -1116,6 +1116,11 @@ def _save_markdown_report(report_path: Path, all_results: Dict):
     report_path.write_text('\n'.join(lines))
 
 
+def test_all_scenarios():
+    """pytest entry point: run the full cross-scheme scenario validation."""
+    assert run_all_scenarios(save_report=True)
+
+
 if __name__ == '__main__':
-    success = test_all_scenarios(save_report=True)
+    success = run_all_scenarios(save_report=True)
     sys.exit(0 if success else 1)

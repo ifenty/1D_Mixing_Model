@@ -299,7 +299,7 @@ def compare_schemes(col: Dict) -> Tuple[bool, Dict]:
     return True, comparison
 
 
-def test_imports():
+def check_imports():
     """Test that all modules import correctly."""
     print("=== Import Validation ===")
     try:
@@ -313,7 +313,7 @@ def test_imports():
         return False
 
 
-def test_single_column():
+def check_single_column():
     """Test both drivers on a single column."""
     print("\n=== Single Column Test ===")
     col = create_stratified_column(nz=20)
@@ -339,7 +339,7 @@ def test_single_column():
     return True
 
 
-def test_multiple_scenarios():
+def check_multiple_scenarios():
     """Test both drivers across multiple scenario types."""
     print("\n=== Multi-Scenario Comparison ===")
     scenarios = [
@@ -364,7 +364,7 @@ def test_multiple_scenarios():
     return True
 
 
-def test_physics_basis_consistency():
+def check_physics_basis_consistency():
     """Verify physics basis functions work correctly across both schemes."""
     print("\n=== Physics Basis Consistency ===")
     
@@ -410,17 +410,34 @@ def test_physics_basis_consistency():
     return True
 
 
+# --- pytest entry points (assert on the boolean check_* helpers above) ---
+def test_imports():
+    assert check_imports()
+
+
+def test_single_column():
+    assert check_single_column()
+
+
+def test_multiple_scenarios():
+    assert check_multiple_scenarios()
+
+
+def test_physics_basis_consistency():
+    assert check_physics_basis_consistency()
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("PHASE 4: CROSS-SCHEME VALIDATION TEST SUITE")
     print("=" * 60)
-    
+
     all_passed = True
     
-    all_passed = test_imports() and all_passed
-    all_passed = test_single_column() and all_passed
-    all_passed = test_physics_basis_consistency() and all_passed
-    all_passed = test_multiple_scenarios() and all_passed
+    all_passed = check_imports() and all_passed
+    all_passed = check_single_column() and all_passed
+    all_passed = check_physics_basis_consistency() and all_passed
+    all_passed = check_multiple_scenarios() and all_passed
     
     print("\n" + "=" * 60)
     if all_passed:

@@ -89,7 +89,6 @@ def test_deep_water_potential_vs_insitu():
     print("\n✓ Potential density gradient implementation verified")
     print("  - In-situ gradients overestimate stratification in deep water")
     print("  - Potential gradients correctly remove compressibility effects")
-    return True
 
 
 def test_shallow_water_equivalence():
@@ -137,7 +136,6 @@ def test_shallow_water_equivalence():
                 f"Shallow surface-layer difference should be < {tol_pct}%, got {pct_diff:.4f}%"
 
     print(f"\n✓ Shallow surface-layer near-equivalence verified (< {tol_pct}%)")
-    return True
 
 
 def test_unstable_stratification():
@@ -174,7 +172,6 @@ def test_unstable_stratification():
         assert n2_potential[k] < 0, "Potential N² should be negative"
 
     print("\n✓ Unstable stratification correctly identified by both methods")
-    return True
 
 
 if __name__ == '__main__':
