@@ -19,5 +19,3 @@ visualizations/
 *.fdb_latexmk
 *.fls
 *.synctex.gz
-# Compiled LaTeX docs (regenerable from the .tex sources)
-docs/**/*.pdf

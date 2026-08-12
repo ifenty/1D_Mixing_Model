@@ -515,7 +515,7 @@ downstream interface routines are called at every model timestep.
               rounded corners=2pt, minimum width=4.8cm,  
               minimum height=0.6cm, font=\footnotesize\ttfamily,  
               align=center},  
-  out/.style={rectangle, draw=fortranorange, fill=orange!8,  
+  outbox/.style={rectangle, draw=fortranorange, fill=orange!8,  
               rounded corners=2pt, minimum width=4.8cm,  
               minimum height=0.6cm, font=\footnotesize\ttfamily,  
               align=center},  
@@ -541,12 +541,12 @@ downstream interface routines are called at every model timestep.
   
 % Output routines  
 \node[sub, below=0.4cm of km] (tr) {Transfer to KPP* arrays};  
-\node[out, below=1.8cm of tr] (cv) {KPP\_CALC\_VISC};  
-\node[out, right=0.5cm of cv] (ct) {KPP\_CALC\_DIFF\_T};  
-\node[out, below=0.5cm of cv] (cs) {KPP\_CALC\_DIFF\_S};  
-\node[out, right=0.5cm of cs] (cp) {KPP\_CALC\_DIFF\_PTR};  
-\node[out, below=0.5cm of cs] (tt) {KPP\_TRANSPORT\_T};  
-\node[out, right=0.5cm of tt] (ts) {KPP\_TRANSPORT\_S};  
+\node[outbox, below=1.8cm of tr] (cv) {KPP\_CALC\_VISC};  
+\node[outbox, right=0.5cm of cv] (ct) {KPP\_CALC\_DIFF\_T};  
+\node[outbox, below=0.5cm of cv] (cs) {KPP\_CALC\_DIFF\_S};  
+\node[outbox, right=0.5cm of cs] (cp) {KPP\_CALC\_DIFF\_PTR};  
+\node[outbox, below=0.5cm of cs] (tt) {KPP\_TRANSPORT\_T};  
+\node[outbox, right=0.5cm of tt] (ts) {KPP\_TRANSPORT\_S};  
   
 % Arrows main chain  
 \draw[arrow] (kc) -- (sk);  
@@ -1370,7 +1370,7 @@ h_{\rm MO} &= c_{\rm MO}\,\frac{\ustar^3}{\kappa\,B_f} \\[4pt]
 Finally, \texttt{hbl} is constrained from below by \texttt{minKPPhbl}  
 (default: depth of first model level center):  
 \begin{equation}  
-\hbl = \max(\hbl,\ \hbl_{\min})  
+\hbl = \max(\hbl,\ h_{\mathrm{bl},\min})  
 \end{equation}  
   
 \subsection{Case A / Case B Classification}  
