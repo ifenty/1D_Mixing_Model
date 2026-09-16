@@ -2210,25 +2210,42 @@ This constraint is applied \emph{before} Methods 0--2, so the subsequent geometr
 
 At the bottom interface ($k = N_r$ in z-coords, $k = 1$ in p-coords), the mixing length is implicitly limited by the special treatment in the upward sweep (Method 2) or by the distance-to-bottom constraint (Method 1). No additional parameter analogous to \verb|mxlSurfFlag| exists for the bottom boundary.
 
-However, the parameter \verb|GGL90mixingLengthMin| effectively sets a minimum mixing length everywhere, including at the bottom, to prevent numerical issues when $\ell \to 0$.
+\textbf{Correction (2026-09-16, 1DMIX-014):} an earlier revision of this section claimed
+\verb|GGL90mixingLengthMin| ``effectively sets a minimum mixing length everywhere, including
+at the bottom.'' That claim is \emph{only} true for \verb|mxlMaxFlag| $\in \{0,1,2\}$. It is
+\textbf{false} for \verb|mxlMaxFlag|~=~3 (this project's ECCOv4r4-documented default), which
+does not floor $\ell$ itself at all -- see the corrected code listing below. This exact
+documentation error led to a real Python-port bug: a blanket \texttt{max($\ell$,~$\ell_{\min}$)}
+was applied to every level for every \verb|mxlMaxFlag|, clamping real (sub-minimum) mixing
+lengths back up to $\ell_{\min}$ for the \verb|mxlMaxFlag|~=~3 case. Confirmed against a real
+MITgcm \texttt{vermix} capture: \verb|mixing_length[k=0..3]=[3.0, 0.760, 0.112, 0.112]| with
+\verb|GGL90mixingLengthMin=3.0| -- levels 1--3 are legitimately below the ``minimum''. Fixed in
+the Python port at \verb|1D_Mixing_Model/GGL90/ggl90_scheme_specific.py::GGL90MixingLength.compute|.
 
 \subsubsection{Regularization: \texttt{GGL90\_REGULARIZE\_MIXINGLENGTH}}
 
-An optional compile-time flag \verb|GGL90_REGULARIZE_MIXINGLENGTH| modifies the final mixing length calculation to prevent abrupt transitions. When enabled, the code replaces:
+The final mixing-length-and-reciprocal step (\verb|ggl90_mixinglength.F| lines 381--416)
+branches on \verb|mxlMaxFlag| itself, not just on the regularization compile flag:
 
-\begin{equation}
-\ell_{\text{final}} = \max(\ell, \ell_{\text{min}})
-\end{equation}
-
-with:
-
-\begin{equation}
-\ell_{\text{final}} = \sqrt{ \ell^2 + \ell_{\text{min}}^2 }
-\end{equation}
-
-This provides a smoother transition as $\ell \to 0$, which can improve convergence in adjoint calculations (see Appendix~\ref{app:adjoint_considerations}). The code appears in lines 390--416 of \verb|ggl90_mixinglength.F|:
-
-\begin{lstlisting}[language=Fortran,caption={(ggl90\_mixinglength.F:L402--415) Final mixing length with optional regularization}]
+\begin{lstlisting}[language=Fortran,caption={(ggl90\_mixinglength.F:381--416) Final mixing length and reciprocal, verified against the real MITgcm source}]
+      IF ( locMxlMaxFlag.EQ.3 ) THEN
+       DO k=2,Nr
+        DO j=jMin,jMax
+         DO i=iMin,iMax
+#ifdef GGL90_REGULARIZE_MIXINGLENGTH
+          MLtmp = SQRT( GGL90mixingLength(i,j,k)*mxLength_Dn(i,j,k)
+     &         + GGL90mixingLengthMin**2 )
+#else
+          MLtmp = SQRT( GGL90mixingLength(i,j,k)*mxLength_Dn(i,j,k) )
+          MLtmp = MAX( MLtmp, GGL90mixingLengthMin )
+#endif
+          rMixingLength(i,j,k) = 1. _d 0 / MLtmp
+C         NOTE: GGL90mixingLength(i,j,k) is NOT reassigned in this branch --
+C         it keeps its raw (possibly sub-minimum) two-way-sweep value.
+         ENDDO
+        ENDDO
+       ENDDO
+      ELSE
        DO k=2,Nr
         DO j=jMin,jMax
          DO i=iMin,iMax
@@ -2243,12 +2260,23 @@ This provides a smoother transition as $\ell \to 0$, which can improve convergen
          ENDDO
         ENDDO
        ENDDO
+      ENDIF
 \end{lstlisting}
+
+For \verb|mxlMaxFlag| $\in \{0,1,2\}$ (the \texttt{ELSE} branch), $\ell$ and its reciprocal are
+both floored by the familiar $\ell_{\text{final}} = \max(\ell, \ell_{\text{min}})$ (or, with
+\verb|GGL90_REGULARIZE_MIXINGLENGTH|, $\ell_{\text{final}} = \sqrt{\ell^2 + \ell_{\text{min}}^2}$,
+a smoother transition as $\ell \to 0$ that can improve adjoint convergence, see
+Appendix~\ref{app:adjoint_considerations}). For \verb|mxlMaxFlag|~=~3, $\ell$ itself is left
+unfloored; only the reciprocal is regularized, using the geometric mean of $\ell(k)$ and the
+downward-sweep companion array \verb|mxLength_Dn(k)| (Section~\ref{sec:mxl_method2}) rather than
+$\ell(k)$ alone.
 
 \paragraph{When to use regularization:}
 \begin{itemize}
 \item Enable for adjoint/gradient-based optimization (see Appendix~\ref{app:adjoint_considerations}), where smooth derivatives are important.
 \item Disable for forward-only simulations to maintain strict adherence to the published GGL90 formulation.
+\item Regardless of this flag, remember \verb|mxlMaxFlag|~=~3 never floors $\ell$ itself -- only \verb|mxlMaxFlag| $\in \{0,1,2\}$ do.
 \end{itemize}
 
 % ------------------------------------------------------------

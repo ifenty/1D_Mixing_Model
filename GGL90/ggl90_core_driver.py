@@ -112,6 +112,7 @@ class GGL90Driver:
         mask: np.ndarray,
         u_star_sq: float = 0.0,
         kappa_m: Optional[np.ndarray] = None,
+        r_mixing_length: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """
         Step TKE forward in time using implicit scheme.
@@ -124,7 +125,8 @@ class GGL90Driver:
         - ε = dissipation (treated implicitly)
         - Last term is vertical diffusion (treated implicitly)
 
-        **Corresponds to**: GGL90_CALC.F TKE stepping logic
+        **Corresponds to**: GGL90_CALC.F TKE stepping logic (dissipation rate:
+        ggl90_calc.F:600-602, 747-748, `GGL90ceps*SQRTTKE(k)*rMixingLength(k)`)
 
         Args:
             tke: Current TKE (nz,) [m²/s²]
@@ -140,6 +142,13 @@ class GGL90Driver:
                 background viscosity, matching MITgcm's KappaM(i,j)). Used to
                 form KappaE = alpha * KappaM. If None (e.g. a standalone unit
                 test), KappaM is recomputed here with no background floor.
+            r_mixing_length: Reciprocal mixing length (nz,) [1/m], as returned
+                by GGL90MixingLength.compute(). Used for the dissipation rate
+                (rMixingLength(k) in ggl90_calc.F, which for mxl_max_flag==3
+                is NOT simply 1/mixing_length[k] -- see
+                GGL90MixingLength.compute(), 1DMIX-014). If None (e.g. a
+                standalone unit test), falls back to 1/mixing_length[k],
+                which is exact for mxl_max_flag in {0,1,2}.
 
         Returns:
             tke_new: Updated TKE (nz,) [m²/s²]
@@ -177,7 +186,10 @@ class GGL90Driver:
             if mask[k] > 0:
                 # Dissipation rate (implicit)
                 sqrt_tke_k = np.sqrt(max(tke[k], self.params.tke_min))
-                diss_rate = self.params.ceps * sqrt_tke_k / mixing_length[k]
+                if r_mixing_length is not None:
+                    diss_rate = self.params.ceps * sqrt_tke_k * r_mixing_length[k]
+                else:
+                    diss_rate = self.params.ceps * sqrt_tke_k / mixing_length[k]
 
                 # GGL90_CALC uses KappaE(k) at the surface-adjacent
                 # interface and averages adjacent KappaE values below it.
@@ -186,6 +198,17 @@ class GGL90Driver:
                 )
                 a[k] = -impl_fac * dt * kappa_up / (dz[k - 1] * dr_c[k - 1])
 
+                # **MITgcm correspondence** (fix, found while verifying
+                # 1DMIX-014): ggl90_calc.F:691-694 (a3d(k)) and :713-716
+                # (c3d(k)) both multiply by the SAME recip_drC(k) -- drC(k) is
+                # the W-cell's own thickness, shared by both its up- and
+                # down-coupling coefficients; only the recip_drF face term
+                # (dz[k-1] for a, dz[k] for c) differs between them. c[k] here
+                # previously used dr_c[k] instead of dr_c[k-1], disagreeing
+                # with a[k]'s index. This has no effect on a uniform grid
+                # (dr_c[k-1]==dr_c[k] there) but is wrong wherever cell
+                # thickness varies with depth (e.g. the vermix grid's
+                # transition layers).
                 if k == nz - 1:
                     # MITgcm forms a virtual bottom-neighbor coefficient, then
                     # moves its Dirichlet contribution to the right-hand side.
@@ -193,7 +216,7 @@ class GGL90Driver:
                     c[k] = -impl_fac * dt * kappa_dn / (dz[k] * dr_c[k - 1])
                 else:
                     kappa_dn = 0.5 * (kappa_e[k] + kappa_e[k + 1])
-                    c[k] = -impl_fac * dt * kappa_dn / (dz[k] * dr_c[k])
+                    c[k] = -impl_fac * dt * kappa_dn / (dz[k] * dr_c[k - 1])
 
                 b[k] = 1.0 + impl_fac * dt * diss_rate - a[k] - c[k]
                 rhs[k] = tke[k] + dt * (production[k] + buoyancy[k])
@@ -333,12 +356,12 @@ class GGL90Driver:
         # ===== Step 4: Compute TKE budget terms =====
         production = compute_tke_production(kappa_m, shear_square, mask)
         buoyancy = compute_tke_buoyancy(kappa_h, n_square, mask)
-        dissipation = compute_tke_dissipation(tke, mixing_length, self.params.ceps, mask)
+        dissipation = compute_tke_dissipation(tke, r_mixing_length, self.params.ceps, mask)
 
         # ===== Step 5: Step TKE forward in time =====
         tke_new = self.step_tke_forward(
             tke, production, buoyancy, mixing_length, dz, dt, mask, u_star_sq,
-            kappa_m=kappa_m,
+            kappa_m=kappa_m, r_mixing_length=r_mixing_length,
         )
 
         # ===== Step 6: Assemble output =====
