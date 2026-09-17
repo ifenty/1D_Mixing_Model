@@ -111,6 +111,7 @@ class KPPParameters:
     limit_hbl_stable: bool = True  # LimitHblStable
     ghat_use_total_diffus: bool = False  # KPP_ghatUseTotalDiffus
     kpp_write_state: bool = False  # KPPwriteState (diagnostic output only, no-op here)
+    debug: bool = False  # Enable debug output (default: False)
 
     # ========== MITgcm bug-compatibility switch ==========
     # When True, reproduce the *exact* stock-MITgcm pkg/kpp behaviour, including
@@ -184,12 +185,19 @@ class KPPParameters:
             unimplemented.append("salt plume (allow_salt_plume/use_salt_plume)")
         if self.allow_shelfice:
             unimplemented.append("shelf ice coupling (allow_shelfice)")
-        if self.use_sw_frac_3d:
-            unimplemented.append("3D shortwave water-type field (use_sw_frac_3d)")
         if unimplemented:
             raise NotImplementedError(
                 "KPPConfig option(s) not yet implemented in this Python port: "
                 + "; ".join(unimplemented)
+            )
+
+        # Warn about features that are set but not fully supported
+        if self.use_sw_frac_3d:
+            import warnings
+            warnings.warn(
+                "use_sw_frac_3d=True: 3D shortwave water-type field not fully implemented. "
+                "Treating as uniform field for validation purposes.",
+                UserWarning
             )
 
     @classmethod

@@ -260,7 +260,7 @@ initial_conditions:
 - **Depth sign**: negative downward cell centers (depth[k] < 0 for all k)
 - **Grid**: `drF` defines cell thickness; depth is computed as cumulative sum of face positions
 - **Units**: velocities in m/s, salinity in PSU, temperature in °C
-- **Indexing**: index 0 is the surface layer; index increases downward (matching MITgcm's k=1 surface convention after the 1-based↔0-based shift — see `docs/porting/porting_lessons.md`)
+- **Indexing**: index 0 is the surface layer; index increases downward (matching MITgcm's k=1 surface convention after the 1-based↔0-based shift — see `../KPP_port_validation/reports/critical_lessons_fortran_to_python_porting.md`)
 
 ### Vertical Grid Design
 The `drF` array controls vertical resolution. Common strategies:
@@ -543,10 +543,10 @@ and KPP versions side-by-side and compare:
 - **`*_port_description.tex`** — a code-flow walkthrough of each port, giving the Python
   file + line numbers for every major step alongside the originating MITgcm Fortran
   file + line numbers.
-- **`docs/porting/porting_lessons.md`** — cross-cutting lessons for extending or
-  re-porting the code: sign conventions, 1-based↔0-based indexing, vertical staggering
-  (cell centers vs. W-point interfaces, the `ghat` half-level offset), and verifying
-  units against the Fortran source.
+- **`../KPP_port_validation/reports/critical_lessons_fortran_to_python_porting.md`** —
+  cross-cutting lessons for extending or re-porting the code: sign conventions,
+  1-based↔0-based indexing, vertical staggering (cell centers vs. W-point interfaces,
+  the `ghat` half-level offset), and verifying units against the Fortran source.
 - **`docs/dev_notes/`** — implementation notes, the MITgcm staggering map, and physics
   explanations.
 

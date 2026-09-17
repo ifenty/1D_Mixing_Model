@@ -30,7 +30,7 @@ Python ports of MITgcm's KPP and GGL90 vertical mixing schemes, designed for sce
 └── docs/
     ├── GGL90/             # GGL90_package_description.tex (physics) + GGL90_port_description.tex (port map)
     ├── KPP/               # KPP_package_description.tex (physics) + KPP_port_description.tex (port map)
-    ├── porting/           # porting_lessons.md — insights for future Fortran→Python porting work
+    ├── porting/           # (empty — lessons consolidated into KPP_port_validation/reports/)
     ├── dev_notes/         # Implementation notes, MITgcm staggering, physics explanations
     └── ML/                # ML draft notes
 ```
@@ -92,7 +92,7 @@ with identical structure (open them side-by-side to compare schemes):
 
 - **`*_package_description.tex`** — the physics of each mixing scheme (governing equations, boundary/interior mixing, diagnostics, validation).
 - **`*_port_description.tex`** — how the Python port maps onto the MITgcm Fortran, organized by code flow with file + line-number references in both languages.
-- **`docs/porting/porting_lessons.md`** — cross-cutting lessons (sign conventions, 1-based↔0-based indexing, vertical staggering, unit verification) for anyone extending the ports.
+- **`../KPP_port_validation/reports/critical_lessons_fortran_to_python_porting.md`** — cross-cutting lessons (sign conventions, 1-based↔0-based indexing, vertical staggering, unit verification) for anyone extending the ports.
 
 ## Testing
 

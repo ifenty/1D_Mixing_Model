@@ -64,6 +64,11 @@ class KPPOutput:
     ustar: Optional[float] = None
     shear_sq: Optional[np.ndarray] = None
 
+    # Forcing validation (Python-computed values when validate_forcing=True)
+    ustar_computed: Optional[float] = None
+    bo_computed: Optional[float] = None
+    bosol_computed: Optional[float] = None
+
     def to_dict(self) -> Dict:
         """Convert to dictionary."""
         return {
@@ -110,15 +115,19 @@ class KPPDriver:
         v_vel: np.ndarray,
         depth: np.ndarray,
         cell_thickness: np.ndarray,
-        tau_x: float,
-        tau_y: float,
-        q_net: float,
-        q_sw: float = 0.0,
-        fw_flux: float = 0.0,
+        tau_x: float = None,
+        tau_y: float = None,
+        q_net: float = None,
+        q_sw: float = None,
+        fw_flux: float = None,
         coriol: float = 1.0e-4,
         background_visc: float = 1.0e-4,
         background_diff_s: float = 1.0e-5,
         background_diff_t: float = 1.0e-5,
+        # Optional: pre-computed forcing values (for validation against MITgcm)
+        ustar_forcing: float = None,
+        bo_forcing: float = None,
+        bosol_forcing: float = None,
     ) -> KPPOutput:
         """
         Compute KPP mixing coefficients for a single column.
@@ -154,16 +163,18 @@ class KPPDriver:
             Depth of cell centers (negative, increasing downward) [m]
         cell_thickness : np.ndarray, shape (nz,)
             Thickness of each cell [m]
-        tau_x : float
-            Zonal wind stress / rho [m^2/s^2]
-        tau_y : float
-            Meridional wind stress / rho [m^2/s^2]
-        q_net : float
-            Net surface heat flux (>0 = into ocean) [W/m^2]
+        tau_x : float, optional
+            Zonal wind stress / rho [m^2/s^2]. Default: None (0.0)
+            Required if computing forcing from fluxes or validating forcing
+        tau_y : float, optional
+            Meridional wind stress / rho [m^2/s^2]. Default: None (0.0)
+            Required if computing forcing from fluxes or validating forcing
+        q_net : float, optional
+            Net surface heat flux (>0 = into ocean) [W/m^2]. Default: None (0.0)
         q_sw : float, optional
-            Shortwave radiation component [W/m^2]
+            Shortwave radiation component [W/m^2]. Default: None (0.0)
         fw_flux : float, optional
-            Freshwater flux (E-P-R, >0 = into ocean) [m/s]
+            Freshwater flux (E-P-R, >0 = into ocean) [m/s]. Default: None (0.0)
         coriol : float, optional
             Coriolis parameter [1/s]
         background_visc : float, optional
@@ -172,6 +183,33 @@ class KPPDriver:
             Background diffusivity for salt [m^2/s]
         background_diff_t : float, optional
             Background diffusivity for temperature [m^2/s]
+        ustar_forcing : float, optional
+            Pre-computed friction velocity [m/s] (for MITgcm validation)
+        bo_forcing : float, optional
+            Pre-computed turbulent buoyancy forcing [m^2/s^3] (for MITgcm validation)
+        bosol_forcing : float, optional
+            Pre-computed radiative buoyancy forcing [m^2/s^3] (for MITgcm validation)
+
+        Notes
+        -----
+        Three usage modes, determined automatically based on input:
+
+        **Mode 1: Pre-computed forcing** (standard validation)
+            Provide: ustar_forcing, bo_forcing, bosol_forcing (all 3)
+            Omit: tau_x, tau_y, q_net, q_sw, fw_flux
+            → Uses pre-computed forcing for mixing calculation
+
+        **Mode 2: Compute forcing** (standalone)
+            Provide: tau_x, tau_y, q_net, q_sw, fw_flux (all 5)
+            Omit: ustar_forcing, bo_forcing, bosol_forcing
+            → Computes forcing from raw fluxes
+
+        **Mode 3: Forcing validation**
+            Provide: ALL 8 parameters (both sets above)
+            → Computes forcing from raw fluxes, validates against pre-computed
+               (1% tolerance), then uses pre-computed for mixing
+
+        Partial sets raise ValueError with clear guidance.
 
         Returns
         -------
@@ -190,10 +228,107 @@ class KPPDriver:
         # Note: horizontal smoothing requires 2D/3D data, skipped for 1D columns
 
         # ===== Step 2: Compute surface forcing =====
-        ustar, bo, bosol = self._compute_surface_forcing(
-            tau_x, tau_y, q_net, q_sw, fw_flux,
-            rho_surf, ttalpha[0], ssbeta[0], salt[0]
+        # Determine mode based on what parameters are provided:
+        # Mode 1: Pre-computed forcing only (validation, MITgcm comparison)
+        # Mode 2: Raw surface fluxes only (standalone, compute forcing)
+        # Mode 3: Both provided (forcing validation mode)
+        # Error: Neither complete, or partial sets
+
+        # Check what's provided
+        precomputed_complete = (
+            ustar_forcing is not None and
+            bo_forcing is not None and
+            bosol_forcing is not None
         )
+        precomputed_partial = (
+            not precomputed_complete and
+            (ustar_forcing is not None or bo_forcing is not None or bosol_forcing is not None)
+        )
+
+        raw_fluxes_complete = (
+            tau_x is not None and
+            tau_y is not None and
+            q_net is not None and
+            q_sw is not None and
+            fw_flux is not None
+        )
+        raw_fluxes_partial = (
+            not raw_fluxes_complete and
+            (tau_x is not None or tau_y is not None or
+             q_net is not None or q_sw is not None or fw_flux is not None)
+        )
+
+        # Validate input combinations
+        if precomputed_partial:
+            raise ValueError(
+                "Incomplete pre-computed forcing provided.\n"
+                "Must provide ALL THREE of: ustar_forcing, bo_forcing, bosol_forcing\n"
+                f"Got: ustar_forcing={ustar_forcing is not None}, "
+                f"bo_forcing={bo_forcing is not None}, "
+                f"bosol_forcing={bosol_forcing is not None}"
+            )
+
+        if raw_fluxes_partial and not precomputed_complete:
+            # Incomplete raw fluxes and no pre-computed forcing to fall back on
+            raise ValueError(
+                "Incomplete surface forcing provided.\n"
+                "Must provide one of:\n"
+                "  1. ALL FIVE raw fluxes: tau_x, tau_y, q_net, q_sw, fw_flux\n"
+                "  2. ALL THREE pre-computed: ustar_forcing, bo_forcing, bosol_forcing\n"
+                "  3. ALL EIGHT (both sets above for forcing validation)\n"
+                f"\nGot raw fluxes: tau_x={tau_x is not None}, tau_y={tau_y is not None}, "
+                f"q_net={q_net is not None}, q_sw={q_sw is not None}, fw_flux={fw_flux is not None}\n"
+                f"Got pre-computed: ustar_forcing={ustar_forcing is not None}, "
+                f"bo_forcing={bo_forcing is not None}, bosol_forcing={bosol_forcing is not None}"
+            )
+
+        if not precomputed_complete and not raw_fluxes_complete:
+            raise ValueError(
+                "No forcing provided.\n"
+                "Must provide one of:\n"
+                "  1. ALL FIVE raw fluxes: tau_x, tau_y, q_net, q_sw, fw_flux\n"
+                "  2. ALL THREE pre-computed: ustar_forcing, bo_forcing, bosol_forcing\n"
+                "  3. ALL EIGHT (both sets above for forcing validation)"
+            )
+
+        # Track computed forcing for output (used in validation mode)
+        ustar_computed_out = None
+        bo_computed_out = None
+        bosol_computed_out = None
+
+        # Execute appropriate mode
+        if precomputed_complete and raw_fluxes_complete:
+            # MODE 3: Forcing validation - compute and validate
+            ustar_computed, bo_computed, bosol_computed = self._compute_surface_forcing(
+                tau_x, tau_y, q_net, q_sw, fw_flux,
+                rho_surf, ttalpha[0], ssbeta[0], salt[0]
+            )
+            # Store for output
+            ustar_computed_out = ustar_computed
+            bo_computed_out = bo_computed
+            bosol_computed_out = bosol_computed
+
+            self._validate_forcing_computation(
+                ustar_forcing, bo_forcing, bosol_forcing,
+                ustar_computed, bo_computed, bosol_computed
+            )
+            # Use pre-computed forcing for mixing calculation (validation passed)
+            ustar, bo, bosol = ustar_forcing, bo_forcing, bosol_forcing
+
+        elif precomputed_complete:
+            # MODE 1: Use pre-computed forcing (standard validation)
+            ustar, bo, bosol = ustar_forcing, bo_forcing, bosol_forcing
+
+        else:  # raw_fluxes_complete must be True
+            # MODE 2: Compute forcing from raw fluxes (standalone)
+            ustar, bo, bosol = self._compute_surface_forcing(
+                tau_x, tau_y, q_net, q_sw, fw_flux,
+                rho_surf, ttalpha[0], ssbeta[0], salt[0]
+            )
+            # Store for output
+            ustar_computed_out = ustar
+            bo_computed_out = bo
+            bosol_computed_out = bosol
 
         # ===== Step 3: Compute velocity shear =====
         shsq, dvsq = self._compute_shear(u_vel, v_vel, depth, cell_thickness)
@@ -286,6 +421,9 @@ class KPPDriver:
             ustar=ustar,
             shear_sq=shsq,
             bulk_ri=bulk_ri,
+            ustar_computed=ustar_computed_out,
+            bo_computed=bo_computed_out,
+            bosol_computed=bosol_computed_out,
         )
 
     def _compute_surface_forcing(
@@ -354,6 +492,76 @@ class KPPDriver:
             bosol = 0.0
 
         return ustar, bo, bosol
+
+    def _validate_forcing_computation(
+        self,
+        ustar_mitgcm: float,
+        bo_mitgcm: float,
+        bosol_mitgcm: float,
+        ustar_python: float,
+        bo_python: float,
+        bosol_python: float,
+    ) -> None:
+        """
+        Validate that Python forcing computation matches MITgcm.
+
+        Raises ValueError if differences exceed tolerance.
+
+        Parameters
+        ----------
+        ustar_mitgcm, bo_mitgcm, bosol_mitgcm : float
+            Pre-computed forcing values from MITgcm
+        ustar_python, bo_python, bosol_python : float
+            Python-computed forcing values from _compute_surface_forcing
+
+        Raises
+        ------
+        ValueError
+            If any forcing term differs by more than 1% (rtol=0.01)
+        """
+        import numpy as np
+
+        # Tolerance for forcing validation: 1% relative error
+        # This accounts for potential differences in flux computation between
+        # MITgcm's complex surface forcing calculation and the simplified
+        # KPP forcing interface
+        rtol = 0.01  # 1%
+        atol = 1e-16  # Absolute tolerance for near-zero values
+
+        errors = []
+
+        # Validate ustar
+        if not np.isclose(ustar_python, ustar_mitgcm, rtol=rtol, atol=atol):
+            rel_err = abs(ustar_python - ustar_mitgcm) / (abs(ustar_mitgcm) + atol)
+            errors.append(
+                f"ustar: Python={ustar_python:.15e}, MITgcm={ustar_mitgcm:.15e}, "
+                f"rel_err={rel_err:.3e}"
+            )
+
+        # Validate bo
+        if not np.isclose(bo_python, bo_mitgcm, rtol=rtol, atol=atol):
+            rel_err = abs(bo_python - bo_mitgcm) / (abs(bo_mitgcm) + atol)
+            errors.append(
+                f"bo: Python={bo_python:.15e}, MITgcm={bo_mitgcm:.15e}, "
+                f"rel_err={rel_err:.3e}"
+            )
+
+        # Validate bosol
+        if not np.isclose(bosol_python, bosol_mitgcm, rtol=rtol, atol=atol):
+            rel_err = abs(bosol_python - bosol_mitgcm) / (abs(bosol_mitgcm) + atol)
+            errors.append(
+                f"bosol: Python={bosol_python:.15e}, MITgcm={bosol_mitgcm:.15e}, "
+                f"rel_err={rel_err:.3e}"
+            )
+
+        if errors:
+            raise ValueError(
+                "Forcing computation validation FAILED (tolerance: 1%):\n" +
+                "\n".join(errors) +
+                "\n\nThe Python _compute_surface_forcing does not match MITgcm's "
+                "kpp_forcing_surf.F within 1% relative error tolerance. "
+                "This indicates a potential issue in the forcing computation port."
+            )
 
     def _compute_shear(
         self,
