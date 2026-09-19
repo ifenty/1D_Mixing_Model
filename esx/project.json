@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "project_id": "1d-mixing-experiments",
+  "project_name": "1D Ocean Mixing Model — GGL90/KPP MITgcm Validation",
+  "mission": "Maintain bit-accurate Python ports of MITgcm's GGL90 (prognostic TKE closure) and KPP (diagnostic Ri-based boundary-layer scheme) vertical-mixing parameterizations, validated against MITgcm Fortran reference output across physically distinct ocean scenarios.",
+  "source_paths": [
+    "Vertical_Mixing_Models/main",
+    "Vertical_Mixing_Models/GGL90",
+    "Vertical_Mixing_Models/KPP",
+    "MITgcm_to_Python_port_verification/scripts",
+    "MITgcm_to_Python_port_verification/mitgcm_verification_mods"
+  ],
+  "test_paths": [
+    "Vertical_Mixing_Models/tests",
+    "MITgcm_to_Python_port_verification/tests"
+  ],
+  "configuration_paths": [
+    "Vertical_Mixing_Models/configuration_yamls",
+    "Vertical_Mixing_Models/simulations/scenarios"
+  ],
+  "output_paths": [
+    "Vertical_Mixing_Models/output"
+  ],
+  "external_inputs": [
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D_python.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_1000_0820T0946.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_1000_0820T0946_python.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend_rawflux_fix.nc"
+  ],
+  "environment_variables": [
+    "PATH",
+    "CONDA_PREFIX",
+    "CONDA_DEFAULT_ENV",
+    "PYTHONPATH",
+    "OMP_NUM_THREADS",
+    "LANG",
+    "LC_ALL"
+  ],
+  "toolchain_commands": [
+    [
+      "{python}",
+      "--version"
+    ],
+    [
+      "{python}",
+      "-c",
+      "import numpy,scipy,xarray,netCDF4; print(numpy.__version__, scipy.__version__, xarray.__version__, netCDF4.__version__)"
+    ]
+  ],
+  "command_timeout_seconds": 1800,
+  "verification": {
+    "structural": [
+      [
+        "{python}",
+        "tools/esx/audit.py"
+      ]
+    ],
+    "focused": [
+      [
+        "{python}",
+        "-m",
+        "pytest",
+        "Vertical_Mixing_Models/tests",
+        "-q"
+      ]
+    ],
+    "scientific": [
+      [
+        "{python}",
+        "-m",
+        "pytest",
+        "Vertical_Mixing_Models/tests",
+        "MITgcm_to_Python_port_verification/tests",
+        "-v"
+      ]
+    ]
+  },
+  "communication": {
+    "provider": "slack",
+    "channel": "C0C27T304GH",
+    "message_prefix": "[1D-Mixing]",
+    "authorization_reference": "esx/project_profile.md#runtime-and-operations (communication)"
+  },
+  "commit_policy": {
+    "mode": "owner_authorization",
+    "authorization_reference": "esx/project_profile.md#runtime-and-operations (commit cadence)"
+  }
+}

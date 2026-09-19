@@ -1,0 +1,90 @@
+================================================================================
+KPP WRAPPER HANDOFF - QUICK START
+================================================================================
+
+STATUS: Wrapper functional but 27% hbl difference from Python port needs investigation
+
+WHAT WORKS:
+  ✅ Compiles and runs without crashes
+  ✅ Produces physically realistic mixing (0.12-0.13 m²/s)
+  ✅ All 9 critical initialization issues fixed
+  ✅ JMD95Z equation of state working correctly
+  ✅ All inputs verified to match Python port exactly
+
+WHAT DOESN'T MATCH:
+  ❌ hbl: 10.8m (should be 14.77m) - 27% difference
+  ❌ Max viscosity: 0.13 m²/s (should be 0.29 m²/s) - 53% difference
+
+--------------------------------------------------------------------------------
+IMMEDIATE NEXT STEP
+--------------------------------------------------------------------------------
+
+Add debug output to see Richardson number (Ri) at each level:
+
+Location: mitgcm_src/kpp_routines.F in the BLDEPTH subroutine
+
+Find the loop that calculates Ri and add:
+  WRITE(6,*) 'DEBUG BLDEPTH: k=', k, ' Ri=', Rib, ' depth=', -zRef(k)
+
+This will show:
+  1. What Ri values the wrapper computes at each depth
+  2. At which depth Ri first exceeds Ricr=0.3 (determines hbl)
+  3. Compare with Python port Ri values to find divergence
+
+--------------------------------------------------------------------------------
+HOW TO BUILD AND TEST
+--------------------------------------------------------------------------------
+
+cd /Users/ifenty/Library/CloudStorage/Box-Box/ifenty/Projects/ECCO/1D_Mixing_Experiments/MITgcm_wrappers/KPP
+
+make clean
+make
+./kpp_wrapper > test_output.txt 2>&1
+
+Check results:
+  grep "OUTPUT_HBL" test_output.txt        # Should show ~10.8m
+  grep "DEBUG BLDEPTH" test_output.txt     # Your new debug output
+
+Compare with Python port:
+  cd validation/test_case_001
+  python3 -c "import numpy as np; d=np.load('outputs_kpp_port.npz'); print('Expected hbl:', d['KPPhbl'])"
+  # Should show: 14.774913687493402
+
+--------------------------------------------------------------------------------
+KEY FILES TO KNOW
+--------------------------------------------------------------------------------
+
+handoff/HANDOFF.md                - Complete handoff document (START HERE!)
+handoff/COMPARISON_RESULTS.md     - Detailed difference analysis
+handoff/COMMON_BLOCK_ISSUE.md     - Known COMMON block quirk (doesn't affect physics)
+
+src/kpp_wrapper.F                 - Main wrapper (all fixes applied here)
+mitgcm_src/kpp_routines.F         - Contains BLDEPTH (hbl calculation) - EDIT THIS NEXT
+
+validation/test_case_001/
+  input.bin                       - Test input (binary)
+  outputs_kpp_port.npz            - Expected output from Python port
+
+--------------------------------------------------------------------------------
+WHY 27% DIFFERENCE?
+--------------------------------------------------------------------------------
+
+All inputs match, all parameters match, grid matches.
+Must be in physics calculation:
+
+  Ri = (N² × depth²) / (S² + ε)
+
+where:
+  N² = stratification = -(g/ρ₀) × (∂ρ/∂z)
+  S² = shear = (∂u/∂z)² + (∂v/∂z)²
+
+hbl = depth where Ri first exceeds Ricr = 0.3
+
+Likely causes:
+  - Different derivative calculations (finite differences)
+  - Grid staggering interpretation differences  
+  - Averaging scheme differences
+
+Action: Output Ri at each level and compare!
+
+================================================================================

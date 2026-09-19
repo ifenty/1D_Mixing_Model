@@ -1,21 +1,18 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
+# ESX/devel-loop local & historical state — never tracked (frozen audit trail or machine-local)
+/devel-loop/loop_state/
+/.claude/ralph-loop*
+/.claude/esx-loop*
+/.claude/settings.local.json
+/ESX-team-local/
 
 # OS
 .DS_Store
 
-# Generated experiment output and figures (regenerable; not version-controlled)
-output/
-visualizations/
+# Python bytecode
+**/__pycache__/
+*.py[cod]
 
-# LaTeX build artifacts
-*.aux
-*.log
-*.out
-*.toc
-*.fdb_latexmk
-*.fls
-*.synctex.gz
+# MITgcm validation data and compiled binaries — kept on disk locally, not pushed to GitHub
+*.nc
+*.o
+a.out

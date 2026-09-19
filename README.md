@@ -1,108 +1,238 @@
-# 1D Mixing Model
+# 1D Mixing Experiments: GGL90 and KPP Python Ports
 
-Python ports of MITgcm's KPP and GGL90 vertical mixing schemes, designed for scenario-driven 1-D ocean column experiments. This codebase enables rapid testing of mixing physics, parameter sensitivity studies, and generation of ML training data without running the full 3-D ocean model.
+A **1D column model for ocean vertical mixing** containing Python ports of two MITgcm
+parameterization schemes:
 
-## Key Features
+- **GGL90** — prognostic, TKE-based turbulence closure
+- **KPP** — diagnostic, Richardson-number based boundary layer scheme
 
-- **Two mixing schemes**: K-Profile Parameterization (KPP) and GGL90 turbulence closure
-- **Unified driver interface**: run identical experiments with either scheme using the same configuration files
-- **Scenario-based configuration**: YAML-driven initial conditions, atmospheric forcing, and time integration
-- **Built-in test scenarios**: arctic convection, hurricane wind, heavy rain freshening, combined storm, tropical diurnal heating, and a calm baseline
-- **Validated physics**: implements MITgcm's equation of state (JMD95), potential density gradients, Richardson number mixing, and TKE evolution, with vertical staggering that overlays MITgcm output index-for-index
-- **Comprehensive diagnostics**: time series of temperature, salinity, velocity, turbulent kinetic energy, mixing length, and mixing coefficients
+Both ports target bit-level correspondence with their MITgcm Fortran originals. Any deviation is
+treated as a bug to be investigated, not a tuning knob.
 
-## Repository Structure
+The project has two complementary validation tracks:
 
-```
-1D_Mixing_Model/
-├── README.md              # This file
-├── user_guide.md          # Complete end-to-end usage documentation
-├── conftest.py            # Pytest configuration
-├── main/                  # Unified driver, adapters, config manager, EOS, physics basis, solver, plotter
-├── GGL90/     # GGL90 turbulence closure implementation + default parameter YAML
-├── KPP/         # KPP boundary layer mixing implementation + default parameter YAML
-├── configuration_yamls/   # Shared physical parameters + example GGL90 override configs
-├── simulations/scenarios/ # Built-in scenario configuration files (6 scenarios × 3 files each)
-├── tests/                 # All test modules
-├── scripts/
-│   ├── analysis/          # Diagnostic scripts (alpha_min, TKE oscillations, oscillation threshold)
-│   └── scenario_generation/ # Training data generation from MITgcm output
-└── docs/
-    ├── GGL90/             # GGL90_package_description.tex (physics) + GGL90_port_description.tex (port map)
-    ├── KPP/               # KPP_package_description.tex (physics) + KPP_port_description.tex (port map)
-    ├── porting/           # (empty — lessons consolidated into KPP_port_validation/reports/)
-    ├── dev_notes/         # Implementation notes, MITgcm staggering, physics explanations
-    └── ML/                # ML draft notes
-```
+1. **Scenario validation** — run both schemes across 6 physically distinct scenarios and compare
+   them against each other for physical plausibility.
+2. **MITgcm validation** — instrument MITgcm's own KPP, capture its exact inputs and outputs, feed
+   those inputs to the Python port, and compare numerically.
+
+## Status
+
+**KPP port: validated against MITgcm.** Across 11,000 timesteps of the `1D_ocean_ice_column`
+verification experiment:
+
+| Metric | Result |
+|---|---|
+| Mean relative error | 0.18% |
+| Median relative error | 0.0005% |
+| RMS error | 0.72 m |
+| Timesteps within 10% | 99.63% |
+
+The residual outliers (41 timesteps, 0.37%) occur during extreme weak forcing and are explained by
+floating-point behavior in a near-critical Richardson-number regime, not by implementation error.
+See `KPP_port_validation/INVESTIGATION_CONCLUSION.md` for the full analysis.
+
+**GGL90 port:** scenario-validated; not yet put through the MITgcm capture-and-compare pipeline.
+
+Open issues live in `open_issues.md` (resolved/false-positive history in `closed_issues.md`) —
+see those files for the current list.
 
 ## Quick Start
 
-### 1. Set up environment
 ```bash
-conda activate ecco  # or your environment with numpy, matplotlib, pyyaml, xarray
+conda activate ecco          # /Users/ifenty/miniforge3/envs/ecco — Python 3.11.10
+cd 1D_Mixing_Model
 ```
 
-### 2. Run built-in scenarios
+Run both schemes across all 6 scenarios:
+
 ```bash
-# Run all 6 scenarios with both schemes
 python main/run_scenarios.py
-
-# Run a single scenario with KPP only
-python main/run_scenarios.py --scheme kpp --scenario arctic_convection
-
-# Run the example experiment with GGL90
-python main/run_experiment_example.py --scheme ggl90
 ```
 
-### 3. Results
-Results are written to an `output/` directory in the repository root by default
-(git-ignored); pass `--output-dir PATH` to choose another location. Each
-scenario/scheme produces, under `output/<scenario_name>/`:
-- `<scheme>_experiment.npz`: full time series data (load with `numpy.load()`)
-- `<scheme>_profiles.png`: snapshot profiles of T, S, velocity, mixing coefficients
-- `<scheme>_contours.png`: time-depth contours of key variables
+Run one scenario with one scheme:
 
-Generated `output/` and `visualizations/` directories are git-ignored, so experiment
-results and figures never clutter the repository.
+```bash
+python main/run_scenarios.py --scenario arctic_convection --scheme ggl90
+```
 
-## Requirements
+Useful flags (`--help` for the full list):
 
-- Python 3.10+
-- numpy
-- matplotlib
-- pyyaml
-- xarray (for training data generation from MITgcm NetCDF)
-- pytest (for running tests)
+| Flag | Purpose |
+|---|---|
+| `--scheme {kpp,ggl90,both}` | Which scheme(s) to run. Default `both`. |
+| `--scenario NAME [NAME ...]` | Restrict to named scenarios. Default: all discovered. |
+| `--no-plots` | Skip figure generation (faster). |
+| `--ggl90-yaml` / `--kpp-yaml` | Override scheme defaults from a YAML file. |
+| `--ivdc-kappa` | Convective-adjustment diffusivity (MITgcm `ivdc_kappa`). ECCOv4r4 uses 10. |
+| `--output-dir` | Output root. Default `1D_Mixing_Model/output`. |
 
-Install via conda environment `ecco` or equivalent.
+Full cross-scheme validation suite:
+
+```bash
+python tests/test_full_scenario_validation.py
+```
+
+Results land in `1D_Mixing_Model/output/`, with the generated cross-scheme report at
+`output/scenario_comparison/scenario_comparison_report.md`.
+
+## Repository Layout
+
+```
+1D_Mixing_Experiments/
+├── CLAUDE.md                        AI project context — read first
+├── open_issues.md / closed_issues.md   Issue tracking (ESX format)
+├── esx/                             ESX project config and scientific profile
+├── docs/                            ESX-owned code map and model contract
+├── .claude/agents/                  Bob, Richard, Scout, Prober, Bisector, Auditor
+│
+├── 1D_Mixing_Model/                 Main codebase
+│   ├── main/                        Shared physics and orchestration
+│   │   ├── unified_driver.py        Master orchestrator (both schemes)
+│   │   ├── run_scenarios.py         CLI entry point
+│   │   ├── mixing_adapter.py        Adapter shared by both schemes
+│   │   ├── eos.py                   JMD95 equation of state
+│   │   ├── physics_basis.py         Shared physics (N², S², Ri)
+│   │   ├── column_grid.py           Vertical grid (z positive up)
+│   │   ├── column_state.py          State variables
+│   │   ├── shared_column_solver.py  Implicit vertical solver
+│   │   ├── diagnostics.py           Diagnostic output
+│   │   ├── config_manager.py        YAML loader
+│   │   └── unified_plotter.py       Profile and contour figures
+│   │
+│   ├── GGL90/                       GGL90 scheme
+│   │   ├── ggl90_core_driver.py
+│   │   ├── ggl90_scheme_specific.py
+│   │   ├── ggl90_mixing_coefficients.py
+│   │   ├── ggl90_parameters.py
+│   │   └── ggl90_default_parameters.yaml
+│   │
+│   ├── KPP/                         KPP scheme
+│   │   ├── kpp_core_driver.py
+│   │   ├── kpp_scheme_specific.py   Boundary layer depth, BL mixing
+│   │   ├── kpp_routines.py          Interior mixing
+│   │   ├── kpp_shortwave.py         Shortwave penetration
+│   │   ├── kpp_parameters.py
+│   │   └── kpp_default_parameters.yaml
+│   │
+│   ├── configuration_yamls/         Shared config (physical params, GGL90 tunings)
+│   ├── simulations/scenarios/       6 scenarios × 3 YAML files each
+│   ├── tests/                       Test suite
+│   ├── scripts/                     Analysis and scenario-generation utilities
+│   ├── output/                      Run outputs and generated reports
+│   └── docs/
+│       ├── GGL90/                   LaTeX package + port descriptions (.tex/.pdf)
+│       ├── KPP/                     LaTeX package + port descriptions (.tex/.pdf)
+│       ├── dev_notes/               Implementation notes, staggering, KPP physics
+│       └── porting/
+│
+├── scripts/                         KPP-vs-MITgcm validation pipeline
+├── KPP_port_validation/             Validation data, analyses, reports
+├── mitgcm_verification_mods/        Instrumented MITgcm sources (kpp_mods/)
+├── MITgcm_wrappers/                 Standalone Fortran KPP wrapper (superseded path)
+├── mitgcm_instrumentation/          Earlier instrumentation attempt
+└── OLD_MARKDOWN_NO_LONGER_NEEDED/   Archived superseded documentation (includes the
+                                     retired Three-Man-Team role files and handoff/)
+```
+
+## Core Concepts
+
+### The Two Schemes
+
+| Feature | GGL90 | KPP |
+|---|---|---|
+| Type | Prognostic (solves a TKE equation) | Diagnostic (bulk Richardson number) |
+| Spinup | Required — TKE evolves gradually | None — responds immediately |
+| Tuning | `alpha`, `mxl_max_flag` | `Ricr`, `cekman`, `cmonob` |
+| Best for | Long spinup, climate runs | Immediate response, brief events |
+
+### Scenarios
+
+Six scenarios, each defined by three YAML files (initial conditions, atmospheric forcing, time
+integration) in `1D_Mixing_Model/simulations/scenarios/`:
+
+`arctic_convection`, `calm_baseline`, `combined_storm`, `heavy_rain_freshening`,
+`hurricane_wind`, `tropical_heating_diurnal`
+
+### Conventions
+
+These match MITgcm and are load-bearing throughout the code:
+
+- **Vertical coordinate**: z positive up — the surface is 0, depths are negative.
+- **Staggering**: tracers at cell centers, diffusivities at interfaces ("top-of-cell").
+- **Pressure**: positive, increasing with depth.
+- **Surface heat flux (MITgcm side)**: negative means heat *into* the ocean. The Python KPP driver
+  uses the opposite sign, so conversions at the boundary need care.
+
+See `1D_Mixing_Model/docs/dev_notes/MITGCM_STAGGERING.md` for the index-by-index mapping.
+
+## MITgcm Validation Pipeline
+
+MITgcm's KPP is instrumented to emit its inputs and outputs at full precision, which are then
+replayed through the Python port. Critically, the instrumentation captures `ustar`, `bo`, and
+`bosol` — the friction velocity and buoyancy forcing terms that `KPP_FORCING_SURF` computes and KPP
+actually consumes — rather than raw surface fluxes. This avoids having to reconstruct them and
+inherit assumptions about `rhoConst` and `HeatCapacity_Cp`.
+
+Three steps, run from the project root:
+
+```bash
+# 1. Parse instrumented MITgcm STDOUT into split input/output NetCDF
+python scripts/parse_mitgcm_split.py output.txt <label>
+
+# 2. Replay through the Python port (auto-compares if MITgcm outputs are present)
+python scripts/run_kpp_from_netcdf_input.py \
+  KPP_port_validation/inputs_from_mitgcm/<inputs>.nc
+
+# 3. Generate the PDF validation report
+python scripts/generate_kpp_validation_report.py \
+  KPP_port_validation/outputs_from_mitgcm/<mitgcm>.nc \
+  KPP_port_validation/outputs_from_python/<python>.nc \
+  KPP_port_validation/reports/validation_report.pdf
+```
+
+Building and running the instrumented MITgcm goes through the Docker helpers symlinked into
+`MITgcm/verification/` (`experiment_compile.sh`, `experiment_run_no_compile.sh`); invoking
+`genmake2` by hand hits assembler errors on arm64. Instrumented sources live in
+`mitgcm_verification_mods/kpp_mods/`, and `mitgcm_verification_mods/FORTRAN_RULES.md` documents the
+fixed-form constraints any edit must respect.
+
+Open thread: lab_sea has parsed MITgcm outputs and inputs but no generated report yet — only the
+1D 11k-timestep report exists in `KPP_port_validation/reports/`.
 
 ## Documentation
 
-See `user_guide.md` for complete documentation covering running scenarios, choosing
-and configuring mixing schemes, setting up initial conditions and forcing, and adding
-your own experiments.
+| Document | Contents |
+|---|---|
+| `CLAUDE.md` | Project context, coding standards; routes to the ESX-Team workflow |
+| `esx/project_profile.md`, `docs/model_contract.md` | Full scientific/numerical contract |
+| `open_issues.md` / `closed_issues.md` | Every suspected MITgcm inconsistency, with status |
+| `scripts/README.md` | Validation pipeline reference |
+| `KPP_port_validation/INVESTIGATION_CONCLUSION.md` | Final KPP validation verdict |
+| `KPP_port_validation/VALIDATION_SUMMARY.md` | Headline validation statistics |
+| `KPP_port_validation/NETCDF_DATA_FORMAT.md` | NetCDF format specification |
+| `KPP_port_validation/reports/critical_lessons_fortran_to_python_porting.md` | Consolidated porting lessons |
+| `KPP_port_validation/reports/possible_kpp_bugs_in_mitgcm.md` | Suspected MITgcm-side KPP bugs |
+| `1D_Mixing_Model/user_guide.md` | End-to-end model user guide |
+| `1D_Mixing_Model/docs/{GGL90,KPP}/` | LaTeX package and port descriptions |
+| `GGL90_DENSITY_GRADIENT_FIX_SUMMARY.md`, `DENSITY_GRADIENT_ANALYSIS.md` | GGL90 potential-density fix |
 
-For the mixing physics and implementation, each scheme has two LaTeX reference documents
-with identical structure (open them side-by-side to compare schemes):
+Superseded and stale documentation has been moved to `OLD_MARKDOWN_NO_LONGER_NEEDED/`, which mirrors
+the original directory structure.
 
-| Scheme | Physics reference | Port reference (Fortran→Python map) |
-|--------|-------------------|-------------------------------------|
-| GGL90  | `docs/GGL90/GGL90_package_description.tex` | `docs/GGL90/GGL90_port_description.tex` |
-| KPP    | `docs/KPP/KPP_package_description.tex`     | `docs/KPP/KPP_port_description.tex`     |
+## Environment
 
-- **`*_package_description.tex`** — the physics of each mixing scheme (governing equations, boundary/interior mixing, diagnostics, validation).
-- **`*_port_description.tex`** — how the Python port maps onto the MITgcm Fortran, organized by code flow with file + line-number references in both languages.
-- **`../KPP_port_validation/reports/critical_lessons_fortran_to_python_porting.md`** — cross-cutting lessons (sign conventions, 1-based↔0-based indexing, vertical staggering, unit verification) for anyone extending the ports.
+- **Python**: 3.11.10 (conda env `ecco` at `/Users/ifenty/miniforge3/envs/ecco`)
+- **Packages**: numpy, scipy, matplotlib, xarray, netCDF4, pyyaml, pytest
+- **Run from**: `1D_Mixing_Model/` for model commands, project root for validation scripts
+- **MITgcm reference source**: `/Users/ifenty/git_repo_others/MITgcm`
+- **MITgcm Docker helpers**: `/Users/ifenty/git_repo_others/MITgcm_verification_docker`
 
-## Testing
+## Contributing Notes
 
-Run the full test suite:
-```bash
-python -m pytest tests/ -q
-```
+Two rules matter more than the rest:
 
-## More Information
-
-This repository is part of the ECCO 1D Mixing Experiments project. For deeper physics
-and implementation background, see the LaTeX references above and the developer notes in
-`docs/dev_notes/`.
+1. **Every non-trivial function cites its MITgcm counterpart** — source file and line numbers, in a
+   comment or docstring.
+2. **Any suspected inconsistency with MITgcm gets documented in `open_issues.md` immediately**,
+   using the blank template in that file, before any fix is attempted.

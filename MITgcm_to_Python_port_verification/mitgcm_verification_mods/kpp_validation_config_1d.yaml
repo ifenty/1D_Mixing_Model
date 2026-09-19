@@ -1,0 +1,13 @@
+# KPP parameters for validating against 1D_ocean_ice_column
+#
+# Parsed from: /Users/ifenty/git_repo_others/MITgcm/verification/1D_ocean_ice_column/input/data.kpp
+#
+# Only parameters explicitly set in data.kpp are listed here.
+# All other parameters use KPP Python port defaults (which should match MITgcm defaults).
+
+ghat_use_total_diffus: true    # KPP_ghatUseTotalDiffus=.TRUE.
+kpp_write_state: true           # KPPwriteState=.TRUE. (diagnostic only, no-op in Python)
+
+# NOTE: MITgcm has KPPuseSWfrac3D=.TRUE. but Python port doesn't support this yet
+#       Validation may show differences in shortwave penetration effects
+# use_sw_frac_3d: false  # Not supported in Python port yet

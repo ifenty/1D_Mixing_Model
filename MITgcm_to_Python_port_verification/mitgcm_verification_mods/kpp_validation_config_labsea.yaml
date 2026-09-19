@@ -1,0 +1,9 @@
+# KPP parameters for validating against lab_sea
+#
+# Parsed from: /Users/ifenty/git_repo_others/MITgcm/verification/lab_sea/input/data.kpp
+#
+# Only parameters explicitly set in data.kpp are listed here.
+# All other parameters use KPP Python port defaults (which should match MITgcm defaults).
+
+ghat_use_total_diffus: true    # KPP_ghatUseTotalDiffus=.TRUE.
+kpp_write_state: true           # KPPwriteState=.TRUE. (diagnostic only, no-op in Python)

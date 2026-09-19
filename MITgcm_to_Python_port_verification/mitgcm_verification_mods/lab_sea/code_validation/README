@@ -1,0 +1,89 @@
+KPP Validation Instrumentation for Python Port Comparison
+===========================================================
+
+This directory contains modified MITgcm source files that add
+instrumentation to output KPP inputs and outputs for validation
+testing against the Python port.
+
+Following MITgcm conventions, custom code goes in code_XXXX/ directories
+rather than modifying the original source in code/.
+
+Files in this directory:
+------------------------
+
+This directory contains a complete copy of lab_sea/code with modifications
+for KPP validation. The -mods mechanism requires a complete code directory.
+
+**Modified files:**
+
+1. SIZE.h (MODIFIED from lab_sea/code/SIZE.h)
+   - Changed to single-tile configuration for simpler I/O and debugging
+   - Original: sNx=10, sNy=8, nSx=2, nSy=2 (4 tiles per process)
+   - Modified: sNx=20, sNy=16, nSx=1, nSy=1 (1 tile per process)
+   - Same domain size: 20×16 horizontal, 23 vertical levels
+   - Single processor: nPx=1, nPy=1 (no MPI parallelization)
+
+2. kpp_calc.F (MODIFIED from pkg/kpp/kpp_calc.F)
+   - Instrumented version of pkg/kpp/kpp_calc.F
+   - Adds call to KPP_OUTPUT_VALIDATION after line 597
+   - Otherwise identical to original
+
+3. kpp_output_validation.F (NEW FILE - not in original MITgcm)
+   - Outputs KPP inputs/outputs in CSV format
+   - Precision: E25.16 (16 significant digits)
+   - Called once per timestep for all grid points
+   - Includes FFIELDS.h for surface forcing variables
+
+**Unmodified files (copied from lab_sea/code):**
+
+4. CPP_OPTIONS.h - Preprocessor options (unmodified)
+5. DIAGNOSTICS_SIZE.h - Diagnostics array sizes (unmodified)
+6. GMREDI_OPTIONS.h - GM/Redi options (unmodified)
+7. SEAICE_OPTIONS.h - Sea ice options (unmodified)
+8. SIZE.h_mpi - MPI configuration (unmodified, not used in this validation)
+9. packages.conf - Package list (unmodified from original)
+
+Compilation:
+-----------
+
+Using the MITgcm Docker verification tools with -mods flag:
+
+  cd /Users/ifenty/git_repo_others/MITgcm/verification
+
+  ./experiment_compile.sh lab_sea \
+    -mods /Users/ifenty/Library/CloudStorage/Box-Box/ifenty/Projects/ECCO/1D_Mixing_Experiments/mitgcm_verification_mods/lab_sea/code_validation \
+    -j 8
+
+The -mods flag tells MITgcm to use files from this directory,
+overriding the originals in code/ and pkg/.
+
+Output Format:
+-------------
+
+The instrumented model outputs CSV blocks like:
+
+  ===== KPP_VALIDATION_START =====
+  TIMESTEP=      2,BI=  1,BJ=  1
+  INPUT_STATE,  1,  1,  1, 2.304E+01, 3.465E+01, ...
+  OUTPUT_MIXING,  1,  1,  1, 1.234E-03, 2.345E-04, ...
+  OUTPUT_HBL,  1,  1, 5.678E+01
+  ===== KPP_VALIDATION_END =====
+
+These blocks are parsed by scripts/mitgcm_kpp_parser.py into HDF5 format
+for Python validation tests.
+
+Purpose:
+-------
+
+This instrumentation enables bit-level validation of the KPP Python port
+against MITgcm's Fortran implementation across all 3,200 test cases
+(20×16 grid × 10 timesteps).
+
+Validation workflow:
+1. Compile with code_validation/
+2. Run lab_sea experiment
+3. Parse output to HDF5
+4. Run Python validation tests (tests/test_mitgcm_kpp_lab_sea_validation.py)
+5. Compare outputs with rtol=1e-12
+
+See: mitgcm_instrumentation/README.md for complete documentation

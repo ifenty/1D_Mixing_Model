@@ -1,0 +1,226 @@
+# KPP_CALC.F Instrumentation Patch for Python Port Validation
+#
+# This patch adds comprehensive validation output to MITgcm's kpp_calc.F
+# to enable bit-level validation of the Python KPP port.
+#
+# Outputs:
+# - Model parameters (once at start)
+# - Grid geometry (once at start)
+# - State variables (theta, salt, u, v) for each column
+# - Surface forcing (ustar, bo, bosol, tau, Coriolis) + raw fluxes
+# - Mixing outputs (KPPviscAz, KPPdiffKzS, KPPdiffKzT, KPPghat, KPPhbl)
+#
+# Usage:
+#   1. Apply this patch to pkg/kpp/kpp_calc.F
+#   2. Recompile MITgcm
+#   3. Run simulation - output goes to STDOUT
+#   4. Parse with scripts/parse_mitgcm_split.py
+
+================================================================================
+LOCATION 1: After variable declarations (around line 200)
+Add local variables for validation output
+================================================================================
+
+INSERT AFTER:
+      INTEGER ikey, kBottom
+#endif /* ALLOW_AUTODIFF_TAMC */
+
+ADD:
+C     Validation output variables
+      LOGICAL :: firstCall = .TRUE.
+      _RL surfHeatFlux, surfSWFlux, surfFWFlux
+      _RL tau_x_out, tau_y_out
+      SAVE firstCall
+
+================================================================================
+LOCATION 2: Right after KPP_FORCING_SURF call (after line 435)
+Output validation headers and data
+================================================================================
+
+INSERT AFTER:
+     I     ikey, iMin, iMax, jMin, jMax, bi, bj, myTime, myThid )
+
+ADD:
+C     ===== VALIDATION OUTPUT START =====
+      IF (firstCall .AND. bi.EQ.1 .AND. bj.EQ.1) THEN
+        firstCall = .FALSE.
+
+C       Output model parameters
+        WRITE(6,*) '===== KPP_MODEL_PARAMETERS ====='
+        WRITE(6,'(A,E16.8)') 'PARAM_Ricr=',Ricr
+        WRITE(6,'(A,E16.8)') 'PARAM_cekman=',cekman
+        WRITE(6,'(A,E16.8)') 'PARAM_cmonob=',cmonob
+        WRITE(6,'(A,E16.8)') 'PARAM_concv=',concv
+        WRITE(6,'(A,E16.8)') 'PARAM_vonk=',vonk
+        WRITE(6,'(A,E16.8)') 'PARAM_Riinfty=',Riinfty
+        WRITE(6,'(A,E16.8)') 'PARAM_BVSQcon=',BVSQcon
+        WRITE(6,'(A,E16.8)') 'PARAM_difm0=',difm0
+        WRITE(6,'(A,E16.8)') 'PARAM_difs0=',difs0
+        WRITE(6,'(A,E16.8)') 'PARAM_dift0=',dift0
+        WRITE(6,'(A,E16.8)') 'PARAM_difmcon=',difmcon
+        WRITE(6,'(A,E16.8)') 'PARAM_difscon=',difscon
+        WRITE(6,'(A,E16.8)') 'PARAM_diftcon=',diftcon
+        WRITE(6,'(A,E16.8)') 'PARAM_cstar=',cstar
+        WRITE(6,'(A,E16.8)') 'PARAM_epsilon=',epsilon
+        WRITE(6,'(A,E16.8)') 'PARAM_Rrho0=',Rrho0
+        WRITE(6,'(A,E16.8)') 'PARAM_dsfmax=',dsfmax
+        WRITE(6,'(A,E16.8)') 'PARAM_gravity=',gravity
+        WRITE(6,'(A,E16.8)') 'PARAM_rhoConst=',rhoConst
+        WRITE(6,'(A,I6)') 'PARAM_nni=',nni
+        WRITE(6,'(A,I6)') 'PARAM_nnj=',nnj
+        WRITE(6,*) '===== KPP_MODEL_PARAMETERS_END ====='
+
+C       Output grid geometry
+        WRITE(6,*) '===== KPP_GRID_GEOMETRY ====='
+        WRITE(6,'(A,I6)') 'GRID_Nr=',Nr
+        WRITE(6,'(A,I6)') 'GRID_sNx=',sNx
+        WRITE(6,'(A,I6)') 'GRID_sNy=',sNy
+        DO k=1,Nr
+          WRITE(6,'(A,I4,A,E16.8,A,E16.8)')
+     &      'GRID_LEVEL,',k,',',rC(k),',',drF(k)
+        ENDDO
+        WRITE(6,*) '===== KPP_GRID_GEOMETRY_END ====='
+
+        WRITE(6,*) '===== KPP_DATA_HEADERS ====='
+        WRITE(6,*) 'INPUT_STATE: i,j,k,theta,salt,u,v'
+        WRITE(6,*) 'INPUT_FORCING: i,j,ustar,bo,bosol,tau_x,tau_y,'
+     &    //'q_net,q_sw,fw_flux'
+        WRITE(6,*) 'INPUT_CORIOLIS: i,j,f'
+        WRITE(6,*) 'OUTPUT_MIXING: i,j,k,viscAz,diffKzS,diffKzT,ghat'
+        WRITE(6,*) 'OUTPUT_HBL: i,j,hbl'
+        WRITE(6,*) '===== KPP_DATA_HEADERS_END ====='
+      ENDIF
+
+C     Output validation data for this timestep
+      IF (bi.EQ.1 .AND. bj.EQ.1) THEN
+        WRITE(6,*) '===== KPP_VALIDATION_START ====='
+        WRITE(6,'(A,I8,A,E16.8)')
+     &    'TIMESTEP=',myIter,', TIME=',myTime
+      ENDIF
+
+C     Loop over all ocean points to output state and forcing
+      DO j = jMin, jMax
+        DO i = iMin, iMax
+          IF (maskC(i,j,1,bi,bj) .GT. 0.) THEN
+
+C           Output state variables (all vertical levels)
+            DO k = 1, Nr
+              WRITE(6,'(A,3I4,4E16.8)') 'INPUT_STATE,',
+     &          i,j,k,
+     &          theta(i,j,k,bi,bj),
+     &          salt(i,j,k,bi,bj),
+     &          uVel(i,j,k,bi,bj),
+     &          vVel(i,j,k,bi,bj)
+            ENDDO
+
+C           Prepare forcing output with raw fluxes
+C           surfaceForcingT has units W/m^2 (positive into ocean)
+C           surfaceForcingS has units g/m^2/s (virtual salt flux)
+C           surfaceForcingU/V have units m/s^2
+
+            surfHeatFlux = surfaceForcingT(i,j,bi,bj)
+            surfSWFlux = Qsw(i,j,bi,bj)
+
+C           Convert virtual salt flux to freshwater flux
+C           surfaceForcingS = -EmPmR * salt (g/m^2/s)
+C           fw_flux = EmPmR (kg/m^2/s)
+            IF (salt(i,j,1,bi,bj) .NE. 0.) THEN
+              surfFWFlux = -surfaceForcingS(i,j,bi,bj)
+     &                     / salt(i,j,1,bi,bj) * rhoConst
+            ELSE
+              surfFWFlux = 0. _d 0
+            ENDIF
+
+C           Wind stress (already in m/s^2 from surfaceForcingU/V)
+            tau_x_out = surfaceForcingU(i,j,bi,bj)
+            tau_y_out = surfaceForcingV(i,j,bi,bj)
+
+C           Output forcing: computed + raw fluxes
+            WRITE(6,'(A,2I4,10E16.8)') 'INPUT_FORCING,',
+     &        i, j,
+     &        ustar(i,j,bi,bj),
+     &        bo(i,j,bi,bj),
+     &        bosol(i,j,bi,bj),
+     &        tau_x_out,
+     &        tau_y_out,
+     &        surfHeatFlux,
+     &        surfSWFlux,
+     &        surfFWFlux
+
+C           Output Coriolis
+            WRITE(6,'(A,2I4,E16.8)') 'INPUT_CORIOLIS,',
+     &        i, j, fCori(i,j,bi,bj)
+
+          ENDIF
+        ENDDO
+      ENDDO
+
+C     ===== VALIDATION OUTPUT CONTINUES AFTER KPPMIX =====
+
+================================================================================
+LOCATION 3: After KPP outputs are transferred to global arrays (after line 600)
+Output mixing coefficients and HBL
+================================================================================
+
+INSERT AFTER:
+       ENDDO
+      ENDDO
+
+ADD BEFORE NEXT SECTION:
+C     ===== VALIDATION OUTPUT: MIXING COEFFICIENTS =====
+      IF (bi.EQ.1 .AND. bj.EQ.1) THEN
+        DO j = jMin, jMax
+          DO i = iMin, iMax
+            IF (maskC(i,j,1,bi,bj) .GT. 0.) THEN
+
+C             Output mixing profiles
+              DO k = 1, Nr
+                WRITE(6,'(A,3I4,4E16.8)') 'OUTPUT_MIXING,',
+     &            i, j, k,
+     &            KPPviscAz(i,j,k,bi,bj),
+     &            KPPdiffKzS(i,j,k,bi,bj),
+     &            KPPdiffKzT(i,j,k,bi,bj),
+     &            KPPghat(i,j,k,bi,bj)
+              ENDDO
+
+C             Output boundary layer depth
+              WRITE(6,'(A,2I4,E16.8)') 'OUTPUT_HBL,',
+     &          i, j, KPPhbl(i,j,bi,bj)
+
+            ENDIF
+          ENDDO
+        ENDDO
+
+        WRITE(6,*) '===== KPP_VALIDATION_END ====='
+      ENDIF
+C     ===== VALIDATION OUTPUT END =====
+
+================================================================================
+END OF PATCH
+================================================================================
+
+# Application Instructions:
+#
+# 1. Backup original file:
+#    cp pkg/kpp/kpp_calc.F pkg/kpp/kpp_calc.F.orig
+#
+# 2. Open pkg/kpp/kpp_calc.F in editor
+#
+# 3. Insert code blocks at the three locations indicated above
+#
+# 4. Verify Fortran syntax (check indentation, continuation lines)
+#
+# 5. Recompile MITgcm
+#
+# 6. Run test case (redirect STDOUT to file):
+#    ./mitgcmuv > output.txt 2>&1
+#
+# 7. Parse output:
+#    python scripts/parse_mitgcm_split.py output.txt experiment_name
+#
+# Notes:
+# - This outputs at bi=1, bj=1 only to avoid duplicate output in tiled runs
+# - For multi-tile runs, adjust bi/bj condition as needed
+# - Output is CSV-like format for easy parsing
+# - All E16.8 format for double precision
+# - Forcing validation data (q_net, q_sw, fw_flux) included

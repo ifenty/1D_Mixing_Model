@@ -1,0 +1,39 @@
+==========================================
+Running MITgcm (NO COMPILATION)
+==========================================
+  Experiment: lab_sea
+  Input:      input
+  Binary:     3.5M
+  MPI:        false
+  Output:     output_docker/
+==========================================
+
+Linking input files...
+Running model...
+EEBOOT_MINIMAL: No. of procs=     1 not equal to nPx*nPy=     2
+EEDIE: earlier error in multi-proc#thread setting
+PROGRAM MAIN: ends with fatal Error
+STOP ABNORMAL END: PROGRAM MAIN
+PROGRAM MAIN: ends with fatal Error
+
+Copying outputs...
+
+Complete!
+
+==========================================
+Done!
+==========================================
+
+Output files:
+  STDERR.0000                     252B
+  pickup_seaice.0000000001.meta       324B
+  pickup_cd.0000000001.meta       158B
+  pickup.0000000001.meta          357B
+  pickup_seaice.0000000001.data        20K
+  pickup_cd.0000000001.data       233K
+  pickup.0000000001.data          468K
+  output.txt                       36B
+  mitgcmuv                        3.5M
+
+View output: less /Users/ifenty/git_repo_others/MITgcm/verification/lab_sea/output_docker/output.txt
+
