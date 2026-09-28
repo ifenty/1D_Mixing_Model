@@ -129,7 +129,6 @@ Results land in `1D_Mixing_Model/output/`, with the generated cross-scheme repor
 ├── scripts/                         KPP-vs-MITgcm validation pipeline
 ├── KPP_port_validation/             Validation data, analyses, reports
 ├── mitgcm_verification_mods/        Instrumented MITgcm sources (kpp_mods/)
-├── MITgcm_wrappers/                 Standalone Fortran KPP wrapper (superseded path)
 ├── mitgcm_instrumentation/          Earlier instrumentation attempt
 └── OLD_MARKDOWN_NO_LONGER_NEEDED/   Archived superseded documentation (includes the
                                      retired Three-Man-Team role files and handoff/)
@@ -215,10 +214,12 @@ Open thread: lab_sea has parsed MITgcm outputs and inputs but no generated repor
 | `KPP_port_validation/reports/possible_kpp_bugs_in_mitgcm.md` | Suspected MITgcm-side KPP bugs |
 | `1D_Mixing_Model/user_guide.md` | End-to-end model user guide |
 | `1D_Mixing_Model/docs/{GGL90,KPP}/` | LaTeX package and port descriptions |
-| `GGL90_DENSITY_GRADIENT_FIX_SUMMARY.md`, `DENSITY_GRADIENT_ANALYSIS.md` | GGL90 potential-density fix |
 
 Superseded and stale documentation has been moved to `OLD_MARKDOWN_NO_LONGER_NEEDED/`, which mirrors
-the original directory structure.
+the original directory structure — including the GGL90 potential-density fix write-ups
+(`three-man-team-archive/GGL90_DENSITY_GRADIENT_FIX_SUMMARY.md`,
+`three-man-team-archive/DENSITY_GRADIENT_ANALYSIS.md`), whose finding is now covered by
+`docs/model_contract.md`'s "Equation of state" section.
 
 ## Environment
 

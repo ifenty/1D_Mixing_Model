@@ -121,7 +121,7 @@ class UnifiedColumnDriver:
             return
 
         unstable = compute_static_instability_mask(
-            state.theta, state.salt, grid.depth, self.rho_const
+            state.theta, state.salt, grid.depth, self.rho_const, self.gravity
         )
         mix_out.diff_kz_t = mix_out.diff_kz_t + unstable * self.ivdc_kappa
         mix_out.diff_kz_s = mix_out.diff_kz_s + unstable * self.ivdc_kappa

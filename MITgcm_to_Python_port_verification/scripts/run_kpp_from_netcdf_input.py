@@ -40,7 +40,7 @@ from datetime import datetime
 from typing import Dict, Tuple, List, Any, Optional
 from multiprocessing import Pool, cpu_count
 
-sys.path.insert(0, str(Path(__file__).parent.parent / '1D_Mixing_Model'))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'Vertical_Mixing_Models'))
 
 from KPP.kpp_core_driver import KPPDriver
 from KPP.kpp_parameters import KPPParameters
@@ -165,6 +165,22 @@ def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tupl
         'exclude_doublediff': 'exclude_doublediff',
         'vertically_smooth_ri': 'vertically_smooth_ri',
         'shortwave_heating': 'shortwave_heating',
+        # 1DMIX-034: salt plume runtime + compile-time flags. Without
+        # these, KPPParameters silently defaulted both to False for any
+        # capture with salt plume active (e.g. seaice_obcs), bypassing
+        # its own deliberate NotImplementedError guard (salt-plume
+        # physics is not ported) and silently producing wrong bfsfc/hbl.
+        'useSALT_PLUME': 'use_salt_plume',
+        'allow_salt_plume': 'allow_salt_plume',
+        # 1DMIX-034 part 2: salt-plume distribution parameters, needed so
+        # KPPParameters' narrowed NotImplementedError guard can tell a
+        # ported configuration (PlumeMethod=1, Npower=0, SALT_PLUME_VOLUME
+        # unset) from an unported one, instead of defaulting silently to
+        # the ported values regardless of what the captured MITgcm run
+        # actually used.
+        'PlumeMethod': 'plume_method',
+        'Npower': 'npower',
+        'salt_plume_volume': 'salt_plume_volume',
         # Shortwave penetration runtime flag (int, mirrors MITgcm
         # selectPenetratingSW; 0=off, >=1=on). Distinct from the
         # shortwave_heating CPP flag above -- both must be set for
@@ -192,7 +208,10 @@ def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tupl
         'smooth_dens', 'smooth_visc', 'smooth_diff', 'estimate_uref',
         'match_diffusivities', 'match_derivatives', 'smooth_regularisation',
         'scale_shearmixing', 'exclude_shear_mix', 'exclude_doublediff',
-        'vertically_smooth_ri', 'shortwave_heating'
+        'vertically_smooth_ri', 'shortwave_heating',
+        'useSALT_PLUME', 'allow_salt_plume',
+        # 1DMIX-034 part 2: compile-time SALT_PLUME_VOLUME variant flag.
+        'salt_plume_volume'
     }
 
     for nc_name, py_name in param_map.items():
@@ -200,7 +219,10 @@ def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tupl
             value = ds.attrs[nc_name]
 
             # Convert type appropriately
-            if nc_name in ('num_v_smooth_Ri', 'selectPenetratingSW'):
+            if nc_name in ('num_v_smooth_Ri', 'selectPenetratingSW',
+                           # 1DMIX-034 part 2: integer salt-plume
+                           # distribution parameters.
+                           'PlumeMethod', 'Npower'):
                 value = int(value)
             elif nc_name in boolean_params:
                 # Boolean params stored as int (0 or 1) in NetCDF
@@ -247,12 +269,13 @@ def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tupl
                 'Lookup table': ['zmin', 'zmax', 'umin', 'umax'],
                 'Runtime flags': ['KPP_ghatUseTotalDiffus', 'KPPuseDoubleDiff',
                                  'LimitHblStable', 'KPPwriteState', 'KPPuseSWfrac3D',
-                                 'selectPenetratingSW'],
+                                 'selectPenetratingSW', 'useSALT_PLUME',
+                                 'PlumeMethod', 'Npower', 'salt_plume_volume'],
                 'CPP options': ['use_ghat', 'smooth_shsq', 'smooth_dvsq', 'smooth_dbloc',
                                'smooth_dens', 'smooth_visc', 'smooth_diff', 'estimate_uref',
                                'match_diffusivities', 'match_derivatives', 'smooth_regularisation',
                                'scale_shearmixing', 'exclude_shear_mix', 'exclude_doublediff',
-                               'vertically_smooth_ri', 'shortwave_heating']
+                               'vertically_smooth_ri', 'shortwave_heating', 'allow_salt_plume']
             }
 
             for category, params_in_cat in categories.items():
@@ -395,6 +418,77 @@ def derive_raw_flux_forcing(
     return None, None, None
 
 
+def _is_land_column(theta: np.ndarray, salt: np.ndarray) -> bool:
+    """True if this column is masked out (not real ocean).
+
+    MITgcm's own land convention is capture-dependent: some captures (e.g.
+    single-column 1D_ocean_ice_column) never have land and never emit NaN;
+    others (e.g. multi-column lab_sea) mask land columns with exact 0.0 at
+    every level for every field (confirmed by inspecting the raw capture
+    directly), not NaN -- so checking NaN alone silently missed every land
+    column there (1DMIX-011), feeding degenerate all-zero T/S into KPP and
+    producing a nonsensical fallback hbl at the domain bottom. A real ocean
+    column is never all NaN and never exactly 0.0 for both theta and salt at
+    every level simultaneously, so both checks are safe.
+
+    Rechecked (1DMIX-025) for the ALLOW_SHELFICE case (no KPP+ShelfIce
+    capture exists yet, but this helper is shared with GGL90's identical
+    isomip case, which does): this check already handles a column masked
+    (dry) at the TOP with real wet ocean below correctly without
+    modification, since it requires EVERY level to be 0.0/NaN, not just
+    level 0 -- see _wet_level_range.
+    """
+    return bool(np.all(np.isnan(theta)) or (np.all(theta == 0.0) and np.all(salt == 0.0)))
+
+
+def _wet_level_range(theta: np.ndarray) -> Tuple[int, int]:
+    """(start, count) of a column's real, contiguous wet region (1DMIX-011).
+
+    Was `_wet_level_count(theta) -> int`, which assumed the wet region
+    always starts at index 0 and returned only its length -- correct for
+    every previously-tested KPP experiment, where a column shallower than
+    the grid's deepest level is zero-padded by MITgcm below its real
+    seafloor only (bathymetry masking is monotonic from the surface: wet
+    from level 0 down to the seafloor, dry below). For a real captured
+    lab_sea column with true depth 45 m (top 4 of 23 levels wet), the
+    untruncated driver call returns hbl=5450.0 (the grid's deepest level);
+    truncating the column to just its 4 wet levels (start=0, count=4)
+    returns hbl=45.0, an exact match to MITgcm.
+
+    Generalized (1DMIX-025) for GGL90's identical helper's ALLOW_SHELFICE
+    case (isomip): a column under a floating ice shelf is masked (dry, exact
+    0.0) from the surface down to kTopC-1, then wet from kTopC to the real
+    seafloor -- start>0 there. No KPP+ShelfIce capture exists yet to
+    exercise this directly, but this helper is shared verbatim with
+    run_ggl90_from_netcdf_input.py's identical fix (confirmed live and
+    necessary for isomip's real GGL90 capture), so the same latent gap
+    applies here for any future KPP+ShelfIce experiment; fixing both now
+    keeps them mirrored rather than leaving KPP's copy stale.
+
+    Returns (0, len(theta)) for a fully wet column (every previously-tested
+    KPP experiment's common case) -- an exact behavioral no-op there.
+
+    Raises
+    ------
+    ValueError
+        If the wet region is not contiguous (a dry level sandwiched between
+        two wet levels) -- see run_ggl90_from_netcdf_input.py's identical
+        function for why this is not supported.
+    """
+    wet = np.flatnonzero(theta != 0.0)
+    if wet.size == 0:
+        return 0, 0
+    start, end = int(wet[0]), int(wet[-1])
+    count = end - start + 1
+    if count != wet.size:
+        raise ValueError(
+            "Column has a non-contiguous wet region (dry level(s) "
+            "sandwiched between wet levels) -- not supported by this "
+            "harness's single-contiguous-slice driver call convention."
+        )
+    return start, count
+
+
 def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
     """
     Worker function to process one (t, i, j) column.
@@ -432,6 +526,14 @@ def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
     tau_y = float(inputs_ds.tau_y.isel(time=t_in_idx, x=i, y=j).values)
     f_coriolis = float(inputs_ds.f_coriolis.isel(time=t_in_idx, x=i, y=j).values)
 
+    # Salt-plume forcing (1DMIX-034 part 2; optional -- absent for every
+    # capture that predates this fix or never compiled ALLOW_SALT_PLUME in).
+    if 'boplume' in inputs_ds and 'sp_depth' in inputs_ds:
+        boplume_val = float(inputs_ds.boplume.isel(time=t_in_idx, x=i, y=j).values)
+        sp_depth_val = float(inputs_ds.sp_depth.isel(time=t_in_idx, x=i, y=j).values)
+    else:
+        boplume_val, sp_depth_val = 0.0, 0.0
+
     # Raw surface fluxes (optional, for forcing validation) -- see
     # derive_raw_flux_forcing's docstring (1DMIX-013) for the exact
     # raw-to-forcing derivation and its citations.
@@ -440,18 +542,27 @@ def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
         rho_const=driver.params.rho_const,
     )
 
-    # Skip land points (all NaN)
-    if np.all(np.isnan(theta)):
+    # Skip land points (see _is_land_column for why this checks both NaN and
+    # all-zero conventions -- 1DMIX-011)
+    if _is_land_column(theta, salt):
         return None
+
+    # Truncate to this column's real wet (start, count) range -- see
+    # _wet_level_range (1DMIX-025, superseding the former dry-bottom-only
+    # _wet_level_count; 1DMIX-011). Full-depth grid arrays are truncated the
+    # same way so indices still line up.
+    wet_start, nz_wet = _wet_level_range(theta)
+    nz_full = len(theta)
+    wet_end = wet_start + nz_wet
 
     try:
         output = driver.compute_mixing(
-            theta=theta,
-            salt=salt,
-            u_vel=u,
-            v_vel=v,
-            depth=depth,
-            cell_thickness=cell_thickness,
+            theta=theta[wet_start:wet_end],
+            salt=salt[wet_start:wet_end],
+            u_vel=u[wet_start:wet_end],
+            v_vel=v[wet_start:wet_end],
+            depth=depth[wet_start:wet_end],
+            cell_thickness=cell_thickness[wet_start:wet_end],
             tau_x=tau_x,
             tau_y=tau_y,
             q_net=q_net_val,
@@ -464,17 +575,32 @@ def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
             ustar_forcing=ustar,
             bo_forcing=bo,
             bosol_forcing=bosol,
+            boplume_forcing=boplume_val,
+            sp_depth_forcing=sp_depth_val,
         )
+
+        # Pad profile fields back to the full grid depth with zeros outside
+        # the real wet range (below the real seafloor, or -- 1DMIX-025,
+        # untested for KPP yet -- above a real ice-shelf draft), matching
+        # MITgcm's own zero-padding convention there (confirmed directly on
+        # its visc_az/ghat output for a known-shallow column) -- hbl needs
+        # no padding, it is already a scalar.
+        def _pad(arr):
+            if nz_wet == nz_full:
+                return arr
+            return np.concatenate([
+                np.zeros(wet_start), arr, np.zeros(nz_full - wet_end),
+            ])
 
         # Return results as dict (need to convert arrays to lists for pickling)
         return {
             't_out_idx': t_out_idx,
             'i': i,
             'j': j,
-            'visc_az': output.visc_az,
-            'diff_kz_s': output.diff_kz_s,
-            'diff_kz_t': output.diff_kz_t,
-            'ghat': output.ghat,
+            'visc_az': _pad(output.visc_az),
+            'diff_kz_s': _pad(output.diff_kz_s),
+            'diff_kz_t': _pad(output.diff_kz_t),
+            'ghat': _pad(output.ghat),
             'hbl': output.hbl,
             'ustar_computed': output.ustar_computed,
             'bo_computed': output.bo_computed,
@@ -682,6 +808,14 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                     tau_y = float(inputs_ds.tau_y.isel(time=t_in_idx, x=i, y=j).values)
                     f_coriolis = float(inputs_ds.f_coriolis.isel(time=t_in_idx, x=i, y=j).values)
 
+                    # Salt-plume forcing (1DMIX-034 part 2; optional -- see
+                    # _process_column's identical derivation above).
+                    if 'boplume' in inputs_ds and 'sp_depth' in inputs_ds:
+                        boplume_val = float(inputs_ds.boplume.isel(time=t_in_idx, x=i, y=j).values)
+                        sp_depth_val = float(inputs_ds.sp_depth.isel(time=t_in_idx, x=i, y=j).values)
+                    else:
+                        boplume_val, sp_depth_val = 0.0, 0.0
+
                     # Raw surface fluxes (optional, for forcing validation).
                     # If present, forcing validation happens automatically
                     # (Mode 3) -- see derive_raw_flux_forcing's docstring
@@ -691,9 +825,16 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                         rho_const=driver.params.rho_const,
                     )
 
-                    # Skip land points (all NaN)
-                    if np.all(np.isnan(theta)):
+                    # Skip land points (see _is_land_column -- 1DMIX-011)
+                    if _is_land_column(theta, salt):
                         continue
+
+                    # Truncate to this column's real wet (start, count)
+                    # range -- see _wet_level_range (1DMIX-025, superseding
+                    # the former dry-bottom-only _wet_level_count; 1DMIX-011).
+                    wet_start, nz_wet = _wet_level_range(theta)
+                    nz_full = len(theta)
+                    wet_end = wet_start + nz_wet
 
                     # Run Python KPP with pre-computed MITgcm forcing
                     # All forcing values (ustar, bo, bosol) are pre-computed by MITgcm's
@@ -705,14 +846,14 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                     try:
                         output = driver.compute_mixing(
                             # ===== State Variables (3D) =====
-                            theta=theta,                    # Potential temperature [°C]
-                            salt=salt,                      # Salinity [psu]
-                            u_vel=u,                        # Zonal velocity [m/s]
-                            v_vel=v,                        # Meridional velocity [m/s]
+                            theta=theta[wet_start:wet_end],  # Potential temperature [°C]
+                            salt=salt[wet_start:wet_end],    # Salinity [psu]
+                            u_vel=u[wet_start:wet_end],      # Zonal velocity [m/s]
+                            v_vel=v[wet_start:wet_end],      # Meridional velocity [m/s]
 
                             # ===== Grid Geometry (1D) =====
-                            depth=depth,                    # Cell interface depths [m], negative down
-                            cell_thickness=cell_thickness,  # Cell thickness [m], positive
+                            depth=depth[wet_start:wet_end],  # Cell interface depths [m], negative down
+                            cell_thickness=cell_thickness[wet_start:wet_end],  # Cell thickness [m], positive
 
                             # ===== Surface Fluxes (for forcing validation when available) =====
                             tau_x=tau_x,                    # Zonal wind stress [N/m²]
@@ -733,16 +874,23 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                             ustar_forcing=ustar,            # Friction velocity [m/s]
                             bo_forcing=bo,                  # Turbulent buoyancy forcing [m²/s³]
                             bosol_forcing=bosol,            # Radiative (shortwave) buoyancy forcing [m²/s³]
+                            boplume_forcing=boplume_val,     # Salt-plume haline buoyancy forcing [m²/s³] (1DMIX-034)
+                            sp_depth_forcing=sp_depth_val,   # Salt plume penetration depth [m] (1DMIX-034)
                             # Note: Mode determined automatically based on which params provided
                             # - If raw fluxes present → Mode 3 (forcing validation)
                             # - If only pre-computed → Mode 1 (use pre-computed)
                         )
 
-                        # Store outputs
-                        visc_az_out[t_out_idx, i, j, :] = output.visc_az
-                        diff_kz_s_out[t_out_idx, i, j, :] = output.diff_kz_s
-                        diff_kz_t_out[t_out_idx, i, j, :] = output.diff_kz_t
-                        ghat_out[t_out_idx, i, j, :] = output.ghat
+                        # Store outputs, zero-padding profile fields outside
+                        # the real wet range (below the real seafloor, or --
+                        # 1DMIX-025, untested for KPP yet -- above a real
+                        # ice-shelf draft) to match MITgcm's own convention
+                        # there (see _wet_level_range).
+                        pad_before, pad_after = wet_start, nz_full - wet_end
+                        visc_az_out[t_out_idx, i, j, :] = np.pad(output.visc_az, (pad_before, pad_after))
+                        diff_kz_s_out[t_out_idx, i, j, :] = np.pad(output.diff_kz_s, (pad_before, pad_after))
+                        diff_kz_t_out[t_out_idx, i, j, :] = np.pad(output.diff_kz_t, (pad_before, pad_after))
+                        ghat_out[t_out_idx, i, j, :] = np.pad(output.ghat, (pad_before, pad_after))
                         hbl_out[t_out_idx, i, j] = output.hbl
 
                         # Store Python-computed forcing (if validation was performed)

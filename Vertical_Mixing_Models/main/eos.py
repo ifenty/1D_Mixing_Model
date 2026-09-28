@@ -21,6 +21,52 @@ from typing import Tuple
 EOS_MIN_THETA_C = -2.0
 
 
+def _depth_to_eos_pressure(
+    depth: np.ndarray,
+    rho_const: float,
+    gravity: float,
+) -> np.ndarray:
+    """
+    Convert depth (negative-down, metres) to the `pressure` argument expected
+    by `jmd95_eos` (which internally does `p_bar = 0.1 * pressure`).
+
+    This reproduces MITgcm's real EOS pressure for the model's default,
+    non-iterative reference-pressure branch -- `selectP_inEOS_Zc<=1`, no
+    `gravityFile`/`integr_GeoPot`, `top_Pres=0`, `seaLev_Z=0`, `surf_pRef ==
+    eosRefP0` -- confirmed at runtime for every experiment currently captured
+    by this project (`1D_ocean_ice_column`, `lab_sea`, `vermix`,
+    `global_oce_latlon`, `seaice_obcs`, `isomip`; see closed issue 1DMIX-039):
+
+        - `model/src/set_ref_state.F:118-121`: `pRef4EOS(k) = top_Pres +
+          rhoConst*gravity*gravitySign*(rC(k)-rF(1))`, which reduces to
+          `pRef4EOS(k) = rhoConst*gravity*depth(k)` [Pa] for the above
+          defaults (`gravitySign=-1` for z-coordinates,
+          `model/src/ini_vertical_grid.F:54`).
+        - `model/src/pressure_for_eos.F` (`selectP_inEOS_Zc.LE.1` branch):
+          `locPres(k) = pRef4EOS(k) + dpRef`, `dpRef = surf_pRef - eosRefP0
+          = 0` under the above defaults.
+        - `model/inc/EOS.h:19` / `model/src/find_rho.F:507`:
+          `p_bar = locPres(k) * SItoBar`, `SItoBar = 1e-5`.
+
+    So MITgcm's real bar-per-metre-of-depth conversion factor is
+    `rho_const*gravity*1e-5`, NOT a flat `0.1` -- the previous port hardcoded
+    `p_bar = 0.1*(-depth)` (equivalent to assuming `rho_const*gravity ==
+    1e4`, i.e. `rho_const ~= 1019.4` for `gravity=9.81`), independent of the
+    model's actual `rho_const`/`gravity`. That mismatch is exact-zero at the
+    surface (p=0) and grows linearly with depth, entering only the
+    pressure-dependent bulk-modulus terms -- confirmed (1DMIX-039 evidence)
+    to reproduce the previously-unexplained ~1e-5-1e-4 relative, depth-
+    growing N² discrepancy against MITgcm's real `isomip` capture, and to
+    collapse that discrepancy to floating-point noise (~1e-12 relative or
+    smaller) once corrected.
+
+    Returns the value to pass as `jmd95_eos`'s `pressure` argument (which
+    that function multiplies by 0.1 to get bar), i.e.
+    `rho_const*gravity*1e-4*(-depth)`.
+    """
+    return (-depth) * rho_const * gravity * 1.0e-4
+
+
 def linear_eos(
     theta: np.ndarray,
     salt: np.ndarray,
@@ -205,8 +251,16 @@ def jmd95_eos(
     # Derivative of bulk modulus
     dbulkmod_dt = _dbulkmod_dt_jmd95(s, t, p, t2, t3, s3o2, p2)
 
-    # Chain rule for in-situ density derivative
-    ttalpha = drho_dt_surf / (1.0 - p / bulkmod) + rho_surf * p * dbulkmod_dt / (bulkmod * (bulkmod - p))
+    # Chain rule for in-situ density derivative. Matches MITgcm FIND_ALPHA's
+    # JMD95 branch (model/src/find_alpha.F:214-218):
+    #   alphaLoc = (K^2*A - K*p*A - rhoP0*p*B) / (K-p)^2
+    #            = A*K/(K-p) - rhoP0*p*B/(K-p)^2
+    # (K=bulkmod, A=drhoP0dtheta, B=dKdtheta). The previous form here used
+    # `+ ... / (bulkmod * (bulkmod - p))` -- wrong sign AND wrong denominator
+    # on the second term; exact at p=0 but diverging from a finite-difference
+    # check with increasing pressure (ratio 1.0 at p=0 -> 0.115 at p=4000 dbar
+    # for a representative theta/salt point), see closed issue 1DMIX-017.
+    ttalpha = drho_dt_surf * bulkmod / (bulkmod - p) - rho_surf * p * dbulkmod_dt / (bulkmod - p) ** 2
 
     # Haline contraction coefficient d(rho)/d(S)
     s_sqrt = np.sqrt(s)
@@ -224,8 +278,9 @@ def jmd95_eos(
     # Derivative of bulk modulus w.r.t. salinity
     dbulkmod_ds = _dbulkmod_ds_jmd95(s, t, p, t2, s_sqrt, p2)
 
-    # Chain rule for in-situ density derivative
-    ssbeta = drho_ds_surf / (1.0 - p / bulkmod) + rho_surf * p * dbulkmod_ds / (bulkmod * (bulkmod - p))
+    # Chain rule for in-situ density derivative. Same correction as ttalpha
+    # above, mirroring MITgcm FIND_BETA's JMD95 branch (find_alpha.F:531-535).
+    ssbeta = drho_ds_surf * bulkmod / (bulkmod - p) - rho_surf * p * dbulkmod_ds / (bulkmod - p) ** 2
 
     return rho_anom, ttalpha, ssbeta
 
@@ -364,6 +419,7 @@ def compute_static_instability_mask(
     salt: np.ndarray,
     depth: np.ndarray,
     rho_const: float = 1029.0,
+    gravity: float = 9.81,
 ) -> np.ndarray:
     """
     Flag statically unstable interfaces (denser water directly overlying
@@ -372,7 +428,10 @@ def compute_static_instability_mask(
 
     MITgcm's own instability test only depends on the SIGN of the density
     gradient (`-sigmaR*gravitySign > 0`), not on any particular scaling of
-    N^2, so this only needs in-situ density -- no gravity/rho0 scaling.
+    N^2, so the *output* needs no gravity/rho0 scaling -- but the EOS
+    pressure ARGUMENT fed to each level's own in-situ density still does
+    (see `_depth_to_eos_pressure`, 1DMIX-039); `gravity` is threaded through
+    for that reason only.
 
     Parameters
     ----------
@@ -385,6 +444,9 @@ def compute_static_instability_mask(
         ColumnGrid.depth
     rho_const : float
         Reference density [kg/m^3]
+    gravity : float
+        Gravitational acceleration [m/s^2] -- used only for the EOS pressure
+        argument (see `_depth_to_eos_pressure`), not for output scaling.
 
     Returns
     -------
@@ -393,7 +455,7 @@ def compute_static_instability_mask(
         where cell k-1 (shallower) is denser than cell k (deeper). Index 0
         (surface face) is always False.
     """
-    pressure = -depth  # dbar, ~1 dbar per meter (depth is negative-down)
+    pressure = _depth_to_eos_pressure(depth, rho_const, gravity)
     rho_anom, _, _ = jmd95_eos(theta, salt, pressure, rho_const)
     rho = rho_anom + rho_const
 
@@ -444,17 +506,17 @@ def compute_buoyancy_gradients(
     """
     nz = len(theta)
 
-    # Pressure at each cell centre. Hydrostatically, 1 dbar of pressure
-    # corresponds to ~1 m of seawater, so pressure in dbar ~ depth in metres.
-    # `depth` is negative-down, so pressure = -depth.
+    # Pressure at each cell centre, matching MITgcm's real EOS pressure
+    # exactly (not a flat "1 dbar per metre") -- see `_depth_to_eos_pressure`
+    # for the full `pRef4EOS`/`SItoBar` derivation and 1DMIX-039 for the
+    # ~1e-5-1e-4 relative N²/density error this fixes relative to the
+    # previous flat-`0.1`-bar/m version.
     #
-    # NOTE (bug fix): the previous port used `-depth / 10.0`, which is a
-    # factor of 10 too small (it would put 1000 m at only 100 dbar). That
-    # under-stated the compressibility correction in the EOS. The correct
-    # dbar~m relationship is restored here. This matches the pressure that
-    # MITgcm's PRESSURE_FOR_EOS supplies to FIND_RHO_2D (hydrostatic pressure
-    # ~ rho*g*depth, i.e. ~depth in dbar for seawater).
-    pressure = -depth  # dbar
+    # NOTE (older bug fix, still applicable): the port before that used
+    # `-depth / 10.0`, which is a factor of 10 too small (it would put
+    # 1000 m at only 100 dbar). That under-stated the compressibility
+    # correction in the EOS -- see closed issue 1DMIX-002.
+    pressure = _depth_to_eos_pressure(depth, rho_const, gravity)
 
     if use_jmd95:
         # In-situ density anomaly + expansion coefficients, each cell at its
@@ -592,8 +654,10 @@ def compute_ggl90_buoyancy_frequency_squared(
     nz = len(theta)
     n_square = np.zeros(nz)
 
-    # Pressure at each cell center (dbar ~ depth in meters)
-    pressure = -depth
+    # Pressure at each cell center, matching MITgcm's real EOS pressure
+    # exactly -- see `_depth_to_eos_pressure` (1DMIX-039) rather than a flat
+    # "1 dbar per metre".
+    pressure = _depth_to_eos_pressure(depth, rho_const, gravity)
 
     if use_jmd95:
         # Compute in-situ density at all levels

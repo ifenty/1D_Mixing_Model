@@ -21,6 +21,7 @@ from typing import Tuple
 from .kpp_parameters import KPPParameters
 from .kpp_routines import wscale, ri_iwmix, build_wscale_lookup_tables
 from .kpp_shortwave import swfrac
+from .kpp_salt_plume import plume_frac
 
 
 def diagnose_bl_depth(
@@ -36,6 +37,8 @@ def diagnose_bl_depth(
     wmt: np.ndarray,
     wst: np.ndarray,
     config: KPPParameters,
+    boplume: float = 0.0,
+    sp_depth: float = 0.0,
 ) -> Tuple[float, float, float, float, int, np.ndarray]:
     """
     Diagnose boundary layer depth using bulk Richardson criterion.
@@ -66,6 +69,16 @@ def diagnose_bl_depth(
         Velocity scale lookup tables
     config : KPPParameters
         KPP configuration
+    boplume : float, optional
+        Surface haline buoyancy forcing from salt plumes, boplume(1)
+        [m^2/s^3] (kpp_forcing_surf.F's SALT_PLUME_VOLUME-undef branch).
+        Only used when config.use_salt_plume is True; default 0.0 is a
+        true no-op (matches MITgcm's own boplume=0 initialization,
+        kpp_forcing_surf.F:181-184).
+    sp_depth : float, optional
+        Salt plume penetration (e-folding) depth, SPDepth [m]
+        (pkg/salt_plume/salt_plume_calc_depth.F). Only used when
+        config.use_salt_plume is True.
 
     Returns
     -------
@@ -108,6 +121,14 @@ def diagnose_bl_depth(
             bfsfc = bo + bosol * frac_absorbed
         else:
             bfsfc = bo + bosol
+
+        # Salt-plume haline buoyancy forcing (1DMIX-034 part 2). MITgcm
+        # bldepth (kpp_routines.F:534-549) evaluates SALT_PLUME_FRAC at
+        # this trial level with fact=hbf and the RAW (negative) zgrid(kl)
+        # -- the same (depth, fact) convention as the swfrac call above,
+        # confirmed against kpp_forcing_surf.F/salt_plume_frac.F.
+        if config.use_salt_plume:
+            bfsfc = bfsfc + boplume * plume_frac(zgrid[kl], config.hbf, sp_depth)[0]
 
         stable_flag = 0.5 + np.sign(bfsfc) * 0.5
         sigma = stable_flag + (1.0 - stable_flag) * config.epsilon
@@ -219,6 +240,12 @@ def diagnose_bl_depth(
         bfsfc = bo + bosol * frac_absorbed
     else:
         bfsfc = bo + bosol
+    # Salt-plume haline buoyancy forcing (1DMIX-034 part 2). MITgcm
+    # bldepth (kpp_routines.F:730-744) evaluates SALT_PLUME_FRAC here with
+    # fact=minusone and the positive trial hbl -- the same (depth, fact)
+    # convention as the swfrac call above (fact=minusone there too).
+    if config.use_salt_plume:
+        bfsfc = bfsfc + boplume * plume_frac(np.array([hbl]), -1.0, sp_depth)[0]
     stable = 0.5 + np.sign(bfsfc) * 0.5
     bfsfc = np.sign(bfsfc) * max(config.phepsi, abs(bfsfc))
 
@@ -254,6 +281,11 @@ def diagnose_bl_depth(
         bfsfc = bo + bosol * frac_absorbed
     else:
         bfsfc = bo + bosol
+    # Salt-plume haline buoyancy forcing (1DMIX-034 part 2), final (post-
+    # limit) recomputation -- mirrors kpp_routines.F:867-881, same
+    # fact=minusone/positive-hbl convention as the pre-limit call above.
+    if config.use_salt_plume:
+        bfsfc = bfsfc + boplume * plume_frac(np.array([hbl]), -1.0, sp_depth)[0]
     stable = 0.5 + np.sign(bfsfc) * 0.5
     bfsfc = np.sign(bfsfc) * max(config.phepsi, abs(bfsfc))
 

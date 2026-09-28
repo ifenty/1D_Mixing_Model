@@ -162,9 +162,14 @@ class KPPAdapter(MixingSchemeAdapter):
         diagnostics = {
             'hbl': kpp_output.hbl,
             'ustar': kpp_output.ustar,
+            'bo': kpp_output.bo,
+            'bosol': kpp_output.bosol,
             'bfsfc': kpp_output.bfsfc,
             'bulk_ri': kpp_output.bulk_ri,
             'shear_sq': kpp_output.shear_sq,
+            'buoy_freq_sq': kpp_output.buoy_freq_sq,
+            'dVsq': kpp_output.dVsq,
+            'Ritop': kpp_output.Ritop,
         }
 
         return MixingOutput(

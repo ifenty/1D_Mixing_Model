@@ -186,6 +186,12 @@ c     boplume(nx,ny,Nrp1)  - surface haline buoyancy forcing        (m^2/s^3)
       _RL vddiff( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy, 0:Nrp1, mdiff )
       _RL ghat  ( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy, Nr            )
       _RL hbl   ( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy                )
+C     1DMIX-025: KPPMIX's real bulk Richardson number profile and final
+C     surface buoyancy forcing, now exposed as new output arguments
+C     (kpp_routines.F) purely for this project's OUTPUT_DIAGNOSTICS dump
+C     below -- not otherwise used, no existing behavior changed.
+      _RL kppRib   ( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy, Nr )
+      _RL kppBfsfc ( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy               )
 cph(
       _RL TTALPHA( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy, Nrp1 )
       _RL SSBETA ( 1-OLx:sNx+OLx, 1-OLy:sNy+OLy, Nrp1 )
@@ -565,6 +571,7 @@ CADJ STORE KPPdiffKzT(:,:,:,bi,bj) = comlev1_kpp, key = ikey
 #ifdef SHORTWAVE_HEATING
      O       kbl,
 #endif
+     O       kppRib, kppBfsfc,
      I       bi, bj, myTime, myIter, myThid )
 
 c-----------------------------------------------------------------------
@@ -601,7 +608,12 @@ c     Output KPP inputs and outputs for Python validation
 c-------------------------------------------------------------------
       CALL KPP_OUTPUT_VALIDATION(
      I     myIter, bi, bj, myThid,
-     I     ustar, bo, bosol, shsq, dbloc, dVsq, Ritop )
+     I     ustar, bo, bosol, shsq, dbloc, dVsq, Ritop,
+     I     kppRib, kppBfsfc
+#ifdef ALLOW_SALT_PLUME
+     I     , boplume
+#endif /* ALLOW_SALT_PLUME */
+     I     )
 
 #ifdef KPP_SMOOTH_VISC
 c     horizontal smoothing of vertical viscosity
@@ -814,7 +826,12 @@ C !ROUTINE: KPP_OUTPUT_VALIDATION
 C !INTERFACE:
       SUBROUTINE KPP_OUTPUT_VALIDATION(
      I     myIter, bi, bj, myThid,
-     I     ustar, bo, bosol, shsq, dbloc, dVsq, Ritop )
+     I     ustar, bo, bosol, shsq, dbloc, dVsq, Ritop,
+     I     kppRib, kppBfsfc
+#ifdef ALLOW_SALT_PLUME
+     I     , boplume
+#endif /* ALLOW_SALT_PLUME */
+     I     )
 
 C !DESCRIPTION: \bv
 C     *==========================================================*
@@ -836,6 +853,14 @@ C !USES:
 #include "KPP_PARAMS.h"
 #include "GRID.h"
 #include "FFIELDS.h"
+C     1DMIX-034 part 2: SALT_PLUME.h brings in PlumeMethod/Npower (INTEGER
+C     PARAMS common) and SaltPlumeDepth (DYNVARS common) as globals -- no
+C     dummy argument needed for those two, unlike boplume below (a LOCAL
+C     array in KPP_CALC, which Fortran scoping requires be passed in
+C     explicitly, exactly like ustar/bo/bosol above).
+#ifdef ALLOW_SALT_PLUME
+# include "SALT_PLUME.h"
+#endif /* ALLOW_SALT_PLUME */
 
 C !INPUT PARAMETERS:
       INTEGER myIter
@@ -852,6 +877,18 @@ C     (calls KPPMIX only, not STATEKPP/KPP_FORCING_SURF) can be fed the
 C     exact values the full model used.
       Real*8 dVsq(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
       Real*8 Ritop(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+C     1DMIX-025: kppRib/kppBfsfc are bldepth's real (post-KPPMIX) bulk
+C     Richardson number and final surface buoyancy forcing, passed in
+C     from KPP_CALC (a separate subroutine's locals -- Fortran scoping
+C     requires these as explicit arguments, not shared automatically).
+      Real*8 kppRib(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+      Real*8 kppBfsfc(1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+C     1DMIX-034 part 2: boplume(i,j,1) is a LOCAL array in KPP_CALC
+C     (declared under #ifdef ALLOW_SALT_PLUME, populated by
+C     KPP_FORCING_SURF), so it must be passed explicitly.
+#ifdef ALLOW_SALT_PLUME
+      Real*8 boplume(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nrp1)
+#endif /* ALLOW_SALT_PLUME */
 
 C !LOCAL VARIABLES:
       INTEGER i, j, k
@@ -1014,6 +1051,18 @@ C      Boolean/Logical flags - runtime parameters (output as 0 or 1)
         WRITE(standardMessageUnit,'(A)')
      &    'PARAM_KPPuseSWfrac3D=0'
        ENDIF
+C      1DMIX-034: runtime useSALT_PLUME flag (PARAMS.h). Without this,
+C      the Python port's replay harness has no way to know salt plume
+C      is active and silently defaults to allow_salt_plume/use_salt_plume
+C      =False, bypassing KPPParameters' own deliberate NotImplementedError
+C      guard for this exact case (salt-plume physics is not ported).
+       IF (useSALT_PLUME) THEN
+        WRITE(standardMessageUnit,'(A)')
+     &    'PARAM_useSALT_PLUME=1'
+       ELSE
+        WRITE(standardMessageUnit,'(A)')
+     &    'PARAM_useSALT_PLUME=0'
+       ENDIF
 C      CPP compile-time options (from KPP_OPTIONS.h)
 C      These determine which code paths were compiled in
 #ifdef KPP_GHAT
@@ -1095,6 +1144,36 @@ C      These determine which code paths were compiled in
        WRITE(standardMessageUnit,'(A)')
      &   'PARAM_vertically_smooth_ri=0'
 #endif
+C      1DMIX-034: compile-time ALLOW_SALT_PLUME (see PARAM_useSALT_PLUME
+C      above for the runtime flag; KPPParameters' NotImplementedError
+C      guard fires on either being true).
+#ifdef ALLOW_SALT_PLUME
+       WRITE(standardMessageUnit,'(A)') 'PARAM_allow_salt_plume=1'
+#else
+       WRITE(standardMessageUnit,'(A)') 'PARAM_allow_salt_plume=0'
+#endif
+C      1DMIX-034 part 2: PlumeMethod/Npower (SALT_PLUME.h, read from
+C      data.salt_plume by salt_plume_readparms.F) and the compile-time
+C      SALT_PLUME_VOLUME variant flag -- needed so KPPParameters'
+C      narrowed NotImplementedError guard can tell a ported
+C      configuration (PlumeMethod=1, Npower=0, SALT_PLUME_VOLUME unset)
+C      from an unported one, instead of firing/skipping unconditionally
+C      on use_salt_plume alone. PlumeMethod/Npower are only declared
+C      under ALLOW_SALT_PLUME (SALT_PLUME.h); SALT_PLUME_VOLUME is
+C      checked unconditionally like SALT_PLUME_SPLIT_BASIN elsewhere in
+C      this file, since it degrades to "undefined" (0) whenever
+C      SALT_PLUME_OPTIONS.h was never even included.
+#ifdef ALLOW_SALT_PLUME
+       WRITE(standardMessageUnit,'(A,I10)')
+     &   'PARAM_PlumeMethod=',PlumeMethod
+       WRITE(standardMessageUnit,'(A,I10)')
+     &   'PARAM_Npower=',Npower
+#endif
+#ifdef SALT_PLUME_VOLUME
+       WRITE(standardMessageUnit,'(A)') 'PARAM_salt_plume_volume=1'
+#else
+       WRITE(standardMessageUnit,'(A)') 'PARAM_salt_plume_volume=0'
+#endif
 C      Shortwave penetration
 #ifdef SHORTWAVE_HEATING
        WRITE(standardMessageUnit,'(A)') 'PARAM_shortwave_heating=1'
@@ -1145,6 +1224,12 @@ C      verbatim) and is kept as Qsw_raw for header-naming consistency.
      &   //'Qnet_raw,Qsw_raw,EmPmR_raw,saltFlux_raw'
        WRITE(standardMessageUnit,'(A)')
      &   'INPUT_CORIOLIS_HEADER,i,j,f'
+C      1DMIX-034 part 2: boplume(1)/SPDepth, needed for the salt-plume
+C      contribution to bfsfc (kpp_forcing_surf.F/salt_plume_frac.F).
+C      Guarded exactly like INPUT_SWATT below, emitting 0.0/0.0 when
+C      ALLOW_SALT_PLUME is not compiled in.
+       WRITE(standardMessageUnit,'(A)')
+     &   'INPUT_SALTPLUME_HEADER,i,j,boplume,sp_depth'
        WRITE(standardMessageUnit,'(A)')
      &   'INPUT_SWATT_HEADER,i,j,k,swatt'
        WRITE(standardMessageUnit,'(A)')
@@ -1154,8 +1239,6 @@ C      verbatim) and is kept as Qsw_raw for header-naming consistency.
      &   //'dVsq,Ritop'
        WRITE(standardMessageUnit,'(A)')
      &   'OUTPUT_HBL_HEADER,i,j,hbl'
-       WRITE(standardMessageUnit,'(A)')
-     &   'OUTPUT_TRUNCATED_HEADER,i,j,k_first_zero'
        WRITE(standardMessageUnit,'(A)')
      &   '===== KPP_DATA_HEADERS_END ====='
       ENDIF
@@ -1190,14 +1273,29 @@ C       Plus wind stress (tau/rho, unaffected by 1DMIX-013: mass2rUnit=
 C       recip_rhoConst here, so surfaceForcingU/V ARE genuinely tau/rho,
 C       external_forcing_surf.F:222,224) and the true raw heat/freshwater
 C       state (1DMIX-013 fix -- see INPUT_FORCING_HEADER comment above).
+C       1DMIX-022 fix: tau_x/tau_y are captured T-grid-centered (averaged
+C       with the i+1/j+1 neighbor), matching KPP_FORCING_SURF's own real
+C       ustar computation exactly (kpp_forcing_surf.F:191-208: ustar is
+C       derived from surfForcU(i,j)+surfForcU(i+1,j), NOT surfForcU(i,j)
+C       alone -- surfaceForcingU/V live on the U/V-grid, one point per
+C       cell edge, and must be averaged onto the T-grid center where KPP
+C       diagnoses ustar/hbl/etc). Dumping the raw single-edge value here
+C       (as before) is fine only when the wind-stress field barely varies
+C       between adjacent columns (true of this project's earlier 1D/
+C       idealized captures) -- for a real, spatially-varying field
+C       (global_oce_latlon's Trenberth climatology) it produced systematic
+C       ustar errors up to ~7%, which the 1% _validate_forcing_computation
+C       gate then reported as a false port defect.
 C       Format: INPUT_FORCING,i,j,ustar,bo,bosol,tau_x,tau_y,
 C               Qnet_raw,Qsw_raw,EmPmR_raw,saltFlux_raw
         WRITE(standardMessageUnit,202) 'INPUT_FORCING',i,j,
      &    ustar(i,j),
      &    bo(i,j),
      &    bosol(i,j),
-     &    surfaceForcingU(i,j,bi,bj),
-     &    surfaceForcingV(i,j,bi,bj),
+     &    0.5 _d 0*(surfaceForcingU(i,j,bi,bj)+
+     &              surfaceForcingU(i+1,j,bi,bj)),
+     &    0.5 _d 0*(surfaceForcingV(i,j,bi,bj)+
+     &              surfaceForcingV(i,j+1,bi,bj)),
      &    Qnet(i,j,bi,bj),
      &    Qsw(i,j,bi,bj),
      &    EmPmR(i,j,bi,bj),
@@ -1207,35 +1305,73 @@ C       Coriolis parameter
         WRITE(standardMessageUnit,203) 'INPUT_CORIOLIS',i,j,
      &    fCori(i,j,bi,bj)
 
+C       Salt-plume surface haline buoyancy forcing and its penetration
+C       depth (1DMIX-034 part 2). boplume(i,j,1) is KPP_FORCING_SURF's
+C       own already-computed local array (kpp_forcing_surf.F:262-273,
+C       the SALT_PLUME_VOLUME-undef branch -- confirmed #undef for
+C       seaice_obcs, SALT_PLUME_OPTIONS.h:24); SaltPlumeDepth is the
+C       existing per-column field already passed verbatim as KPPMIX's
+C       own SPDepth argument above (kpp_routines.F:32,116,391-392).
+C       Both purely additive captures -- no new Fortran computation.
+C       Guarded exactly like INPUT_SWATT below: boplume is only
+C       DECLARED under #ifdef ALLOW_SALT_PLUME (this file, ~line 205),
+C       so referencing it unconditionally would be a hard compile
+C       failure for any experiment (e.g. vermix) that does not compile
+C       salt plume in.
+#ifdef ALLOW_SALT_PLUME
+        WRITE(standardMessageUnit,211) 'INPUT_SALTPLUME',i,j,
+     &    boplume(i,j,1),
+     &    SaltPlumeDepth(i,j,bi,bj)
+#else
+        WRITE(standardMessageUnit,211) 'INPUT_SALTPLUME',i,j,
+     &    0. _d 0,
+     &    0. _d 0
+#endif
+
 C       Shortwave attenuation profile (KPPMIX direct "I" argument
 C       whenever SHORTWAVE_HEATING is active; Nrp1 levels, from
-C       FFIELDS.h, already included above)
+C       FFIELDS.h, already included above).
+C       1DMIX-028 fix: SWFrac3D is only DECLARED in FFIELDS.h under
+C       #ifdef SHORTWAVE_HEATING (model/inc/FFIELDS.h:144-153) -- this
+C       WRITE previously referenced it unconditionally, a latent bug
+C       invisible for every experiment tested so far (all had
+C       SHORTWAVE_HEATING defined) but a hard compile failure
+C       ("no IMPLICIT type") for vermix's own stock KPP config, which
+C       doesn't define it. Guard with the same #ifdef this file already
+C       uses at line ~1099 for PARAM_shortwave_heating; write zero swatt
+C       when undefined, matching export_kpp_input_for_fortran.py's own
+C       existing all-zero fallback for this exact case.
+#ifdef SHORTWAVE_HEATING
         DO k = 1, Nr+1
          WRITE(standardMessageUnit,208) 'INPUT_SWATT',i,j,k,
      &     SWFrac3D(i,j,k,bi,bj)
         ENDDO
+#else
+        DO k = 1, Nr+1
+         WRITE(standardMessageUnit,208) 'INPUT_SWATT',i,j,k,
+     &     0. _d 0
+        ENDDO
+#endif
 
 C       --- OUTPUT OUTPUTS ---
-C       KPP mixing coefficients (at interfaces, k=1..Nr)
-C       Stop at depth where all outputs are zero
+C       1DMIX-033 fix: OUTPUT_DIAGNOSTICS (shear_sq, buoy_freq_sq, Ri,
+C       dVsq, Ritop) is written in its OWN full loop, unconditionally
+C       for every level. Previously this write sat inside the SAME loop
+C       as OUTPUT_MIXING and was skipped by OUTPUT_MIXING's own
+C       all-zero truncation check (below) -- but shsq/dbloc/dVsq/Ritop
+C       are raw physical quantities that exist at every level regardless
+C       of whether KPP's mixing *enhancement* (visc_az/diff_kz/ghat) has
+C       decayed to exactly zero there. Confirmed on a real capture
+C       (vermix, 1DMIX-032/033): whenever OUTPUT_MIXING truncates at the
+C       very first level (a genuinely common case for a shallow-hbl,
+C       weakly-forced column), the old single-loop code wrote ZERO
+C       OUTPUT_DIAGNOSTICS lines for the entire column/timestep, even
+C       though the real shsq/dbloc/Ritop were nonzero and physically
+C       reasonable throughout. This split is purely additive: it adds
+C       OUTPUT_DIAGNOSTICS lines that were previously silently dropped
+C       and does not change a single byte of any line that was already
+C       written (same formats 207, same values, same per-level order).
         DO k = 1, Nr
-C        Check if all KPP outputs are zero
-         IF ( KPPviscAz(i,j,k,bi,bj) .EQ. 0. .AND.
-     &        KPPdiffKzS(i,j,k,bi,bj) .EQ. 0. .AND.
-     &        KPPdiffKzT(i,j,k,bi,bj) .EQ. 0. .AND.
-     &        KPPghat(i,j,k,bi,bj) .EQ. 0. ) THEN
-C         All outputs zero - mark truncation and exit loop
-          WRITE(standardMessageUnit,206) 'OUTPUT_TRUNCATED',i,j,k
-          GOTO 100
-         ENDIF
-
-C        Format: OUTPUT_MIXING,i,j,k,visc_az,diff_kz_s,diff_kz_t,ghat
-         WRITE(standardMessageUnit,204) 'OUTPUT_MIXING',i,j,k,
-     &     KPPviscAz(i,j,k,bi,bj),
-     &     KPPdiffKzS(i,j,k,bi,bj),
-     &     KPPdiffKzT(i,j,k,bi,bj),
-     &     KPPghat(i,j,k,bi,bj)
-
 C        Format: OUTPUT_DIAGNOSTICS,i,j,k,shear_sq,buoy_freq_sq,
 C                richardson,dVsq,Ritop
 C        Compute Richardson number: Ri = N²/S²
@@ -1259,14 +1395,60 @@ C        KPP_FORCING_SURF.
      &      dVsq(i,j,k),
      &      Ritop(i,j,k)
          ENDIF
+
+C        1DMIX-025: kppRib is bldepth's own real bulk Richardson number
+C        (kpp_routines.F, now exposed via KPPMIX's new output argument
+C        added for this issue) -- dumped unconditionally alongside the
+C        diagnostics above so the Python port's own Rib profile can be
+C        compared directly against real ground truth, distinguishing a
+C        genuine port defect from inert near-zero-denominator noise.
+         WRITE(standardMessageUnit,209) 'OUTPUT_RIB',i,j,k,
+     &     kppRib(i,j,k)
         ENDDO
 
-C       Label for early exit from k loop
- 100    CONTINUE
+C       KPP mixing coefficients (at interfaces, k=1..Nr)
+C       1DMIX-035 fix: previously stopped at the first level where all 4
+C       outputs happened to be exactly zero, on the assumption that KPP's
+C       enhancement is genuinely background/zero below where it truncates.
+C       That assumption is false: pkg/kpp/kpp_routines.F::Ri_iwmix adds
+C       the background viscosity/diffusivity (viscArNr(1)/diffusKzS/T)
+C       UNCONDITIONALLY at every real interior level regardless of KPP's
+C       own shear/convective enhancement (kpp_routines.F:1206-1208), so
+C       KPPviscAz/KPPdiffKzS/KPPdiffKzT can only be legitimately zero at
+C       the surface face (k=1, Ri_iwmix's own explicit diffus(i,0,*)=0
+C       convention) or at/below the real seafloor (maskC-masked) -- never
+C       at a genuinely wet interior level. Confirmed directly on
+C       global_oce_latlon's full-year capture: this early-exit fired at
+C       the very first level (where ghat alone can legitimately be zero,
+C       satisfying the old all-4-zero check) for 83.5% of wet columns,
+C       discarding every deeper level's real, nonzero background-floor
+C       data. Same bug class as 1DMIX-033's OUTPUT_DIAGNOSTICS fix; same
+C       fix here: write unconditionally for every level. KPPviscAz/
+C       KPPdiffKzS/KPPdiffKzT/KPPghat are already the final maskC-masked
+C       arrays, so this is exactly as safe as 1DMIX-033's fix -- no
+C       existing correctly-written line changes, only previously-
+C       discarded real data is now written.
+        DO k = 1, Nr
+C        Format: OUTPUT_MIXING,i,j,k,visc_az,diff_kz_s,diff_kz_t,ghat
+         WRITE(standardMessageUnit,204) 'OUTPUT_MIXING',i,j,k,
+     &     KPPviscAz(i,j,k,bi,bj),
+     &     KPPdiffKzS(i,j,k,bi,bj),
+     &     KPPdiffKzT(i,j,k,bi,bj),
+     &     KPPghat(i,j,k,bi,bj)
+        ENDDO
 
 C       Boundary layer depth (scalar per column)
         WRITE(standardMessageUnit,205) 'OUTPUT_HBL',i,j,
      &    KPPhbl(i,j,bi,bj)
+
+C       1DMIX-025: bldepth's final (post-LimitHblStable-clamp) surface
+C       buoyancy forcing, exposed via KPPMIX's new kppBfsfc output
+C       argument -- lets the Python port's own bfsfc/hlimit computation
+C       be checked against real ground truth for weakly-forced columns
+C       where bfsfc is extremely close to zero (see 1DMIX-025's seaice_obcs
+C       finding).
+        WRITE(standardMessageUnit,210) 'OUTPUT_BFSFC',i,j,
+     &    kppBfsfc(i,j)
 
        ENDDO
       ENDDO
@@ -1285,6 +1467,9 @@ C     Format specifications (E25.16 for high precision)
  206  FORMAT(A,2(',',I3),',',I3)
  207  FORMAT(A,3(',',I3),5(',',E25.16))
  208  FORMAT(A,3(',',I3),',',E25.16)
+ 209  FORMAT(A,3(',',I3),',',E25.16)
+ 210  FORMAT(A,2(',',I3),',',E25.16)
+ 211  FORMAT(A,2(',',I3),2(',',E25.16))
 
       RETURN
       END

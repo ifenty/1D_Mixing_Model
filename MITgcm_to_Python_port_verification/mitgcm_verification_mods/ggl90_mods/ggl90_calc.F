@@ -127,12 +127,37 @@ C                        (floored by diffKrNrS, an intermediate used only to
 C                        derive GGL90diffKr), this is the real momentum
 C                        viscosity value (1DMIX-016)
       _RL GGL90viscOutput  (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+C     GGL90riOutput/GGL90shearOutput (1DMIX-028): RiNumber and
+C     verticalShear(i,j), saved per level across the k-loop for the
+C     Python-validation dump -- both are otherwise a scalar/2D scratch
+C     overwritten every k iteration and never previously retained. Added
+C     to directly ground-truth the diff_kz/TKEPrandtlNumber-level residual
+C     found when first testing GGL90 on a real multi-column, real-
+C     bathymetry grid (global_oce_latlon), rather than continuing to infer
+C     RiNumber/verticalShear indirectly from output-only ratios.
+      _RL GGL90riOutput    (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+      _RL GGL90shearOutput (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
 C     tkeBeforeCopy :: GGL90TKE captured on entry, before this call
 C     modifies it in place (both the explicit partial update inside the
 C     k-loop below and the implicit tridiagonal solve later overwrite
 C     GGL90TKE), so the Python-validation dump can report TKE(t) (input)
 C     separately from TKE(t+1) (output, the mutated common on exit).
       _RL tkeBeforeCopy    (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+C     IDEMIXgTKEOutput (1DMIX-025): copy of IDEMIX_gTKE (dissipation of
+C     internal-wave energy, the additional TKE source term IDEMIX adds --
+C     see S/R GGL90_IDEMIX) for the Python-validation dump below. Declared
+C     and zeroed UNCONDITIONALLY (mirrors GGL90viscOutput's own pattern)
+C     so this stays a build-time no-op for every experiment without
+C     ALLOW_GGL90_IDEMIX defined: IDEMIX_gTKE itself only exists inside
+C     the #ifdef below, but the validation-dump call site and its new
+C     OUTPUT_IDEMIX row are shared, unconditional code (every other
+C     GGL90_OUTPUT_VALIDATION field follows this same always-present,
+C     conditionally-filled convention). The Python port has no IDEMIX
+C     physics at all (confirmed: GGL90/ggl90_parameters.py's use_idemix
+C     flag is declared but never read anywhere else) -- this capture is
+C     harness-only, quantifying the real, expected physics gap, not
+C     feeding a Python-side IDEMIX implementation.
+      _RL IDEMIXgTKEOutput (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
 #ifdef ALLOW_GGL90_IDEMIX
       _RL hFacI            (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
 C     IDEMIX_gTKE :: dissipation of internal wave energy is a source
@@ -294,6 +319,9 @@ C     Initialize local fields
          rMixingLength(i,j,k)     = 0. _d 0
          GGL90visctmp(i,j,k)      = 0. _d 0
          GGL90viscOutput(i,j,k)   = 0. _d 0
+         GGL90riOutput(i,j,k)     = 0. _d 0
+         GGL90shearOutput(i,j,k)  = 0. _d 0
+         IDEMIXgTKEOutput(i,j,k)  = 0. _d 0
          KappaE(i,j,k)            = 0. _d 0
          TKEPrandtlNumber(i,j,k)  = 1. _d 0
          GGL90mixingLength(i,j,k) = GGL90mixingLengthMin
@@ -594,6 +622,17 @@ C     compute Prandtl number (always greater than 1)
           prTemp          = 6.6 _d 0 * MIN( RiNumber, IDEMIX_RiNumber )
           TKEPrandtlNumber(i,j,k) = MIN(10. _d 0,prTemp)
           TKEPrandtlNumber(i,j,k) = MAX( oneRL,TKEPrandtlNumber(i,j,k) )
+C     1DMIX-025: GGL90riOutput/GGL90shearOutput (1DMIX-028) were only ever
+C     filled in the ELSE (non-IDEMIX) branch below -- a real, latent gap
+C     invisible until now since no useIDEMIX=.TRUE. capture existed yet.
+C     Filled here identically so ri_number/vertical_shear stay meaningful
+C     (not silently 0) for an IDEMIX-enabled capture too.
+          GGL90riOutput(i,j,k)    = RiNumber
+          GGL90shearOutput(i,j,k) = verticalShear(i,j)
+C     IDEMIXgTKEOutput (1DMIX-025): IDEMIX_gTKE(i,j,k) itself, the real
+C     additional TKE source term this run's physics includes and the
+C     Python port does not -- see this array's declaration above.
+          IDEMIXgTKEOutput(i,j,k) = IDEMIX_gTKE(i,j,k)
          ENDDO
         ENDDO
        ELSE
@@ -605,6 +644,8 @@ C     compute Prandtl number (always greater than 1)
           prTemp = 1. _d 0
           IF ( RiNumber .GE. 0.2 _d 0 ) prTemp = 5. _d 0 * RiNumber
           TKEPrandtlNumber(i,j,k) = MIN(10. _d 0,prTemp)
+          GGL90riOutput(i,j,k)    = RiNumber
+          GGL90shearOutput(i,j,k) = verticalShear(i,j)
          ENDDO
         ENDDO
 #ifdef ALLOW_GGL90_IDEMIX
@@ -1201,7 +1242,9 @@ C-------------------------------------------------------------------
       CALL GGL90_OUTPUT_VALIDATION(
      I     myIter, bi, bj, myThid,
      I     tkeBeforeCopy, GGL90viscOutput, GGL90mixingLength,
-     I     uStarSquare )
+     I     uStarSquare, sigmaR,
+     I     GGL90riOutput, GGL90shearOutput, TKEPrandtlNumber,
+     I     IDEMIXgTKEOutput )
 
 #endif /* ALLOW_GGL90 */
 
@@ -1216,7 +1259,9 @@ C !ROUTINE: GGL90_OUTPUT_VALIDATION
 C !INTERFACE:
       SUBROUTINE GGL90_OUTPUT_VALIDATION(
      I     myIter, bi, bj, myThid,
-     I     tkeBefore, viscAzOut, mixingLength, uStarSq )
+     I     tkeBefore, viscAzOut, mixingLength, uStarSq, sigmaRArg,
+     I     riOut, shearOut, prandtlOut,
+     I     idemixGTKEOut )
 
 C !DESCRIPTION: \bv
 C     *==========================================================*
@@ -1227,6 +1272,33 @@ C     | Mirrors kpp_calc.F's KPP_OUTPUT_VALIDATION: CSV-formatted|
 C     | STDOUT at E25.16 precision, single-step-replay layout    |
 C     | (tkeBefore = TKE(t), input; GGL90TKE (post-call) =       |
 C     | TKE(t+1), output).                                       |
+C     | sigmaRArg (1DMIX-024): GGL90_CALC's own dummy argument   |
+C     | sigmaR, plumbed through unmodified -- the one genuinely  |
+C     | missing input needed by the standalone GGL90_CALC        |
+C     | replay driver (mitgcm_verification_mods/                 |
+C     | ggl90_standalone_driver/), which cannot derive it from   |
+C     | theta/salt without injecting a wrong-EOS confound (this  |
+C     | run uses eosType='MDJWF', but the Python port only       |
+C     | implements JMD95).                                       |
+C     | riOut/shearOut/prandtlOut (1DMIX-028): RiNumber,          |
+C     | verticalShear(i,j) and TKEPrandtlNumber(i,j,k), all       |
+C     | already computed inside the main non-IDEMIX Prandtl-      |
+C     | number branch but previously discarded (scalar/2D         |
+C     | scratch, or simply never passed) -- exposed to directly   |
+C     | ground-truth the diff_kz-level residual found when first  |
+C     | testing GGL90 on a real multi-column grid. Also now filled|
+C     | in the useIDEMIX branch (1DMIX-025 fix -- previously left |
+C     | at 0 there, a latent gap invisible before any IDEMIX      |
+C     | capture existed).                                          |
+C     | idemixGTKEOut (1DMIX-025): IDEMIX_gTKE(i,j,k), the real    |
+C     | additional TKE source term (dissipation of internal-wave   |
+C     | energy) that ALLOW_GGL90_IDEMIX adds -- always declared/   |
+C     | zeroed by the caller, only actually nonzero for a          |
+C     | useIDEMIX=.TRUE. run. This project's Python GGL90 port has |
+C     | no IDEMIX physics (confirmed: GGL90/ggl90_parameters.py's  |
+C     | use_idemix flag is declared but never read elsewhere) --   |
+C     | this capture quantifies the real, expected physics gap     |
+C     | rather than feeding a Python-side implementation.           |
 C     *==========================================================*
 C \ev
 
@@ -1248,6 +1320,11 @@ C !INPUT PARAMETERS:
       Real*8 viscAzOut(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
       Real*8 mixingLength(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
       Real*8 uStarSq  (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      Real*8 sigmaRArg(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+      Real*8 riOut     (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+      Real*8 shearOut  (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+      Real*8 prandtlOut(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
+      Real*8 idemixGTKEOut(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
 
 C !LOCAL VARIABLES:
       INTEGER i, j, k
@@ -1256,6 +1333,21 @@ C !LOCAL VARIABLES:
       LOGICAL firstCall
       SAVE firstCall
       DATA firstCall /.TRUE./
+C     landColumn (1DMIX-025): true iff every level of this column is dry.
+C     Checking only maskC(i,j,1,bi,bj) (the former test here) correctly
+C     identifies land for every previously-tested experiment, where a
+C     dry column is dry at every level by construction of bathymetry-only
+C     (bottom-up) masking -- but it is WRONG for ALLOW_SHELFICE experiments
+C     (e.g. isomip/input.obcs) where useShelfIce masks level 1 (and levels
+C     down to kTopC-1) for a column that is real open ocean, wet from
+C     kTopC down to the seafloor: the old check silently CYCLE'd past
+C     every such column, omitting the entire ice-shelf-covered half of
+C     isomip's domain (4 of 8 tiles, 0 captured columns) from this
+C     capture, not just zero-filling it. Checking every level instead is
+C     provably a no-op for any experiment without ALLOW_SHELFICE-style
+C     top masking (confirmed byte-identical for vermix's rebuild, see
+C     1DMIX-025 evidence).
+      LOGICAL landColumn
 CEOP
 
       IF ( firstCall ) THEN
@@ -1290,6 +1382,12 @@ CEOP
      &   'PARAM_viscAz=',viscArNr(1)
        WRITE(standardMessageUnit,'(A,E16.8)')
      &   'PARAM_diffKzS=',diffKrNrS(1)
+C      Real tracer timestep (1DMIX-015): the TKE forward step below uses
+C      deltaTloc = dTtracerLev(kSrf) (see this file's TKE update), not the
+C      captured netCDF's raw iteration-index time coordinate. Capture it so
+C      the Python replay harness can read the real dt instead of guessing.
+       WRITE(standardMessageUnit,'(A,E16.8)')
+     &   'PARAM_deltaT=',dTtracerLev(1)
        WRITE(standardMessageUnit,'(A,I10)')
      &   'PARAM_mxlMaxFlag=',mxlMaxFlag
        IF (GGL90_dirichlet) THEN
@@ -1301,6 +1399,17 @@ CEOP
         WRITE(standardMessageUnit,'(A)') 'PARAM_calcMeanVertShear=1'
        ELSE
         WRITE(standardMessageUnit,'(A)') 'PARAM_calcMeanVertShear=0'
+       ENDIF
+C      1DMIX-028: mxlSurfFlag was never captured -- the Python port's own
+C      mxl_surf_flag handling (ggl90_scheme_specific.py's
+C      "mixing_length[1] = dz[0]" override) is already correct, but this
+C      harness gap silently left it defaulted to False for every capture,
+C      invisible until global_oce_latlon (the first experiment tested with
+C      mxlSurfFlag=.TRUE.).
+       IF (mxlSurfFlag) THEN
+        WRITE(standardMessageUnit,'(A)') 'PARAM_mxlSurfFlag=1'
+       ELSE
+        WRITE(standardMessageUnit,'(A)') 'PARAM_mxlSurfFlag=0'
        ENDIF
        WRITE(standardMessageUnit,'(A)')
      &   '===== GGL90_MODEL_PARAMETERS_END ====='
@@ -1323,11 +1432,18 @@ CEOP
        WRITE(standardMessageUnit,'(A)')
      &   'INPUT_TKE_HEADER,i,j,k,tke_before'
        WRITE(standardMessageUnit,'(A)')
+     &   'INPUT_SIGMAR_HEADER,i,j,k,sigma_r'
+       WRITE(standardMessageUnit,'(A)')
      &   'INPUT_FORCING_HEADER,i,j,tau_x,tau_y,u_star_sq'
        WRITE(standardMessageUnit,'(A)')
      &   'OUTPUT_MIXING_HEADER,i,j,k,visc_az,diff_kz,mixing_length'
        WRITE(standardMessageUnit,'(A)')
      &   'OUTPUT_TKE_HEADER,i,j,k,tke_after'
+       WRITE(standardMessageUnit,'(A)')
+     &   'OUTPUT_RI_SHEAR_PR_HEADER,i,j,k,ri_number,vertical_shear,'
+     &   //'tke_prandtl_number'
+       WRITE(standardMessageUnit,'(A)')
+     &   'OUTPUT_IDEMIX_HEADER,i,j,k,idemix_gtke'
        WRITE(standardMessageUnit,'(A)')
      &   '===== GGL90_DATA_HEADERS_END ====='
       ENDIF
@@ -1340,7 +1456,13 @@ CEOP
       DO j = jMin, jMax
        DO i = iMin, iMax
 
-        IF ( maskC(i,j,1,bi,bj) .EQ. 0. ) CYCLE
+C       Skip only truly dry (land) columns -- see landColumn declaration
+C       above (1DMIX-025) for why this checks every level, not just k=1.
+        landColumn = .TRUE.
+        DO k = 1, Nr
+         IF ( maskC(i,j,k,bi,bj) .NE. 0. ) landColumn = .FALSE.
+        ENDDO
+        IF ( landColumn ) CYCLE
 
         DO k = 1, Nr
          WRITE(standardMessageUnit,200) 'INPUT_STATE',i,j,k,
@@ -1350,6 +1472,8 @@ CEOP
      &     vVel(i,j,k,bi,bj)
          WRITE(standardMessageUnit,201) 'INPUT_TKE',i,j,k,
      &     tkeBefore(i,j,k)
+         WRITE(standardMessageUnit,201) 'INPUT_SIGMAR',i,j,k,
+     &     sigmaRArg(i,j,k)
         ENDDO
 
         WRITE(standardMessageUnit,202) 'INPUT_FORCING',i,j,
@@ -1364,6 +1488,12 @@ CEOP
      &     mixingLength(i,j,k)
          WRITE(standardMessageUnit,201) 'OUTPUT_TKE',i,j,k,
      &     GGL90TKE(i,j,k,bi,bj)
+         WRITE(standardMessageUnit,203) 'OUTPUT_RI_SHEAR_PR',i,j,k,
+     &     riOut(i,j,k),
+     &     shearOut(i,j,k),
+     &     prandtlOut(i,j,k)
+         WRITE(standardMessageUnit,201) 'OUTPUT_IDEMIX',i,j,k,
+     &     idemixGTKEOut(i,j,k)
         ENDDO
 
        ENDDO

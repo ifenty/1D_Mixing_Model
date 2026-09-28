@@ -16,7 +16,7 @@ Usage:
 Examples:
   python generate_kpp_validation_report.py \\
     KPP_port_validation/outputs_from_mitgcm/mitgcm_kpp_outputs_11k_1D.nc \\
-    KPP_port_validation/outputs_from_python/mitgcm_kpp_inputs_11k_1D_python.nc
+    KPP_port_validation/outputs_from_python/python_kpp_outputs_11k_1D.nc
 
   python generate_kpp_validation_report.py \\
     outputs/kpp_output_lab_sea_20260819.nc \\
@@ -77,6 +77,37 @@ def load_and_validate_datasets(file1: Path, file2: Path) -> Tuple[xr.Dataset, xr
     print(f"\nDimensions:")
     print(f"  MITgcm: time={len(ds1.time)}, x={len(ds1.x)}, y={len(ds1.y)}, z={len(ds1.z)}")
     print(f"  Python: time={len(ds2.time)}, x={len(ds2.x)}, y={len(ds2.y)}, z={len(ds2.z)}")
+
+    # 1DMIX-044 fix: a Python output covering only a leading subsample of
+    # MITgcm's own full time range (e.g. run_kpp_from_netcdf_input.py run
+    # with --last set, as this project's own lab_sea_6mo regression test
+    # does for tractability -- a 222 MB, heavily-chunked capture where the
+    # untruncated 4368-timestep replay is impractical to regenerate on every
+    # report refresh) previously crashed this function's caller with a
+    # numpy broadcast ValueError the first time this script was ever run
+    # against such a pair (confirmed directly: ds1.sizes != ds2.sizes was
+    # already detected and warned about, but nothing downstream acted on
+    # it). Mirrors run_kpp_from_netcdf_input.py::main's own established
+    # slicing convention for its "Quick Comparison" section
+    # (`mit_ds.isel(time=slice(first_t, last_t + 1))`): if the Python
+    # dataset's time axis is a strict prefix of MITgcm's, restrict MITgcm to
+    # that same prefix before any statistic is computed, rather than either
+    # crashing or silently padding/truncating incorrectly.
+    if len(ds1.time) != len(ds2.time):
+        if len(ds2.time) < len(ds1.time):
+            n_mitgcm_full, n_python = len(ds1.time), len(ds2.time)
+            print(f"  ℹ️  Python output covers only the first {n_python} of "
+                  f"{n_mitgcm_full} MITgcm timesteps -- restricting MITgcm to that "
+                  "same leading subsample for comparison.")
+            ds1 = ds1.isel(time=slice(0, n_python))
+            metadata['time_subsample_note'] = (
+                f"Python output covers only the first {n_python} of "
+                f"{n_mitgcm_full} timesteps; MITgcm restricted to the same "
+                "leading subsample for this comparison."
+            )
+        else:
+            print("  ⚠️  WARNING: Python output has MORE timesteps than MITgcm -- "
+                  "cannot restrict; comparison will fail downstream.")
 
     if ds1.sizes != ds2.sizes:
         print(f"  ⚠️  WARNING: Dimension mismatch!")
@@ -276,6 +307,13 @@ def generate_pdf_report(ds1: xr.Dataset, ds2: xr.Dataset, metadata: Dict,
             f"Timesteps: {len(ds1.time)}",
             f"Grid: {len(ds1.x)} × {len(ds1.y)} × {len(ds1.z)}",
         ]
+        # 1DMIX-044: surface load_and_validate_datasets's leading-time-
+        # subsample restriction (see that function's own docstring/comment)
+        # on the title page itself, not only in stdout, so a PDF reader
+        # sees the report covers fewer than the capture's full timestep
+        # count.
+        if 'time_subsample_note' in metadata:
+            info_text.extend(["", f"Note: {metadata['time_subsample_note']}"])
 
         fig.text(0.5, y_pos, '\n'.join(info_text),
                 ha='center', va='top', fontsize=11, family='monospace')

@@ -109,7 +109,10 @@ def test_ggl90_kappa_at_top_face_no_averaging():
     n_square = np.zeros(nz)  # Dummy N² for this test
     shear_square = np.zeros(nz)  # Dummy S² for this test
 
-    kappa_m, kappa_h = compute_viscosity_diffusivity(
+    # 1DMIX-048: third return value (kappa_h_tendency) unused by this
+    # test -- it checks the diagnostic kappa_m/kappa_h staggering, which
+    # is unaffected by that fix.
+    kappa_m, kappa_h, _kappa_h_tendency = compute_viscosity_diffusivity(
         tke, mixing_length, mask, params, n_square, shear_square
     )
 
@@ -174,7 +177,9 @@ def test_ggl90_stable_prandtl_controls_tracer_diffusivity():
     params.alpha = 30.0
     tke = np.array([params.tke_min, 1.0])
     mixing_length = np.array([params.mixing_length_min, 1.0])
-    kappa_m, kappa_h = compute_viscosity_diffusivity(
+    # 1DMIX-048: third return value (kappa_h_tendency) unused by this
+    # test -- see note above.
+    kappa_m, kappa_h, _kappa_h_tendency = compute_viscosity_diffusivity(
         tke=tke,
         mixing_length=mixing_length,
         mask=np.ones(2),

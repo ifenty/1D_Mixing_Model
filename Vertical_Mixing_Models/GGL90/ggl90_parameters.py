@@ -49,7 +49,15 @@ class GGL90Parameters:
         -----------
         tke_min : float
             Minimum TKE for regularization and background processes (m²/s²)
-            Default: 1.0e-11 (ECCOv4 R4 uses 1.0e-7)
+            Default: 1.0e-11 (ECCOv4 R4 uses 1.0e-7). Exactly 0.0 is a
+            valid, MITgcm-supported value (1DMIX-025: MITgcm's own
+            GGL90TKEmin=0. namelist setting, used by e.g. the
+            global_ocean.90x40x15/global_ocean.cs32x15 IDEMIX
+            experiments) -- ggl90_calc.F's own only use of it is
+            MAX(TKE,GGL90TKEmin), i.e. a non-negativity floor with no
+            positive lower bound, matching this port's every tke_min
+            use site (always inside sqrt(max(tke,tke_min)) or
+            max(tke,tke_min), never a divisor).
         tke_surf_min : float
             Minimum surface TKE (m²/s²)
             Default: 1.0e-4
@@ -94,12 +102,29 @@ class GGL90Parameters:
         calc_mean_vert_shear : bool
             Calculate mean vertical shear at grid center (vs shear of mean flow)
             Default: False
+            NOTE (1DMIX-040): this flag is captured/mapped from MITgcm's real
+            `calcMeanVertShear` but is currently a dead placeholder -- no
+            physics function in this module reads it; the port always uses
+            the "shear of mean flow" formula regardless of this value. First
+            observed to matter for `global_ocean.cs32x15` (the first capture
+            to set it `.TRUE.`), but that capture's comparison is dominated
+            by a separate, larger confound (see `use_idemix`'s own note)
+            before this flag's own standalone effect could be isolated.
 
         Optional Features:
         -----------------
         use_idemix : bool
             Enable IDEMIX internal wave model
             Default: False
+            NOTE (1DMIX-025/1DMIX-040): also a dead placeholder -- no
+            physics function in this module reads it (confirmed no IDEMIX_E
+            state, no IDEMIX_gTKE TKE source term, no IDEMIX-modified
+            Prandtl number anywhere in this port). Real MITgcm IDEMIX
+            physics is a full internal-wave-energy model (Olbers & Eden
+            2013, `pkg/ggl90/ggl90_idemix.F`) -- a substantial, separate
+            extension, not implemented here. The gap is captured and
+            decisively quantified (not merely asserted) against a real
+            `useIDEMIX=.TRUE.` MITgcm run in 1DMIX-025's own evidence.
         use_langmuir : bool
             Enable Langmuir circulation parameterization
             Default: False
@@ -170,8 +195,8 @@ class GGL90Parameters:
 
     def _validate(self):
         """Validate parameter values."""
-        if self.tke_min <= 0:
-            raise ValueError("tke_min must be greater than zero")
+        if self.tke_min < 0:
+            raise ValueError("tke_min must not be less than zero")
         if self.tke_bottom < 0:
             raise ValueError("tke_bottom must not be less than zero")
         if self.mixing_length_min <= 0:

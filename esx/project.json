@@ -1,7 +1,7 @@
 {
   "version": 1,
   "project_id": "1d-mixing-experiments",
-  "project_name": "1D Ocean Mixing Model — GGL90/KPP MITgcm Validation",
+  "project_name": "1D Ocean Mixing Model \u2014 GGL90/KPP MITgcm Validation",
   "mission": "Maintain bit-accurate Python ports of MITgcm's GGL90 (prognostic TKE closure) and KPP (diagnostic Ri-based boundary-layer scheme) vertical-mixing parameterizations, validated against MITgcm Fortran reference output across physically distinct ocean scenarios.",
   "source_paths": [
     "Vertical_Mixing_Models/main",
@@ -21,16 +21,52 @@
   "output_paths": [
     "Vertical_Mixing_Models/output"
   ],
+  "mirrored_paths": [
+    {
+      "canonical": "MITgcm_to_Python_port_verification/mitgcm_verification_mods/kpp_mods/kpp_calc.F",
+      "mirrors": [
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/1D_ocean_ice_column/code_validation/kpp_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_oce_latlon/code_validation/kpp_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/lab_sea/code_validation/kpp_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/seaice_obcs/code_validation/kpp_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/kpp_code_validation/kpp_calc.F"
+      ]
+    },
+    {
+      "canonical": "MITgcm_to_Python_port_verification/mitgcm_verification_mods/kpp_mods/kpp_routines.F",
+      "mirrors": [
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/1D_ocean_ice_column/code_validation/kpp_routines.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_oce_latlon/code_validation/kpp_routines.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/lab_sea/code_validation/kpp_routines.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/seaice_obcs/code_validation/kpp_routines.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/kpp_code_validation/kpp_routines.F"
+      ]
+    },
+    {
+      "canonical": "MITgcm_to_Python_port_verification/mitgcm_verification_mods/ggl90_mods/ggl90_calc.F",
+      "mirrors": [
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/1D_ocean_ice_column/ggl90_code_validation/ggl90_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_oce_latlon/code_validation/ggl90_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/code_validation/ggl90_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/isomip/code_validation/ggl90_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_90x40x15/code_validation/ggl90_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_cs32x15/code_validation/ggl90_calc.F"
+      ]
+    }
+  ],
+  "archive_paths": [
+    "docs/OLD_MARKDOWN_NO_LONGER_NEEDED"
+  ],
   "external_inputs": [
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D_python.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_1000_0820T0946.nc",
-    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_1000_0820T0946_python.nc",
-    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend_rawflux_fix.nc"
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend_rawflux_fix.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_global_oce_latlon_720.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_mitgcm/mitgcm_kpp_outputs_global_oce_latlon_720.nc"
   ],
   "environment_variables": [
-    "PATH",
     "CONDA_PREFIX",
     "CONDA_DEFAULT_ENV",
     "PYTHONPATH",

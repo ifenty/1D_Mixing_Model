@@ -59,12 +59,13 @@ python3 scripts/parse_mitgcm_ggl90_split.py vermix/output_ggl90/output.txt vermi
 python3 scripts/run_ggl90_from_netcdf_input.py vermix/output_ggl90/mitgcm_ggl90_inputs.nc -o <out>.nc
 ```
 
-## Known blocking finding (as of first capture, 2026-09-16)
+## Historical finding, fixed (as of first capture, 2026-09-16)
 
-See open issue **1DMIX-014**: the Python port's mixing-length limiter
-(`GGL90MixingLength.compute()`) applies `GGL90mixingLengthMin` as an
+See closed issue **1DMIX-014** (resolved; stale "open"/"blocking" wording here
+noted and corrected under 1DMIX-044): the Python port's mixing-length limiter
+(`GGL90MixingLength.compute()`) previously applied `GGL90mixingLengthMin` as an
 unconditional floor to every level, but MITgcm's own two-way-sweep algorithm
 (`mxlMaxFlag` 2/3) only uses that parameter as a boundary seed/cap term, not
 a blanket floor -- causing large, systematic mixing-length (and downstream
-viscosity/diffusivity/TKE) mismatches. Do not treat comparisons run before
-that is fixed as validation evidence.
+viscosity/diffusivity/TKE) mismatches. Fixed; every GGL90 comparison in this
+directory's own `reports/` (1DMIX-042/1DMIX-044) postdates the fix.

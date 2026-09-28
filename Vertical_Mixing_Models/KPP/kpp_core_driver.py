@@ -18,6 +18,7 @@ Reference:
     Reviews of Geophysics, 32(4), 363-403.
 """
 
+import warnings
 import numpy as np
 from typing import Tuple, Optional, Dict
 from dataclasses import dataclass
@@ -62,7 +63,17 @@ class KPPOutput:
     bulk_ri: Optional[np.ndarray] = None
     bfsfc: Optional[float] = None
     ustar: Optional[float] = None
+    bo: Optional[float] = None
+    bosol: Optional[float] = None
     shear_sq: Optional[np.ndarray] = None
+
+    # KPPMIX's other direct "I"-only arguments (unmodified by KPPMIX; exposed
+    # so callers -- e.g. exporting a Python-driven column to the standalone
+    # Fortran KPPMIX driver -- can replay the identical inputs without
+    # duplicating this method's derivation of them).
+    buoy_freq_sq: Optional[np.ndarray] = None  # dbloc
+    dVsq: Optional[np.ndarray] = None
+    Ritop: Optional[np.ndarray] = None
 
     # Forcing validation (Python-computed values when validate_forcing=True)
     ustar_computed: Optional[float] = None
@@ -128,6 +139,13 @@ class KPPDriver:
         ustar_forcing: float = None,
         bo_forcing: float = None,
         bosol_forcing: float = None,
+        # Optional: salt-plume haline buoyancy forcing (1DMIX-034 part 2).
+        # Independent of the ustar/bo/bosol forcing-mode switch above --
+        # always additive, default 0.0 is a true no-op regardless of mode
+        # (matches MITgcm's own boplume=0 initialization) and only takes
+        # effect when self.params.use_salt_plume is True.
+        boplume_forcing: float = 0.0,
+        sp_depth_forcing: float = 0.0,
     ) -> KPPOutput:
         """
         Compute KPP mixing coefficients for a single column.
@@ -189,6 +207,13 @@ class KPPDriver:
             Pre-computed turbulent buoyancy forcing [m^2/s^3] (for MITgcm validation)
         bosol_forcing : float, optional
             Pre-computed radiative buoyancy forcing [m^2/s^3] (for MITgcm validation)
+        boplume_forcing : float, optional
+            Surface haline buoyancy forcing from salt plumes, boplume(1)
+            [m^2/s^3] (1DMIX-034). Default 0.0 (no salt plume). Only
+            takes effect when self.params.use_salt_plume is True.
+        sp_depth_forcing : float, optional
+            Salt plume penetration (e-folding) depth, SPDepth [m]
+            (1DMIX-034). Default 0.0.
 
         Notes
         -----
@@ -331,7 +356,10 @@ class KPPDriver:
             bosol_computed_out = bosol
 
         # ===== Step 3: Compute velocity shear =====
-        shsq, dvsq = self._compute_shear(u_vel, v_vel, depth, cell_thickness)
+        shsq, dvsq = self._compute_shear(
+            u_vel, v_vel, depth, cell_thickness,
+            dbloc=dbloc, tau_x=tau_x, tau_y=tau_y, ustar=ustar,
+        )
 
         # ===== Step 4: Interior mixing (Ri-based) =====
         # Background diffusivities
@@ -356,7 +384,8 @@ class KPPDriver:
 
         hbl, bfsfc, stable, casea, kbl, bulk_ri = diagnose_bl_depth(
             dvsq, dbloc, Ritop, ustar, bo, bosol, coriol,
-            depth, cell_thickness, self.wmt, self.wst, self.params
+            depth, cell_thickness, self.wmt, self.wst, self.params,
+            boplume=boplume_forcing, sp_depth=sp_depth_forcing,
         )
 
         # ===== Step 6: Boundary layer mixing =====
@@ -419,7 +448,12 @@ class KPPDriver:
             hbl=hbl,
             bfsfc=bfsfc,
             ustar=ustar,
+            bo=bo,
+            bosol=bosol,
             shear_sq=shsq,
+            buoy_freq_sq=dbloc,
+            dVsq=dvsq,
+            Ritop=Ritop,
             bulk_ri=bulk_ri,
             ustar_computed=ustar_computed_out,
             bo_computed=bo_computed_out,
@@ -555,12 +589,25 @@ class KPPDriver:
             )
 
         if errors:
-            raise ValueError(
+            # 1DMIX-022: warn rather than raise. This check is a diagnostic
+            # comparison only -- the caller always uses ustar_forcing/
+            # bo_forcing/bosol_forcing (MITgcm's own captured ground truth,
+            # not this method's Python recomputation) for the actual mixing
+            # computation regardless of outcome (see compute_mixing's Mode 3
+            # branch). Raising here previously aborted the whole column via
+            # the caller's broad exception handling, discarding hbl/visc_az/
+            # etc. that have nothing to do with this specific check -- fatal
+            # for realistic multi-column configurations (spherical grid +
+            # climatological surface restoring) this check wasn't written
+            # against, where it fails for the large majority of columns
+            # (see open_issues.md 1DMIX-022 for the root causes found so far).
+            warnings.warn(
                 "Forcing computation validation FAILED (tolerance: 1%):\n" +
                 "\n".join(errors) +
                 "\n\nThe Python _compute_surface_forcing does not match MITgcm's "
                 "kpp_forcing_surf.F within 1% relative error tolerance. "
-                "This indicates a potential issue in the forcing computation port."
+                "Continuing with MITgcm's captured ustar/bo/bosol for the "
+                "mixing computation (see 1DMIX-022)."
             )
 
     def _compute_shear(
@@ -569,6 +616,10 @@ class KPPDriver:
         v_vel: np.ndarray,
         depth: np.ndarray,
         cell_thickness: np.ndarray,
+        dbloc: Optional[np.ndarray] = None,
+        tau_x: Optional[float] = None,
+        tau_y: Optional[float] = None,
+        ustar: Optional[float] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute velocity shear terms.
@@ -589,11 +640,114 @@ class KPPDriver:
             dv = v_vel[k] - v_vel[k+1]
             shsq[k] = du**2 + dv**2
 
-        # Shear relative to surface
+        if self.params.estimate_uref:
+            u_ref, v_ref = self._estimate_reference_velocity(
+                u_vel, v_vel, depth, cell_thickness, dbloc, tau_x, tau_y, ustar
+            )
+        else:
+            u_ref, v_ref = u_vel[0], v_vel[0]
+
+        # Shear relative to reference (surface, or resolution-independent
+        # reference level when estimate_uref is enabled)
         dvsq = np.zeros(nz)
         for k in range(nz):
-            du = u_vel[0] - u_vel[k]
-            dv = v_vel[0] - v_vel[k]
+            du = u_ref - u_vel[k]
+            dv = v_ref - v_vel[k]
             dvsq[k] = du**2 + dv**2
 
         return shsq, dvsq
+
+    def _estimate_reference_velocity(
+        self,
+        u_vel: np.ndarray,
+        v_vel: np.ndarray,
+        depth: np.ndarray,
+        cell_thickness: np.ndarray,
+        dbloc: np.ndarray,
+        tau_x: Optional[float],
+        tau_y: Optional[float],
+        ustar: Optional[float],
+    ) -> Tuple[float, float]:
+        """
+        Resolution-independent reference velocity for dVsq (KPP_ESTIMATE_UREF).
+
+        Corresponds to KPP_FORCING_SURF's KPP_ESTIMATE_UREF branch
+        (kpp_forcing_surf.F:309-419). Gets rid of the vertical-resolution
+        dependence of the surface shear term by estimating uRef/vRef at a
+        mixed-layer-depth-dependent reference level zRef, rather than simply
+        using the top-cell velocity. tau_x/tau_y here are already tau/rho
+        (this driver's convention), matching surfaceForcingU/V exactly.
+        """
+        if tau_x is None or tau_y is None or ustar is None:
+            raise ValueError(
+                "estimate_uref=True requires tau_x, tau_y, and ustar "
+                "(KPP_ESTIMATE_UREF needs the surface momentum forcing, "
+                "not just a pre-computed scalar ustar magnitude)."
+            )
+
+        params = self.params
+        nz = len(u_vel)
+
+        interfaces = np.zeros(nz + 1)
+        interfaces[1:] = -np.cumsum(cell_thickness)
+
+        # Shallowest level where the local buoyancy gradient exceeds dB_dz
+        # (kpp_forcing_surf.F:326-334); defaults to the deepest level if none.
+        k_tmp = nz - 1
+        for k in range(nz - 1):
+            grad = dbloc[k] / (depth[k] - depth[k+1])
+            if grad > params.dB_dz:
+                k_tmp = k
+                break
+
+        if k_tmp == nz - 1:
+            z_ref = abs(interfaces[nz])
+        elif k_tmp == 0:
+            dbdz2 = dbloc[0] / (depth[0] - depth[1])
+            z_ref = cell_thickness[0] * params.dB_dz / dbdz2
+        else:
+            dbdz1 = dbloc[k_tmp-1] / (depth[k_tmp-1] - depth[k_tmp])
+            dbdz2 = dbloc[k_tmp] / (depth[k_tmp] - depth[k_tmp+1])
+            z_ref = abs(interfaces[k_tmp]) + cell_thickness[k_tmp] * (
+                params.dB_dz - dbdz1
+            ) / max(params.phepsi, dbdz2 - dbdz1)
+
+        # Roughness length scale z0 (kpp_forcing_surf.F:320-372)
+        drf1 = cell_thickness[0]
+        z_fac = abs(interfaces[2]) * np.log(interfaces[2] / interfaces[1]) / cell_thickness[1]
+        du01 = u_vel[0] - u_vel[1]
+        dv01 = v_vel[0] - v_vel[1]
+        temp1 = du01**2 + dv01**2
+        temp2 = np.sqrt(temp1) if temp1 >= params.epsln**2 else params.epsln
+        z0 = drf1 * (z_fac - temp2 * params.vonk / ustar)
+        z0 = max(z0, params.phepsi)
+
+        z_ref = max(params.epsilon * z_ref, z0)
+
+        # Estimate uRef/vRef (kpp_forcing_surf.F:380-419)
+        u_ref = u_vel[0]
+        v_ref = v_vel[0]
+        if z_ref < drf1:
+            ustar_x = tau_x / drf1
+            ustar_y = tau_y / drf1
+            temp1 = ustar_x**2 + ustar_y**2
+            temp2 = np.sqrt(temp1) if temp1 >= params.epsln**2 else params.epsln
+            temp2 = ustar * (
+                np.log(z_ref / drf1) + z0 / z_ref - z0 / drf1
+            ) / params.vonk / temp2
+            u_ref = u_ref + ustar_x * temp2
+            v_ref = v_ref + ustar_y * temp2
+        else:
+            u_ref = u_ref * drf1
+            v_ref = v_ref * drf1
+            k = 1
+            while k < nz - 1 and abs(interfaces[k+1]) <= z_ref:
+                u_ref += cell_thickness[k] * u_vel[k]
+                v_ref += cell_thickness[k] * v_vel[k]
+                k += 1
+            u_ref += max(0.0, z_ref - abs(interfaces[k])) * u_vel[k]
+            v_ref += max(0.0, z_ref - abs(interfaces[k])) * v_vel[k]
+            u_ref = u_ref / z_ref
+            v_ref = v_ref / z_ref
+
+        return u_ref, v_ref

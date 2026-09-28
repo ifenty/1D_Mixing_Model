@@ -12,6 +12,7 @@ This allows:
   - Clear provenance tracking
 """
 
+import re
 import sys
 import uuid
 import numpy as np
@@ -19,6 +20,38 @@ import xarray as xr
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Tuple
+
+# Fortran's fixed-width E-format (e.g. E16.8/E20.12, used throughout this
+# project's KPP validation WRITE statements) drops the "E" when the exponent
+# needs 3 digits to fit the field width, e.g. '0.105188567206-104' instead of
+# '0.105188567206E-104'. This silently breaks for vanishingly tiny (but
+# physically real) values like shsq at quiescent deep levels -- Python's
+# float() raises ValueError on the "E"-less form, which every call site here
+# was catching via a blanket except-continue, silently dropping the entire
+# line (including otherwise-valid sibling fields like dbloc/Ritop) and
+# leaving pre-initialized zeros in their place (1DMIX-012).
+_FORTRAN_BARE_EXPONENT = re.compile(r'^([+-]?\d*\.\d+)([+-]\d+)$')
+
+# kpp_calc.F's TIMESTEP header (format '(A,I10,A,I3,A,I3)') always carries the
+# tile indices BI=/BJ=, even for single-tile (nSx=nSy=1) experiments (where
+# they're always 1,1). Every dict key parsed below is tile-local (i,j)
+# -- for a real multi-tile domain (e.g. global_oce_latlon's nSx=2,nSy=2),
+# distinct tiles reuse the same local index range, so tile-local keys alone
+# collide across tiles and silently overwrite each other. This regex lets
+# parse_mitgcm_split remap tile-local (i,j) to global (x,y) using the
+# tile size inferred from the data itself (see _remap_tiles_to_global).
+_TIMESTEP_HEADER = re.compile(r'^TIMESTEP=\s*(-?\d+),BI=\s*(\d+),BJ=\s*(\d+)$')
+
+
+def _ffloat(s: str) -> float:
+    """float() that also accepts Fortran's E-less bare-exponent form."""
+    try:
+        return float(s)
+    except ValueError:
+        m = _FORTRAN_BARE_EXPONENT.match(s.strip())
+        if m:
+            return float(m.group(1) + 'E' + m.group(2))
+        raise
 
 
 def parse_mitgcm_split(output_file: Path,
@@ -57,9 +90,15 @@ def parse_mitgcm_split(output_file: Path,
     nx_max, ny_max, nz_max = 0, 0, 0
     timesteps = set()
 
+    # Tile-local index bookkeeping for the BI/BJ -> global (x,y) remap
+    # (see _TIMESTEP_HEADER / _remap_tiles_to_global).
+    local_i_max, local_j_max = 0, 0
+    bi_max, bj_max = 1, 1
+
     with open(output_file, 'r') as f:
         in_validation_block = False
         current_timestep = None
+        current_bi, current_bj = 1, 1
 
         for line in f:
             line = line.strip()
@@ -86,14 +125,26 @@ def parse_mitgcm_split(output_file: Path,
                 continue
 
             if in_validation_block and line.startswith('TIMESTEP='):
-                current_timestep = int(line.split(',')[0].split('=')[1].strip())
+                m = _TIMESTEP_HEADER.match(line)
+                if m:
+                    current_timestep = int(m.group(1))
+                    current_bi, current_bj = int(m.group(2)), int(m.group(3))
+                else:
+                    # Older/malformed header without BI=/BJ= -- treat as
+                    # the single-tile case (kpp_calc.F always emits BI/BJ
+                    # in current captures, so this should not trigger).
+                    current_timestep = int(line.split(',')[0].split('=')[1].strip())
+                    current_bi, current_bj = 1, 1
+                bi_max = max(bi_max, current_bi)
+                bj_max = max(bj_max, current_bj)
                 timesteps.add(current_timestep)
 
                 if current_timestep not in timestep_data:
                     timestep_data[current_timestep] = {
                         'state': {}, 'forcing': {}, 'coriolis': {},
                         'mixing': {}, 'hbl': {}, 'diagnostics': {},
-                        'swatt': {}
+                        'swatt': {}, 'bulk_ri': {}, 'bfsfc_final': {},
+                        'saltplume': {}
                     }
                 continue
 
@@ -113,28 +164,29 @@ def parse_mitgcm_split(output_file: Path,
             tag = parts[0]
 
             try:
-                # nx_max/ny_max are normally sized off INPUT_STATE, but an
-                # outputs-only capture (e.g. the standalone-subroutine
-                # driver, which dumps no INPUT_* lines) still needs correct
-                # sizing -- OUTPUT_MIXING/OUTPUT_HBL carry the same i,j.
-                if tag in ('INPUT_STATE', 'OUTPUT_MIXING', 'OUTPUT_HBL'):
+                # Every dict below is keyed by (bi, bj, i, j[, k]) -- i,j
+                # are tile-local (0-based). local_i_max/local_j_max/bi_max/
+                # bj_max let _remap_tiles_to_global convert these to global
+                # (x,y) after the full file has been parsed (see module
+                # docstring on _TIMESTEP_HEADER for why this is needed).
+                if tag in ('INPUT_STATE', 'OUTPUT_MIXING', 'OUTPUT_HBL',
+                           'OUTPUT_RIB', 'OUTPUT_BFSFC'):
                     i, j = int(parts[1])-1, int(parts[2])-1
-                    nx_max, ny_max = max(nx_max, i+1), max(ny_max, j+1)
+                    local_i_max, local_j_max = max(local_i_max, i), max(local_j_max, j)
 
                 if tag == 'INPUT_STATE':
                     i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    nx_max, ny_max = max(nx_max, i+1), max(ny_max, j+1)
-                    timestep_data[current_timestep]['state'][(i,j,k)] = {
-                        'theta': float(parts[4]), 'salt': float(parts[5]),
-                        'u': float(parts[6]), 'v': float(parts[7])
+                    timestep_data[current_timestep]['state'][(current_bi,current_bj,i,j,k)] = {
+                        'theta': _ffloat(parts[4]), 'salt': _ffloat(parts[5]),
+                        'u': _ffloat(parts[6]), 'v': _ffloat(parts[7])
                     }
 
                 elif tag == 'INPUT_FORCING':
                     i, j = int(parts[1])-1, int(parts[2])-1
                     forcing_dict = {
-                        'ustar': float(parts[3]), 'bo': float(parts[4]),
-                        'bosol': float(parts[5]), 'tau_x': float(parts[6]),
-                        'tau_y': float(parts[7])
+                        'ustar': _ffloat(parts[3]), 'bo': _ffloat(parts[4]),
+                        'bosol': _ffloat(parts[5]), 'tau_x': _ffloat(parts[6]),
+                        'tau_y': _ffloat(parts[7])
                     }
                     # Optional: raw surface fluxes for forcing validation (backwards compatible)
                     # Legacy extended format (pre-1DMIX-013 fix; still emitted by
@@ -153,58 +205,97 @@ def parse_mitgcm_split(output_file: Path,
                     #   INPUT_FORCING,i,j,ustar,bo,bosol,tau_x,tau_y,
                     #     Qnet_raw,Qsw_raw,EmPmR_raw,saltFlux_raw
                     if len(parts) == 12:
-                        forcing_dict['qnet_raw'] = float(parts[8])
-                        forcing_dict['qsw_raw'] = float(parts[9])
-                        forcing_dict['empmr_raw'] = float(parts[10])
-                        forcing_dict['saltflux_raw'] = float(parts[11])
+                        forcing_dict['qnet_raw'] = _ffloat(parts[8])
+                        forcing_dict['qsw_raw'] = _ffloat(parts[9])
+                        forcing_dict['empmr_raw'] = _ffloat(parts[10])
+                        forcing_dict['saltflux_raw'] = _ffloat(parts[11])
                     elif len(parts) >= 11:
-                        forcing_dict['q_net'] = float(parts[8])
-                        forcing_dict['q_sw'] = float(parts[9])
-                        forcing_dict['fw_flux'] = float(parts[10])
-                    timestep_data[current_timestep]['forcing'][(i,j)] = forcing_dict
+                        forcing_dict['q_net'] = _ffloat(parts[8])
+                        forcing_dict['q_sw'] = _ffloat(parts[9])
+                        forcing_dict['fw_flux'] = _ffloat(parts[10])
+                    timestep_data[current_timestep]['forcing'][(current_bi,current_bj,i,j)] = forcing_dict
 
                 elif tag == 'INPUT_CORIOLIS':
                     i, j = int(parts[1])-1, int(parts[2])-1
-                    timestep_data[current_timestep]['coriolis'][(i,j)] = float(parts[3])
+                    timestep_data[current_timestep]['coriolis'][(current_bi,current_bj,i,j)] = _ffloat(parts[3])
+
+                elif tag == 'INPUT_SALTPLUME':
+                    # 1DMIX-034 part 2: boplume(i,j,1) and SaltPlumeDepth(i,j),
+                    # both already computed locally by KPP_FORCING_SURF/salt
+                    # plume depth diagnosis -- new, purely additive capture
+                    # (kpp_calc.F INPUT_FORCING dump, guarded #ifdef
+                    # ALLOW_SALT_PLUME exactly like INPUT_SWATT, emitting
+                    # 0.0/0.0 when compiled out). Needed to port the
+                    # salt-plume term in diagnose_bl_depth's bfsfc.
+                    i, j = int(parts[1])-1, int(parts[2])-1
+                    timestep_data[current_timestep]['saltplume'][(current_bi,current_bj,i,j)] = {
+                        'boplume': _ffloat(parts[3]), 'sp_depth': _ffloat(parts[4])
+                    }
 
                 elif tag == 'INPUT_SWATT':
                     # KPPMIX direct "I" argument (bldepth) whenever
                     # SHORTWAVE_HEATING is active; k runs 1..Nr+1 (one
                     # more level than shsq/dbloc/dVsq/Ritop).
                     i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    timestep_data[current_timestep]['swatt'][(i,j,k)] = float(parts[4])
+                    timestep_data[current_timestep]['swatt'][(current_bi,current_bj,i,j,k)] = _ffloat(parts[4])
 
                 elif tag == 'OUTPUT_MIXING':
                     i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    timestep_data[current_timestep]['mixing'][(i,j,k)] = {
-                        'visc_az': float(parts[4]), 'diff_kz_s': float(parts[5]),
-                        'diff_kz_t': float(parts[6]), 'ghat': float(parts[7])
+                    timestep_data[current_timestep]['mixing'][(current_bi,current_bj,i,j,k)] = {
+                        'visc_az': _ffloat(parts[4]), 'diff_kz_s': _ffloat(parts[5]),
+                        'diff_kz_t': _ffloat(parts[6]), 'ghat': _ffloat(parts[7])
                     }
 
                 elif tag == 'OUTPUT_HBL':
                     i, j = int(parts[1])-1, int(parts[2])-1
-                    timestep_data[current_timestep]['hbl'][(i,j)] = float(parts[3])
+                    timestep_data[current_timestep]['hbl'][(current_bi,current_bj,i,j)] = _ffloat(parts[3])
 
                 elif tag == 'OUTPUT_DIAGNOSTICS':
                     i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
                     diag = {
-                        'shear_sq': float(parts[4]),
-                        'buoy_freq_sq': float(parts[5]),
-                        'richardson': float(parts[6])
+                        'shear_sq': _ffloat(parts[4]),
+                        'buoy_freq_sq': _ffloat(parts[5]),
+                        'richardson': _ffloat(parts[6])
                     }
                     # dVsq/Ritop: KPPMIX's direct "I"-only arguments, dumped
                     # verbatim (unmodified by KPPMIX) so the standalone
                     # KPPMIX-only harness can replay it without STATEKPP/
                     # KPP_FORCING_SURF. Older captures predate these columns.
                     if len(parts) >= 9:
-                        diag['dVsq'] = float(parts[7])
-                        diag['Ritop'] = float(parts[8])
-                    timestep_data[current_timestep]['diagnostics'][(i,j,k)] = diag
+                        diag['dVsq'] = _ffloat(parts[7])
+                        diag['Ritop'] = _ffloat(parts[8])
+                    timestep_data[current_timestep]['diagnostics'][(current_bi,current_bj,i,j,k)] = diag
+
+                elif tag == 'OUTPUT_RIB':
+                    # 1DMIX-025: bldepth's own real bulk Richardson number
+                    # (kpp_routines.F), exposed via KPPMIX's new output
+                    # argument -- ground truth for the Python port's own
+                    # Rib profile, distinct from 'richardson' above (which
+                    # is dbloc/shsq, the *local* Ri used by Ri_iwmix, not
+                    # bldepth's bulk Rib).
+                    i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
+                    timestep_data[current_timestep]['bulk_ri'][(current_bi,current_bj,i,j,k)] = _ffloat(parts[4])
+
+                elif tag == 'OUTPUT_BFSFC':
+                    # 1DMIX-025: bldepth's final (post-LimitHblStable-clamp)
+                    # surface buoyancy forcing, exposed via KPPMIX's new
+                    # kppBfsfc output argument.
+                    i, j = int(parts[1])-1, int(parts[2])-1
+                    timestep_data[current_timestep]['bfsfc_final'][(current_bi,current_bj,i,j)] = _ffloat(parts[3])
 
             except (ValueError, IndexError):
                 continue
 
-    print(f"  Parsed: {len(timesteps)} timesteps, grid {nx_max}×{ny_max}×{nz_max}")
+    # sNx/sNy (uniform per-tile size) inferred from the tile-local index
+    # range actually observed -- MITgcm's decomposition is exact (every
+    # tile is exactly sNx x sNy, no partial edge tiles), so the maximum
+    # local index seen over ALL tiles equals sNx-1/sNy-1.
+    sNx, sNy = local_i_max + 1, local_j_max + 1
+    nx_max, ny_max = bi_max * sNx, bj_max * sNy
+    timestep_data = _remap_tiles_to_global(timestep_data, sNx, sNy)
+
+    print(f"  Parsed: {len(timesteps)} timesteps, grid {nx_max}×{ny_max}×{nz_max}"
+          f" ({bi_max}×{bj_max} tiles of {sNx}×{sNy})")
 
     # Create datasets
     inputs_ds = _create_inputs_dataset(
@@ -222,6 +313,28 @@ def parse_mitgcm_split(output_file: Path,
     return inputs_ds, outputs_ds
 
 
+def _remap_tiles_to_global(timestep_data: Dict, sNx: int, sNy: int) -> Dict:
+    """Replace tile-local (bi,bj,i,j[,k]) dict keys with global (x,y[,k]).
+
+    x = (bi-1)*sNx + i, y = (bj-1)*sNy + j. For single-tile captures
+    (bi=bj=1 always) this is the identity map.
+    """
+    def remap(d: Dict) -> Dict:
+        out = {}
+        for key, value in d.items():
+            bi, bj = key[0], key[1]
+            rest = key[2:]
+            x = (bi - 1) * sNx + rest[0]
+            y = (bj - 1) * sNy + rest[1]
+            out[(x, y) + rest[2:]] = value
+        return out
+
+    return {
+        ts: {category: remap(d) for category, d in categories.items()}
+        for ts, categories in timestep_data.items()
+    }
+
+
 def _parse_parameters(f) -> Dict:
     """Parse KPP parameters from MITgcm output.
 
@@ -237,7 +350,10 @@ def _parse_parameters(f) -> Dict:
         'smooth_dens', 'smooth_visc', 'smooth_diff', 'estimate_uref',
         'match_diffusivities', 'match_derivatives', 'smooth_regularisation',
         'scale_shearmixing', 'exclude_shear_mix', 'exclude_doublediff',
-        'vertically_smooth_ri', 'shortwave_heating'
+        'vertically_smooth_ri', 'shortwave_heating',
+        'useSALT_PLUME', 'allow_salt_plume',
+        # 1DMIX-034 part 2: compile-time SALT_PLUME_VOLUME variant flag.
+        'salt_plume_volume'
     }
 
     for line in f:
@@ -254,7 +370,12 @@ def _parse_parameters(f) -> Dict:
                 if param_name in boolean_params:
                     # Store as int (0 or 1) since NetCDF doesn't support bool attributes
                     params[param_name] = int(value_str)
-                elif param_name in ('num_v_smooth_Ri', 'selectPenetratingSW'):
+                elif param_name in ('num_v_smooth_Ri', 'selectPenetratingSW',
+                                     # 1DMIX-034 part 2: integer salt-plume
+                                     # distribution parameters (SALT_PLUME.h),
+                                     # only emitted when ALLOW_SALT_PLUME is
+                                     # compiled in.
+                                     'PlumeMethod', 'Npower'):
                     params[param_name] = int(value_str)
                 else:
                     params[param_name] = float(value_str)
@@ -269,9 +390,9 @@ def _parse_grid(f) -> Dict:
             break
         if line.startswith('GRID_GEOM,'):
             parts = line.split(',')
-            drF.append(float(parts[2]))
-            rF.append(float(parts[3]))
-            rC.append(float(parts[4]))
+            drF.append(_ffloat(parts[2]))
+            rF.append(_ffloat(parts[3]))
+            rC.append(_ffloat(parts[4]))
     return {'nr': len(drF), 'drF': np.array(drF), 'rF': np.array(rF), 'rC': np.array(rC)}
 
 
@@ -325,6 +446,14 @@ def _create_inputs_dataset(timestep_data, grid_info, params,
     swatt = np.zeros((n_time, nx, ny, nz + 1))
     has_swatt = False
 
+    # Optional: salt-plume surface haline buoyancy forcing and its
+    # penetration depth (1DMIX-034 part 2). Scalar per column, like bo/
+    # bosol. Absent (all-zero, has_saltplume=False) for every capture
+    # that predates this fix or never compiled ALLOW_SALT_PLUME in.
+    boplume = np.zeros((n_time, nx, ny))
+    sp_depth = np.zeros((n_time, nx, ny))
+    has_saltplume = False
+
     # Fill arrays
     for t_idx, ts in enumerate(timesteps):
         ts_data = timestep_data[ts]
@@ -361,6 +490,11 @@ def _create_inputs_dataset(timestep_data, grid_info, params,
         for (i,j,k), val in ts_data.get('swatt', {}).items():
             swatt[t_idx, i, j, k] = val
             has_swatt = True
+
+        for (i,j), vals in ts_data.get('saltplume', {}).items():
+            boplume[t_idx, i, j] = vals['boplume']
+            sp_depth[t_idx, i, j] = vals['sp_depth']
+            has_saltplume = True
 
     # Coordinates
     coords = {
@@ -518,6 +652,30 @@ def _create_inputs_dataset(timestep_data, grid_info, params,
             )
         })
 
+    if has_saltplume:
+        data_vars['boplume'] = (['time', 'x', 'y'], boplume, {
+            'long_name': 'Surface haline buoyancy forcing from salt plumes',
+            'units': 'm^2/s^3',
+            'description': (
+                '1DMIX-034: boplume(i,j,1), KPP_FORCING_SURF\'s surface-'
+                'level (SALT_PLUME_VOLUME-undef branch) haline buoyancy '
+                'forcing from rejected brine (kpp_forcing_surf.F:262-273). '
+                'Direct KPPMIX "I" argument, needed whenever useSALT_PLUME '
+                'is active; 0.0 otherwise.'
+            )
+        })
+        data_vars['sp_depth'] = (['time', 'x', 'y'], sp_depth, {
+            'long_name': 'Salt plume penetration depth',
+            'units': 'm',
+            'description': (
+                '1DMIX-034: SaltPlumeDepth(i,j), the e-folding depth used '
+                'by SALT_PLUME_FRAC to distribute boplume vertically '
+                '(pkg/salt_plume/salt_plume_calc_depth.F). Direct KPPMIX '
+                '"I" argument (SPDepth), needed whenever useSALT_PLUME is '
+                'active; 0.0 otherwise.'
+            )
+        })
+
     ds = xr.Dataset(data_vars=data_vars, coords=coords)
 
     # Global attributes
@@ -534,6 +692,7 @@ def _create_inputs_dataset(timestep_data, grid_info, params,
         'present' if (has_raw_fluxes or has_raw_mitgcm_fields) else 'absent'
     )
     ds.attrs['swatt_data'] = 'present' if has_swatt else 'absent'
+    ds.attrs['saltplume_data'] = 'present' if has_saltplume else 'absent'
 
     # Model parameters
     for param_name, param_value in params.items():
@@ -561,7 +720,11 @@ def _create_outputs_dataset(timestep_data, grid_info,
     richardson = np.zeros((n_time, nx, ny, nz))
     dvsq = np.zeros((n_time, nx, ny, nz))
     ritop = np.zeros((n_time, nx, ny, nz))
+    bulk_ri = np.zeros((n_time, nx, ny, nz))
+    bfsfc_final = np.zeros((n_time, nx, ny))
     has_kppmix_direct_inputs = False
+    has_bulk_ri = False
+    has_bfsfc_final = False
 
     # Fill arrays
     for t_idx, ts in enumerate(timesteps):
@@ -584,6 +747,14 @@ def _create_outputs_dataset(timestep_data, grid_info,
                 dvsq[t_idx, i, j, k] = vals['dVsq']
                 ritop[t_idx, i, j, k] = vals['Ritop']
                 has_kppmix_direct_inputs = True
+
+        for (i,j,k), val in ts_data.get('bulk_ri', {}).items():
+            bulk_ri[t_idx, i, j, k] = val
+            has_bulk_ri = True
+
+        for (i,j), val in ts_data.get('bfsfc_final', {}).items():
+            bfsfc_final[t_idx, i, j] = val
+            has_bfsfc_final = True
 
     # Coordinates (matching inputs)
     coords = {
@@ -666,6 +837,33 @@ def _create_outputs_dataset(timestep_data, grid_info,
             'cell_location': 'interface'
         })
 
+    if has_bulk_ri:
+        data_vars['bulk_ri'] = (['time', 'x', 'y', 'z_iface'], bulk_ri, {
+            'long_name': "bldepth's real bulk Richardson number",
+            'units': 'dimensionless',
+            'description': (
+                '1DMIX-025: bldepth\'s own Rib(kl) = Ritop(kl)/(dVsq(kl)+vtsq(kl)) '
+                '(kpp_routines.F), exposed via a new KPPMIX output argument '
+                'added for this issue -- real ground truth, distinct from '
+                "'richardson' above (which is dbloc/shsq, the *local* Ri used "
+                'by the separate Ri_iwmix routine, not this bulk Rib).'
+            ),
+            'cell_location': 'interface'
+        })
+
+    if has_bfsfc_final:
+        data_vars['bfsfc_final'] = (['time', 'x', 'y'], bfsfc_final, {
+            'long_name': "bldepth's final surface buoyancy forcing",
+            'units': 'm^2/s^3',
+            'description': (
+                "1DMIX-025: bldepth's bfsfc AFTER the LimitHblStable Ekman/"
+                'Monin-Obukhov clamp is applied (the value used to compute '
+                'that clamp, not the earlier per-trial-level bfsfc used '
+                'inside the Rib search loop), exposed via a new KPPMIX '
+                'output argument added for this issue.'
+            )
+        })
+
     ds = xr.Dataset(data_vars=data_vars, coords=coords)
 
     # Global attributes
@@ -717,6 +915,9 @@ def _get_param_units(param: str) -> str:
         'deltaz': 'm^3/s^3', 'deltau': 'm/s',
         # Integer parameters
         'num_v_smooth_Ri': 'dimensionless',
+        # 1DMIX-034 part 2: salt-plume distribution parameters
+        'PlumeMethod': 'dimensionless', 'Npower': 'dimensionless',
+        'salt_plume_volume': 'boolean',
         # Boolean flags - runtime
         'KPP_ghatUseTotalDiffus': 'boolean',
         'KPPuseDoubleDiff': 'boolean',
@@ -803,6 +1004,11 @@ def _get_param_description(param: str) -> str:
         'deltau': 'Delta ustar in lookup table',
         # Integer parameters
         'num_v_smooth_Ri': 'Number of vertical smoothing passes for Richardson number',
+        # 1DMIX-034 part 2: salt-plume distribution parameters
+        'PlumeMethod': 'Salt plume vertical distribution method (1=power/uniform, '
+                       'this port only implements 1; 2=exp, 3=overshoot, 5=dump-at-top, 6=reverse-of-1)',
+        'Npower': 'Salt plume distribution power for PlumeMethod=1 (0=uniform, this port only implements 0)',
+        'salt_plume_volume': 'SALT_PLUME_VOLUME compile-time variant (accumulate boplume over levels, not implemented)',
         # Boolean flags - runtime
         'KPP_ghatUseTotalDiffus': 'Use total diffusivity (not just KPP) for ghat computation',
         'KPPuseDoubleDiff': 'Include double diffusion contributions',

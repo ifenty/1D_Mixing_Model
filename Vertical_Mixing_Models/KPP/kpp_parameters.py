@@ -135,9 +135,16 @@ class KPPParameters:
     use_sw_frac_3d: bool = False  # KPPuseSWfrac3D: spatially varying water type (not implemented)
 
     # ========== Salt plume (ALLOW_SALT_PLUME) ==========
-    allow_salt_plume: bool = False  # Compiled-in support (not implemented)
-    use_salt_plume: bool = False  # Runtime useSALT_PLUME (not implemented)
+    # 1DMIX-034 part 2: the salt-plume term IS ported (kpp_scheme_specific.py
+    # ::diagnose_bl_depth / kpp_salt_plume.py::plume_frac), but only for the
+    # default PlumeMethod=1/Npower=0 linear-ramp distribution with
+    # SALT_PLUME_VOLUME unset -- see plume_method/npower/salt_plume_volume
+    # below and __post_init__'s narrowed guard.
+    allow_salt_plume: bool = False  # Compiled-in support
+    use_salt_plume: bool = False  # Runtime useSALT_PLUME
     salt_plume_volume: bool = False  # SALT_PLUME_VOLUME variant (not implemented)
+    plume_method: int = 1  # PlumeMethod (SALT_PLUME.h); only 1 is ported
+    npower: int = 0  # Npower for PlumeMethod=1; only 0 (uniform ramp) is ported
 
     # ========== Shelf ice (ALLOW_SHELFICE) ==========
     allow_shelfice: bool = False  # Ice-shelf boundary layer coupling (not implemented)
@@ -181,8 +188,31 @@ class KPPParameters:
         # These modules are flagged for future work but not yet ported; fail loudly
         # rather than silently producing physics that ignores the requested option.
         unimplemented = []
-        if self.allow_salt_plume or self.use_salt_plume:
-            unimplemented.append("salt plume (allow_salt_plume/use_salt_plume)")
+        # Only the runtime flag matters: kpp_forcing_surf.F initializes boplume=p0=0.0
+        # for every level and only overwrites it inside `IF (useSALT_PLUME)` -- being
+        # merely compiled in (ALLOW_SALT_PLUME) with useSALT_PLUME=.FALSE. at runtime
+        # is physically a no-op (confirmed directly against pkg/kpp/kpp_forcing_surf.F).
+        #
+        # 1DMIX-034 part 2: the salt-plume bfsfc term is now ported
+        # (diagnose_bl_depth/plume_frac), but only for PlumeMethod=1,
+        # Npower=0 (SALT_PLUME_FRAC's default linear-ramp branch,
+        # salt_plume_frac.F:93-107) with SALT_PLUME_VOLUME unset (the
+        # simpler single-surface-level boplume branch, kpp_forcing_surf.F
+        # :262-273) -- confirmed the only configuration any experiment
+        # this project has captured actually uses (seaice_obcs's own
+        # data.salt_plume overrides neither PlumeMethod nor Npower from
+        # their MITgcm defaults). Narrow the guard to fire only for a
+        # genuinely unported configuration, not unconditionally on
+        # use_salt_plume alone.
+        if self.use_salt_plume and (
+            self.plume_method != 1 or self.npower != 0 or self.salt_plume_volume
+        ):
+            unimplemented.append(
+                "salt plume with PlumeMethod="
+                f"{self.plume_method}/Npower={self.npower}/"
+                f"SALT_PLUME_VOLUME={self.salt_plume_volume} "
+                "(only PlumeMethod=1, Npower=0, SALT_PLUME_VOLUME unset is ported)"
+            )
         if self.allow_shelfice:
             unimplemented.append("shelf ice coupling (allow_shelfice)")
         if unimplemented:

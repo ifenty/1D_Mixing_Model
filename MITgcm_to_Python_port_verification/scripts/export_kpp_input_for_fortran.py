@@ -80,7 +80,7 @@ def export(inputs_nc: Path, outputs_nc: Path, out_txt: Path) -> None:
     drF = inputs_ds['cell_thickness'].values
     rC = inputs_ds['depth'].values
     for k in range(nr):
-        lines.append(f"{drF[k]!r} {rC[k]!r}")
+        lines.append(f"{float(drF[k])!r} {float(rC[k])!r}")
 
     # Scalar KPP_PARAMS.h parameters, in a fixed order the Fortran driver expects
     for name in SCALAR_PARAMS:
@@ -105,17 +105,17 @@ def export(inputs_nc: Path, outputs_nc: Path, out_txt: Path) -> None:
     for t in range(ntime):
         lines.append(f"{int(timesteps[t])}")
         lines.append(
-            f"{ustar[t,0,0]!r} {bo[t,0,0]!r} {bosol[t,0,0]!r} "
-            f"{coriol[t,0,0]!r}"
+            f"{float(ustar[t,0,0])!r} {float(bo[t,0,0])!r} "
+            f"{float(bosol[t,0,0])!r} {float(coriol[t,0,0])!r}"
         )
         for k in range(nr):
             lines.append(
-                f"{shsq[t,0,0,k]!r} {dvsq[t,0,0,k]!r} "
-                f"{dbloc[t,0,0,k]!r} {ritop[t,0,0,k]!r}"
+                f"{float(shsq[t,0,0,k])!r} {float(dvsq[t,0,0,k])!r} "
+                f"{float(dbloc[t,0,0,k])!r} {float(ritop[t,0,0,k])!r}"
             )
         # swatt: Nr+1 levels (one more than the KPPMIX-level arrays above)
         for k in range(nr + 1):
-            val = swatt[t, 0, 0, k] if swatt is not None else 0.0
+            val = float(swatt[t, 0, 0, k]) if swatt is not None else 0.0
             lines.append(f"{val!r}")
 
     out_txt.write_text("\n".join(lines) + "\n")

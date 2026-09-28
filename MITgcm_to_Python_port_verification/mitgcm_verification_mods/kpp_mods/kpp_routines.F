@@ -46,6 +46,13 @@ c***********************************************************************
 #ifdef SHORTWAVE_HEATING
      O       kbl,
 #endif
+C     1DMIX-025: expose bldepth's already-computed Rib/bfsfc (previously
+C     local-only inside KPPMIX, discarded after the blmix call) so
+C     kpp_calc.F can dump the real bulk Richardson number profile and
+C     final surface buoyancy forcing directly -- purely additive, no
+C     existing behavior changes (Rib/bfsfc keep their existing _RL
+C     declarations below; this only adds them to the argument list).
+     O       Rib, bfsfc,
      I       bi, bj, myTime, myIter, myThid )
 
 c-----------------------------------------------------------------------
@@ -144,7 +151,7 @@ c     hbl    (imt)    - mixing layer depth                                  (m)
 
 #ifdef ALLOW_KPP
 
-c local
+c local (1DMIX-025: bfsfc/Rib are ALSO now output arguments, above)
 c     bfsfc  (imt         ) - surface buoyancy forcing                (m^2/s^3)
 c     casea  (imt         ) - 1 in case A; 0 in case B
 c     stable (imt         ) - 1 in stable forcing; 0 if unstable
@@ -474,17 +481,6 @@ c     initialize hbl and kbl to bottomed out values
       ENDDO
 #endif /* ALLOW_DIAGNOSTICS */
 
-C     DEBUG: Surface reference values at timestep 2312
-      IF (myIter .EQ. 2312 .AND. bi .EQ. 1 .AND. bj .EQ. 1) THEN
-        DO i = 1, 1
-          WRITE(6,'(A)') 'RIB_T2312: === Surface (kl=0)'
-          WRITE(6,'(A,E25.16)') '  ustar    = ', ustar(i)
-          WRITE(6,'(A,E25.16)') '  bfsfc    = ', bfsfc(i)
-          WRITE(6,'(A,E25.16)') '  hbl_in   = ', hbl(i)
-          WRITE(6,'(A,E25.16)') '  zgrid(1) = ', zgrid(1)
-        ENDDO
-      ENDIF
-
       DO kl = 2, Nr
 
 #ifdef ALLOW_AUTODIFF_TAMC
@@ -643,24 +639,6 @@ c
 #endif /* KPP_SMOOTH_REGULARISATION */
             Rib(i,kl) = Ritop(i,kl) / tempVar2
 
-C           DEBUG: Maximum precision output for timestep 2312
-            IF (myIter .EQ. 2312 .AND. i .EQ. 1 .AND.
-     &          bi .EQ. 1 .AND. bj .EQ. 1 .AND. kl .LE. 5) THEN
-              WRITE(6,'(A,I2)') 'RIB_T2312: === Level kl=', kl
-              WRITE(6,'(A,E25.16)') '  Rib      = ', Rib(i,kl)
-              WRITE(6,'(A,E25.16)') '  Ritop    = ', Ritop(i,kl)
-              WRITE(6,'(A,E25.16)') '  dvsq     = ', dvsq(i,kl)
-              WRITE(6,'(A,E25.16)') '  bvsq     = ', bvsq
-              WRITE(6,'(A,E25.16)') '  ws       = ', ws(i)
-              WRITE(6,'(A,E25.16)') '  vtsq     = ', vtsq
-              WRITE(6,'(A,E25.16)') '  tempVar1 = ', tempVar1
-              WRITE(6,'(A,E25.16)') '  tempVar2 = ', tempVar2
-              WRITE(6,'(A,E25.16)') '  dbloc_k  = ', dbloc(i,kl)
-              WRITE(6,'(A,E25.16)') '  dbloc_km1= ', dbloc(i,kl-1)
-              WRITE(6,'(A,E25.16)') '  depth    = ', zgrid(kl)
-              WRITE(6,'(A,E25.16)') '  Vtc      = ', Vtc
-            ENDIF
-
          ENDDO
       ENDDO
 
@@ -679,34 +657,11 @@ CADJ store Rib = comlev1_kpp, key=ikey, kind=isbyte
 #endif
 cph)
 
-C     DEBUG: Print Rib for timestep 2312 (myIter=2311 with 1-based)
-      IF (myIter .EQ. 2312 .AND. i .EQ. 1 .AND. bi .EQ. 1 .AND. bj .EQ. 1) THEN
-        WRITE(6,'(A)') 'DEBUG_RIB: Rib profile at myIter=2312'
-        WRITE(6,'(A,E12.5)') 'DEBUG_RIB: Ricr=', Ricr
-        DO kl = 1, Nr
-          WRITE(6,'(A,I3,A,E12.5,A,E12.5,A,E12.5)')
-     &      'DEBUG_RIB: k=', kl, ' Rib=', Rib(1,kl),
-     &      ' Ritop=', Ritop(1,kl), ' dvsq=', dvsq(1,kl)
-        ENDDO
-      ENDIF
-
       DO kl = 2, Nr
          DO i = 1, imt
-            IF (kbl(i).EQ.kmtj(i) .AND. Rib(i,kl).GT.Ricr) THEN
-              kbl(i) = kl
-C             DEBUG: Print when kbl is set
-              IF (myIter .EQ. 2312 .AND. i .EQ. 1) THEN
-                WRITE(6,'(A,I3,A,E12.5)')
-     &            'DEBUG_RIB: kbl set to ', kl, ', Rib=', Rib(i,kl)
-              ENDIF
-            ENDIF
+            IF (kbl(i).EQ.kmtj(i) .AND. Rib(i,kl).GT.Ricr) kbl(i) = kl
          ENDDO
       ENDDO
-
-C     DEBUG: Print final kbl
-      IF (myIter .EQ. 2312 .AND. bi .EQ. 1 .AND. bj .EQ. 1) THEN
-        WRITE(6,'(A,I3)') 'DEBUG_RIB: Final kbl=', kbl(1)
-      ENDIF
 
 #ifdef ALLOW_AUTODIFF_TAMC
 CADJ store kbl = comlev1_kpp, key=ikey, kind=isbyte

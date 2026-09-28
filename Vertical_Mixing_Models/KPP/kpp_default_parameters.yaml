@@ -95,10 +95,17 @@ select_penetrating_sw: 0   # 0 = off, >=1 = on
 jerlov_water_type: "IB"    # One of I, IA, IB, II, III
 use_sw_frac_3d: false      # Spatially varying water type -- NOT IMPLEMENTED, must stay false
 
-# ========== Salt plume (NOT IMPLEMENTED -- must stay false) ==========
+# ========== Salt plume ==========
+# 1DMIX-034 part 2: use_salt_plume=true IS implemented, but only for the
+# default PlumeMethod=1/Npower=0 linear-ramp distribution with
+# salt_plume_volume unset (see kpp_parameters.py::KPPParameters.__post_init__
+# for the exact guard). Any other PlumeMethod/Npower/salt_plume_volume
+# combination remains NOT IMPLEMENTED and raises NotImplementedError.
 allow_salt_plume: false
 use_salt_plume: false
 salt_plume_volume: false
+plume_method: 1            # PlumeMethod (SALT_PLUME.h); only 1 is ported
+npower: 0                  # Npower for PlumeMethod=1; only 0 is ported
 
 # ========== Shelf ice (NOT IMPLEMENTED -- must stay false) ==========
 allow_shelfice: false

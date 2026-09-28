@@ -41,7 +41,8 @@ class GGL90MixingLength:
         dz: np.ndarray,
         depth_to_surface: np.ndarray,
         depth_to_bottom: np.ndarray,
-        mask: np.ndarray
+        mask: np.ndarray,
+        is_true_surface: bool = True
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute mixing length.
@@ -55,6 +56,17 @@ class GGL90MixingLength:
             depth_to_surface: Distance to surface (nz,) [m]
             depth_to_bottom: Distance to bottom (nz,) [m]
             mask: Vertical mask (nz,) [0 or 1]
+            is_true_surface: True (default) when index 0 is the model's true
+                k=1 array boundary (every non-ShelfIce experiment): an exact
+                behavioral no-op, matching every pre-existing call site. Set
+                False when the caller has sliced a column starting at a
+                real, shifted `kSrf>1` (an `ALLOW_SHELFICE` column) -- see
+                1DMIX-038 (kSrf+1 fix) below and `_limit_method_2`'s own
+                docstring for the mechanism. Only affects mxl_max_flag in
+                {2,3} (the only flags that build the `mxl_down` two-way-sweep
+                companion array); mxl_max_flag in {0,1} ignore this flag,
+                since their limiters are purely geometric (no recursive
+                dry-region accumulation to get wrong).
 
         Returns:
             mixing_length: Mixing length (nz,) [m]
@@ -76,6 +88,46 @@ class GGL90MixingLength:
         branch (ggl90_mixinglength.F:401-416), which *is* the blanket
         MAX(L,min) this function previously applied to every flag and every
         level (including the surface) -- that blanket application was the bug.
+
+        **1DMIX-038 (round 2, mxl_down[0] seed -- real but narrow fix, does
+        NOT explain the reported kSrf+1 bimodal mismatch)**: for an
+        `ALLOW_SHELFICE` column, index 0 (this function's local k=0) is
+        genuinely MITgcm's real kSrf, and (confirmed exactly, 0/28812
+        mismatch) both sides independently floor it to mixing_length_min
+        there -- no flag needed for `mixing_length` itself. But
+        `_limit_method_2`'s internal `mxl_down` companion array (Fortran
+        `mxLength_Dn`) is a SEPARATE recursive accumulator seeded at
+        Fortran's fixed array index 1 to `GGL90mixingLengthMin`,
+        unconditionally, regardless of kSrf -- for a real ShelfIce column,
+        every dry level above kSrf (Fortran k=2..kSrf, this port's local k
+        never visited) has its raw pre-sweep mixing length forced to
+        exactly 0.0 by MITgcm's own `mskLoc` masking (ggl90_calc.F:331-357),
+        so `mxLength_Dn` cascades to exactly 0.0 (not `GGL90mixingLengthMin`)
+        by the time the real sweep reaches kSrf itself.
+        `is_true_surface=False` reproduces that same 0.0 seed here instead
+        of `mixing_length_min` -- a genuine, independently-derived
+        correctness fix (verified by direct Fortran-source derivation, see
+        open_issues.md), but its numeric effect on the real `isomip`
+        capture is negligible (its own grid's uniform 30 m cell thickness
+        dwarfs every observed raw mixing length at kSrf+1, so the
+        envelope branch this seed feeds is essentially never binding
+        there) -- rerunning the full `isomip` comparison with only this fix
+        applied left compare_ggl90.py's aggregate `mixing_length` stats
+        numerically unchanged. **The dominant, reported bimodal `kSrf+1`
+        mismatch is NOT a kSrf/boundary-condition defect at all** --
+        directly confirmed by finding the SAME large-magnitude mismatch
+        pattern in ordinary, fully-wet (`is_true_surface=True`, already
+        regression-validated) columns within this same `isomip` capture,
+        wherever the real column's N² happens to pass near zero (see
+        open_issues.md's 1DMIX-038 entry and 1DMIX-039 for the real
+        mechanism: `mixing_length`'s `1/sqrt(N²)` formula amplifies a
+        general, small, depth-growing N² relative error into a large
+        mixing_length difference specifically wherever N² is naturally
+        near-zero. 1DMIX-039 root-caused and fixed that N² error itself --
+        it was a hardcoded flat `0.1 bar/m` EOS pressure conversion in
+        `main/eos.py`'s callers of `jmd95_eos`, not an `eosType='JMD95Z'`
+        EOS-variant mismatch, which was directly checked and ruled out; see
+        `main/eos.py::_depth_to_eos_pressure`).
         """
         nz = len(tke)
 
@@ -103,7 +155,7 @@ class GGL90MixingLength:
             )
         elif self.params.mxl_max_flag in [2, 3]:
             mixing_length, mxl_down = self._limit_method_2(
-                mixing_length, dz, mask
+                mixing_length, dz, mask, is_true_surface=is_true_surface
             )
         else:
             raise ValueError(f"mxl_max_flag={self.params.mxl_max_flag} not supported")
@@ -151,10 +203,21 @@ class GGL90MixingLength:
 
         L = min(L, total_depth)
 
-        **MITgcm correspondence**: ggl90_mixinglength.F:168-179 (`DO k=2,Nr`).
-        The loop starts at Fortran k=2 (here k=1): the surface level (k=0)
-        is never touched by this limiter and keeps the mixing_length_min
-        seed from compute().
+        **MITgcm correspondence**: ggl90_mixinglength.F:168-179 (`DO k=2,Nr`):
+        `MaxLength = Ro_surf(i,j)-R_low(i,j)` (interface-to-interface water
+        column depth: `Ro_surf=rF(1)`, `R_low=rF(Nr+1)` for the no-bathyFile
+        default, model/src/ini_depths.F:91-102/155-166). The loop starts at
+        Fortran k=2 (here k=1): the surface level (k=0) is never touched by
+        this limiter and keeps the mixing_length_min seed from compute().
+
+        `depth_to_surface[k]+depth_to_bottom[k]` (built from interface
+        depths in `ggl90_core_driver.py::GGL90Driver.compute_mixing`, fixed
+        1DMIX-030) reduces to the constant `Ro_surf-R_low` at every k here,
+        matching this single-scalar MaxLength exactly. Fixed 1DMIX-030
+        (previously used cell-center `z[0]-z[-1]`, short by half the top
+        cell's thickness plus half the bottom cell's -- see closed_issues.md
+        for the full before/after evidence against the standalone-
+        GGL90_CALC-driver scenario check).
         """
         nz = len(mixing_length)
         result = mixing_length.copy()
@@ -178,10 +241,27 @@ class GGL90MixingLength:
 
         L = min(L, min(depth_to_surface, depth_to_bottom))
 
-        **MITgcm correspondence**: ggl90_mixinglength.F:183-193 (`DO k=2,Nr`).
+        **MITgcm correspondence**: ggl90_mixinglength.F:183-193 (`DO k=2,Nr`):
+        `MaxLength = MIN(Ro_surf(i,j)-rF(k), rF(k)-R_low(i,j))` (per-level,
+        interface-referenced: `rF(k)` is the top face of Fortran level k).
         The loop starts at Fortran k=2 (here k=1): the surface level (k=0)
         is never touched by this limiter and keeps the mixing_length_min
         seed from compute().
+
+        `depth_to_surface[k]`/`depth_to_bottom[k]` (built from interface
+        depths in `ggl90_core_driver.py::GGL90Driver.compute_mixing`, fixed
+        1DMIX-030) are `Ro_surf-rF(k+1)`/`rF(k+1)-R_low` (Fortran level
+        k+1 = this module's Python index k), so this method's own
+        `min(depth_to_surface[k], depth_to_bottom[k])` already matches
+        `MIN(Ro_surf-rF(k),rF(k)-R_low)` exactly -- no change was needed in
+        this method itself, only in the depth_to_surface/depth_to_bottom
+        construction upstream (previously built from cell-center `z`, off
+        by a half-cell amount at every level). Not directly exercised by any
+        of the 6 idealized scenarios (all use mxl_max_flag=0, the default),
+        so this branch's fix has not been independently re-checked against
+        the standalone driver with mxl_max_flag=1 data -- the formula
+        equivalence above is a direct algebraic derivation, not (yet) an
+        empirical re-confirmation for this specific flag value.
         """
         nz = len(mixing_length)
         result = mixing_length.copy()
@@ -197,7 +277,8 @@ class GGL90MixingLength:
         self,
         mixing_length: np.ndarray,
         dz: np.ndarray,
-        mask: np.ndarray
+        mask: np.ndarray,
+        is_true_surface: bool = True
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Method 2: Two-way sweep (Blanke & Delecluse 1993).
@@ -206,7 +287,11 @@ class GGL90MixingLength:
         vertical variation of mixing length.
 
         Algorithm (ggl90_mixinglength.F:240-299, z-coordinate branch --
-        this project has no p-coordinate/atmosphere path):
+        this project has no p-coordinate/atmosphere path; confirmed a real,
+        not just theoretical, gap by 1DMIX-040 -- feeding a genuine
+        `usingPCoords=.TRUE.` MITgcm capture's grid geometry (in Pa, not m)
+        through this method's `dz`-based ceiling produces mixing lengths
+        wrong by ~4 orders of magnitude, not an error):
         1. Downward sweep: mxl_down(k) = min(L_raw(k), mxl_down(k-1) + dz(k-1))
         2. Bottom special treatment (Fortran "extra treatment of k=Nr because
            level Nr+1 is not available", ggl90_mixinglength.F:260-267):
@@ -217,6 +302,35 @@ class GGL90MixingLength:
         Step 2 was previously missing here (1DMIX-014 follow-up finding):
         without it the upward sweep at the level adjacent to the bottom used
         an unclamped bottom value, diverging from MITgcm at depth.
+
+        **1DMIX-038 (round 2)**: `mxl_down[0]`'s seed. In real Fortran,
+        `mxLength_Dn(1) = GGL90mixingLengthMin` is a FIXED, kSrf-independent
+        boundary condition at the true array index 1 (ggl90_mixinglength.F:
+        131) -- correct only when this function's local index 0 really is
+        that true k=1 (`is_true_surface=True`, default, every pre-existing
+        call site: exact no-op). For an `ALLOW_SHELFICE` column sliced at a
+        real `kSrf>1` (`is_true_surface=False`), local index 0 is that real
+        kSrf, not Fortran's array index 1 -- the real Fortran downward sweep
+        reaches `mxLength_Dn(kSrf)` not from a `GGL90mixingLengthMin` seed,
+        but by cascading `MIN(0, ...)=0` through every dry level `k=2..kSrf`
+        above it (each has raw pre-sweep mixing length forced to exactly
+        0.0 by MITgcm's own `mskLoc=maskC(k)*maskC(k-1)` masking,
+        ggl90_calc.F:331-357 -- 0, not `GGL90mixingLengthMin`, since masking
+        multiplies the whole raw formula by 0 rather than flooring it).
+        `mxLength_Dn(kSrf)` is therefore exactly 0.0, not
+        `GGL90mixingLengthMin` -- seeding `mxl_down[0]=0.0` instead
+        reproduces that real value. A genuine, real, directly-derived fix
+        (kept), but verified NOT to be the explanation for the reported
+        `kSrf+1` bimodal mismatch: on the real `isomip` grid (uniform 30 m
+        cells), this seed only matters when the downward-sweep envelope
+        (`mxl_down[k-1]+dz[k-1]`) is the active MIN() branch at local k=1,
+        which empirically never happens there (every observed raw
+        mixing_length at kSrf+1 is far below 30 m) -- rerunning the real
+        `isomip` comparison with only this fix applied left
+        compare_ggl90.py's `mixing_length` stats numerically unchanged. See
+        `GGL90MixingLength.compute()`'s own docstring for what the
+        dominant mismatch actually is (not a boundary-condition defect --
+        see open_issues.md's 1DMIX-038/1DMIX-039).
 
         Returns
         -------
@@ -231,7 +345,7 @@ class GGL90MixingLength:
 
         # Initialize downward sweep array
         mxl_down = np.zeros(nz)
-        mxl_down[0] = self.params.mixing_length_min
+        mxl_down[0] = self.params.mixing_length_min if is_true_surface else 0.0
 
         # Downward sweep (from surface to bottom), using the raw (pre-sweep)
         # mixing_length values -- ggl90_mixinglength.F:246-258.
@@ -341,10 +455,24 @@ def compute_tke_buoyancy(
 
     B = -KappaH * N²
 
-    Corresponds to GGL90_CALC.F buoyancy term.
+    Corresponds to GGL90_CALC.F buoyancy term (ggl90_calc.F:661,673).
+
+    **1DMIX-048**: despite the generic `kappa_h` parameter name, MITgcm's
+    real `KappaH` here (`ggl90_calc.F:661`,
+    `KappaH = KappaM(i,j)/TKEPrandtlNumber(k)`) is NOT the same quantity
+    as the exported diagnostic `kappa_h`/`GGL90diffKr` (which is
+    additionally floored by the diffusivity background and capped by
+    `diff_max`, `ggl90_calc.F:1086-1088`). `GGL90Driver.compute_mixing`
+    passes `kappa_h_tendency` (from
+    `ggl90_mixing_coefficients.py::compute_viscosity_diffusivity`) here,
+    not `kappa_h` -- see that function's docstring for the full
+    derivation. This function itself is a generic `-arg*N²` helper and
+    needs no change; get the *argument* right at the call site.
 
     Args:
-        kappa_h: Eddy diffusivity (nz,) [m²/s]
+        kappa_h: The buoyancy term's KappaH (nz,) [m²/s] -- MITgcm's
+            `KappaM/TKEPrandtlNumber`, NOT the diagnostic eddy
+            diffusivity (see 1DMIX-048 note above)
         n_square: Buoyancy frequency squared (nz,) [s⁻²]
         mask: Vertical mask (nz,) [0 or 1]
 

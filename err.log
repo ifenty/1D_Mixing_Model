@@ -1,0 +1,306 @@
+
+--- docs/code_map.md#pipeline (15 lines; sha256=0756961b86cd2612915b3b80073b4bf21be7bff2bd8f66b1c83c9a596306a415) ---
+## Pipeline
+
+| Stage | Source and owning symbol | Input → output | Contract / nearest test |
+|---|---|---|---|
+| Scenario config loading | `Vertical_Mixing_Models/main/config_manager.py` | scenario YAML (`simulations/scenarios/`, `configuration_yamls/`) → physical/forcing/IC/time-integration dicts | `configuration_yamls/validate_yaml.py` |
+| Column grid & state | `Vertical_Mixing_Models/main/column_grid.py::ColumnGrid`, `Vertical_Mixing_Models/main/column_state.py::ColumnState` | grid spec (`drF`) + initial conditions → discretized column arrays, MITgcm staggering | `Vertical_Mixing_Models/tests/test_staggering.py` |
+| Equation of state | `Vertical_Mixing_Models/main/eos.py::jmd95_eos`, `::compute_buoyancy_gradients`, `::compute_ggl90_buoyancy_frequency_squared` | T, S, pressure → density anomaly, N² (potential-density convention) | `Vertical_Mixing_Models/tests/test_potential_density_gradient.py` |
+| Shared physics basis | `Vertical_Mixing_Models/main/physics_basis.py::compute_buoyancy_frequency_squared`, `::compute_vertical_shear_squared`, `::compute_richardson_number` | ρ, u, v, z → N², S², Ri | `Vertical_Mixing_Models/tests/test_physics_basis.py` |
+| Scheme dispatch | `Vertical_Mixing_Models/main/mixing_adapter.py::KPPAdapter.compute_mixing`, `::GGL90Adapter.compute_mixing` | `ColumnState` → `MixingOutput` (K_m, K_h, ...) | `Vertical_Mixing_Models/tests/test_cross_scheme_validation.py` |
+| GGL90 core (prognostic TKE) | `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.step_tke_forward`, `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing` | N², S², surface forcing → TKE(t+dt), K_m, K_h | `Vertical_Mixing_Models/tests/test_cross_scheme_validation.py`; see `Vertical_Mixing_Models/docs/GGL90/GGL90_package_description.tex` |
+| KPP core (diagnostic BL) | `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`, `::_compute_surface_forcing`, `::_compute_shear`, `::_estimate_reference_velocity` | N², S², surface forcing → hbl, K_m, K_h, ghat | `Vertical_Mixing_Models/tests/test_mitgcm_kpp_lab_sea_validation.py` (currently blocked at collection, open issue 1DMIX-010); `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation.py` (root; currently all-skip pending 1DMIX-010); `Vertical_Mixing_Models/tests/test_kpp_estimate_uref.py` (`KPP_ESTIMATE_UREF` branch, issue 1DMIX-032) |
+| Time integration / driver | `Vertical_Mixing_Models/main/unified_driver.py::UnifiedColumnDriver.run_experiment`, `::_apply_vertical_diffusion`, `::_apply_convective_adjustment` | forcing + mixing coefficients → stepped `ColumnState` trajectory | `Vertical_Mixing_Models/tests/test_full_scenario_validation.py` |
+| Diagnostics & serialization | `Vertical_Mixing_Models/main/diagnostics.py::DiagnosticsManager.save_snapshot`, `::get_diagnostics` | `ColumnState` trajectory → density/shear diagnostics, `.npz`/NetCDF | output under `Vertical_Mixing_Models/output/` (generated, git-ignored, not source-controlled) |
+| Scenario CLI / plotting | `Vertical_Mixing_Models/main/run_scenarios.py`; `Vertical_Mixing_Models/main/unified_plotter.py::make_figures` | CLI args + scenario set → runs all scenarios, renders figures | `Vertical_Mixing_Models/user_guide.md` §"Running the built-in scenarios" |
+
+
+--- Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing (158 lines; sha256=370fafe0d5d5f2ee62ed78406969463daab95c80ea4315ae5dcff477d2b1a638) ---
+    def compute_mixing(
+        self,
+        tke: np.ndarray,
+        u: np.ndarray,
+        v: np.ndarray,
+        theta: np.ndarray,
+        salt: np.ndarray,
+        depth: np.ndarray,
+        z: np.ndarray,
+        dz: np.ndarray,
+        dt: float,
+        mask: np.ndarray,
+        u_star_sq: float = 0.0,
+        gravity: float = 9.81,
+        rho_const: float = 1029.0,
+        background_visc: float = 0.0,
+        background_diff: float = 0.0,
+    ) -> GGL90Output:
+        """
+        Compute GGL90 mixing coefficients for a single column.
+
+        Roadmap of this routine (calculations in order):
+            Step 1: Compute stratification and shear (N², S²) — shared physics_basis
+            Step 2: Compute mixing length (from TKE and N², with limits) — scheme_specific
+            Step 3: Compute viscosity and diffusivity (κ_m, κ_h) — mixing_coefficients
+            Step 4: Compute TKE budget terms (production, buoyancy, dissipation) — scheme_specific
+            Step 5: Step TKE forward in time (implicit tridiagonal solve) — local
+            Step 6: Assemble output
+
+        Unlike KPP, GGL90 is prognostic: TKE is a state variable. The updated
+        TKE (tke_new) is returned and must be fed back on the next call.
+
+        **Corresponds to**: GGL90_CALC.F (orchestration)
+
+        Parameters
+        ----------
+        tke : np.ndarray, shape (nz,)
+            Current turbulent kinetic energy [m²/s²]
+        u : np.ndarray, shape (nz,)
+            Zonal velocity [m/s]
+        v : np.ndarray, shape (nz,)
+            Meridional velocity [m/s]
+        theta : np.ndarray, shape (nz,)
+            Potential temperature [°C]
+        salt : np.ndarray, shape (nz,)
+            Salinity [psu]
+        depth : np.ndarray, shape (nz,)
+            Depth of cell centers (negative, increasing downward) [m]
+        z : np.ndarray, shape (nz,)
+            Vertical coordinate [m], positive upward
+        dz : np.ndarray, shape (nz,)
+            Vertical grid spacing [m]
+        dt : float
+            Time step [s]
+        mask : np.ndarray, shape (nz,)
+            Vertical mask [0 or 1]
+        u_star_sq : float, optional
+            Surface friction velocity squared [m²/s²]
+        gravity : float, optional
+            Gravitational acceleration [m/s²]
+        rho_const : float, optional
+            Reference density [kg/m³]
+        background_visc : float, optional
+            Background (floor) vertical viscosity [m²/s], MITgcm's
+            viscArNr(k). Default 0.0 (no floor).
+Excerpt truncated: use a focused Read/rg for the relevant body.
+
+--- Vertical_Mixing_Models/GGL90/ggl90_scheme_specific.py::GGL90MixingLength._limit_method_0 (37 lines; sha256=82f1631f1525b48af9fbbb00715afb6a9e0af04f73cbd1fe910b2fb6b4560de7) ---
+    def _limit_method_0(
+        self,
+        mixing_length: np.ndarray,
+        depth_to_surface: np.ndarray,
+        depth_to_bottom: np.ndarray,
+        mask: np.ndarray
+    ) -> np.ndarray:
+        """
+        Method 0: Simple water column depth limit.
+
+        L = min(L, total_depth)
+
+        **MITgcm correspondence**: ggl90_mixinglength.F:168-179 (`DO k=2,Nr`):
+        `MaxLength = Ro_surf(i,j)-R_low(i,j)` (interface-to-interface water
+        column depth: `Ro_surf=rF(1)`, `R_low=rF(Nr+1)` for the no-bathyFile
+        default, model/src/ini_depths.F:91-102/155-166). The loop starts at
+        Fortran k=2 (here k=1): the surface level (k=0) is never touched by
+        this limiter and keeps the mixing_length_min seed from compute().
+
+        `depth_to_surface[k]+depth_to_bottom[k]` (built from interface
+        depths in `ggl90_core_driver.py::GGL90Driver.compute_mixing`, fixed
+        1DMIX-030) reduces to the constant `Ro_surf-R_low` at every k here,
+        matching this single-scalar MaxLength exactly. Fixed 1DMIX-030
+        (previously used cell-center `z[0]-z[-1]`, short by half the top
+        cell's thickness plus half the bottom cell's -- see closed_issues.md
+        for the full before/after evidence against the standalone-
+        GGL90_CALC-driver scenario check).
+        """
+        nz = len(mixing_length)
+        result = mixing_length.copy()
+
+        for k in range(1, nz):
+            if mask[k] > 0:
+                max_length = depth_to_surface[k] + depth_to_bottom[k]
+                result[k] = min(result[k], max_length)
+
+        return result
+
+--- Vertical_Mixing_Models/GGL90/ggl90_scheme_specific.py::GGL90MixingLength._limit_method_1 (43 lines; sha256=117818d26c89f6fe88d64fd1df6b2f2a6c8a608882dd34a2420f2a5fac49484d) ---
+    def _limit_method_1(
+        self,
+        mixing_length: np.ndarray,
+        depth_to_surface: np.ndarray,
+        depth_to_bottom: np.ndarray,
+        mask: np.ndarray
+    ) -> np.ndarray:
+        """
+        Method 1: Distance to surface or bottom.
+
+        L = min(L, min(depth_to_surface, depth_to_bottom))
+
+        **MITgcm correspondence**: ggl90_mixinglength.F:183-193 (`DO k=2,Nr`):
+        `MaxLength = MIN(Ro_surf(i,j)-rF(k), rF(k)-R_low(i,j))` (per-level,
+        interface-referenced: `rF(k)` is the top face of Fortran level k).
+        The loop starts at Fortran k=2 (here k=1): the surface level (k=0)
+        is never touched by this limiter and keeps the mixing_length_min
+        seed from compute().
+
+        `depth_to_surface[k]`/`depth_to_bottom[k]` (built from interface
+        depths in `ggl90_core_driver.py::GGL90Driver.compute_mixing`, fixed
+        1DMIX-030) are `Ro_surf-rF(k+1)`/`rF(k+1)-R_low` (Fortran level
+        k+1 = this module's Python index k), so this method's own
+        `min(depth_to_surface[k], depth_to_bottom[k])` already matches
+        `MIN(Ro_surf-rF(k),rF(k)-R_low)` exactly -- no change was needed in
+        this method itself, only in the depth_to_surface/depth_to_bottom
+        construction upstream (previously built from cell-center `z`, off
+        by a half-cell amount at every level). Not directly exercised by any
+        of the 6 idealized scenarios (all use mxl_max_flag=0, the default),
+        so this branch's fix has not been independently re-checked against
+        the standalone driver with mxl_max_flag=1 data -- the formula
+        equivalence above is a direct algebraic derivation, not (yet) an
+        empirical re-confirmation for this specific flag value.
+        """
+        nz = len(mixing_length)
+        result = mixing_length.copy()
+
+        for k in range(1, nz):
+            if mask[k] > 0:
+                max_length = min(depth_to_surface[k], depth_to_bottom[k])
+                result[k] = min(result[k], max_length)
+
+        return result
+
+--- Vertical_Mixing_Models/tests/test_ggl90_mixing_length.py::<module> (293 lines; sha256=1e228cc27954a1374494d08cafba6f93a6adb89f82c2712793e855f45d01a1cd) ---
+"""
+Unit tests for GGL90MixingLength.compute() -- regression coverage for 1DMIX-014.
+
+1DMIX-014 root cause (verified against
+/Users/ifenty/git_repo_others/MITgcm/pkg/ggl90/ggl90_mixinglength.F, the real
+MITgcm source this project ports): compute()'s final "impose minimum" step
+previously applied `mixing_length[k] = max(mixing_length[k], mixing_length_min)`
+unconditionally to every level, for every mxl_max_flag.
+
+Reading ggl90_mixinglength.F:381-416 (the final floor-and-reciprocal step)
+shows this is only correct for mxl_max_flag in {0,1,2} (the ELSE branch,
+ggl90_mixinglength.F:401-416: a genuine blanket MAX(L,min) applied to both
+GGL90mixingLength and its reciprocal). mxl_max_flag==3 takes a DIFFERENT IF
+branch (ggl90_mixinglength.F:383-400): GGL90mixingLength itself is NOT
+reassigned there -- it keeps its raw (possibly sub-minimum) two-way-sweep
+value; only the reciprocal is floored, using
+sqrt(L(k)*mxLength_Dn(k)) clamped at mixing_length_min.
+
+Note this means the fix is scoped to mxl_max_flag==3 specifically, not to
+"the two-way-sweep methods (2 and 3)" as originally hypothesized when this
+issue was opened -- mxl_max_flag==2 legitimately still floors L via the ELSE
+branch. Both behaviors are covered below so a future change cannot silently
+regress either one.
+
+Also covers 1DMIX-030 (mxl_max_flag=0's `_limit_method_0` ceiling, plus the
+`GGL90Driver.compute_mixing` construction that feeds it): the ceiling must
+be the INTERFACE-to-interface water column depth (`Ro_surf-R_low`), not the
+cell-center-to-cell-center span, which is short by half the top cell's
+thickness plus half the bottom cell's -- see
+`test_limit_method_0_ceiling_is_interface_span_not_cell_center` and
+`test_compute_mixing_builds_interface_derived_ceiling` below.
+"""
+
+import sys
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from GGL90.ggl90_parameters import GGL90Parameters
+from GGL90.ggl90_scheme_specific import GGL90MixingLength
+
+TOL = 1e-12
+
+
+def _stratified_calm_column(nz=6, dz_val=10.0, n2_val=1.0e-4, params=None):
+    """A column with TKE pinned at tke_min and uniform strong stratification.
+
+    With TKE this small, the Gaspar formula L = sqrt(2*TKE)/sqrt(N^2)
+    (ggl90_calc.F:352-354, eq. 2.35) produces a raw mixing length far below
+    any physically reasonable mixing_length_min -- exactly the regime 1DMIX-014
+    was found in (MITgcm's own vermix capture: mixing_length[1:4] =
+    [0.760, 0.112, 0.112] against mixing_length_min=3.0).
+    """
+    dz = np.full(nz, dz_val)
+    mask = np.ones(nz)
+    tke = np.full(nz, params.tke_min)
+    n_square = np.full(nz, n2_val)
+    depth_to_surface = np.cumsum(dz) - dz  # unused by method 2, harmless for 0/1
+    depth_to_bottom = np.sum(dz) - depth_to_surface - dz
+    return tke, n_square, dz, depth_to_surface, depth_to_bottom, mask
+
+
+def test_mxl_max_flag_3_allows_submin_mixing_length():
+Excerpt truncated: use a focused Read/rg for the relevant body.
+
+--- docs/model_contract.md (132 lines; sha256=16b8ad17e934a817c4f52d0033297d3719686b6d95a25c38468a89725b7d0c80) ---
+# Scientific model or analysis contract
+
+This project ports two MITgcm vertical-mixing parameterizations to a 1-D Python
+column model. Every non-trivial function must cite the MITgcm source file and
+line numbers it corresponds to; any deviation from MITgcm physics must be
+explicitly justified in a code comment and, if uncertain, opened as an issue
+(see `open_issues.md`/`closed_issues.md` for the current and historical record).
+
+## Coordinate and unit conventions
+
+- `z` positive **up**; `depth` positive **down**; `z = -depth`.
+- Pressure is positive and increases with depth: `pressure = -depth` (1 dbar ≈ 1 m).
+  A prior port bug computed `pressure = -depth / 10.0` (10× too small) — fixed and
+  audited, see closed issue 1DMIX-002. Watch for regressions of this exact form.
+- Density: `rho_const = 1029.0 kg/m³` (reference); `rho = rho_anom + rho_const`
+  where `rho_anom` is the JMD95 equation-of-state anomaly (`Vertical_Mixing_Models/main/eos.py::jmd95_eos`).
+- Grid staggering matches MITgcm exactly (index-for-index, no re-indexing/interpolation):
+  cell centers hold tracers/velocities; interface-array index `k` is the **top face
+  of cell k** (`k=0` = ocean surface); the surface interface carries zero diffusive
+  flux (`diffKz[0] = viscAz[0] = 0`). Full array-to-array mapping, including KPP's
+  half-level `ghat` offset, is in `Vertical_Mixing_Models/docs/dev_notes/MITGCM_STAGGERING.md`
+  and enforced by `Vertical_Mixing_Models/tests/test_staggering.py`.
+
+## Equation of state
+
+`Vertical_Mixing_Models/main/eos.py::jmd95_eos` — full Jackett & McDougall (1995) nonlinear EOS. Stratification
+(N²) **must** use potential density (adjacent levels evaluated at a common reference
+pressure), not in-situ density — see `Vertical_Mixing_Models/main/eos.py::compute_ggl90_buoyancy_frequency_squared`
+and closed issue 1DMIX-001 (a real historical bug used in-situ density here). The
+static-instability sign test (`compute_static_instability_mask`) is the one place
+in-situ density is *correct*, verified against MITgcm's
+`model/src/convective_adjustment.F` (closed issue 1DMIX-005) — do not "fix" this to
+potential density without re-checking that source.
+
+## GGL90 (prognostic TKE closure)
+
+Governing equation (full derivation: `Vertical_Mixing_Models/docs/GGL90/GGL90_package_description.tex`
+§"Governing Equations (overview)"):
+
+```
+∂TKE/∂t + u·∇TKE = P + B - ε + ∂/∂z(K_e ∂TKE/∂z)
+  P = K_m·S²        (shear production)
+  B = -K_h·N²       (buoyancy flux)
+  ε = c_ε·TKE^1.5/L (dissipation)
+  K_m = c_k·L·√TKE,  K_h = K_m/α   (c_k = 0.1; α = Prandtl number, default 1.0, ECCOv4r4 = 30.0)
+```
+
+TKE is GGL90's only prognostic variable — implemented in
+`Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.step_tke_forward` /
+`::compute_mixing`. Mixing length `L(z)` follows Gaspar et al. (1990), bounded by
+distance to boundaries (von Kármán constant `κ = 0.4`). Surface TKE boundary
+condition is forced by friction velocity `u*` (coefficient `B1 ≈ 16.6`); this is a
+distinct constant from the mixing-length parameter `GGL90m2 = 3.75` documented
+elsewhere in the package description — do not conflate the two (this exact
+confusion was a real documentation bug, corrected 2026-08-06 per the archived
+`handoff/BUILD-LOG.md`, not tracked as a code-correctness issue here since it
+never affected the Python port itself).
+
+Mixing-length depth limiters (`mxl_max_flag` 0/1, `GGL90/ggl90_scheme_specific.py::
+GGL90MixingLength._limit_method_0`/`_limit_method_1`) bound the raw Gaspar-formula
+length by the INTERFACE-to-interface water column depth
+(`Ro_surf-R_low`/`Ro_surf-rF(k)`/`rF(k)-R_low`, `pkg/ggl90/ggl90_mixinglength.F:
+163-193`), not the cell-center-to-cell-center span — `GGL90/ggl90_core_driver.py::
+GGL90Driver.compute_mixing` builds `depth_to_surface`/`depth_to_bottom` from
+interface depths (mirroring `ColumnGrid.interfaces`: `interfaces[0]=0=Ro_surf`,
+Excerpt truncated: use a focused Read/rg for the relevant body.
+

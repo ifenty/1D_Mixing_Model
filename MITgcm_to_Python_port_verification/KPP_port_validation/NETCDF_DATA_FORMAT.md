@@ -31,19 +31,27 @@ KPP_port_validation/
 │   └── mitgcm_kpp_inputs_11k_1D.nc
 ├── outputs_from_mitgcm/    # Mixing coefficients, HBL from MITgcm KPP
 │   └── mitgcm_kpp_outputs_11k_1D.nc
-├── inputs_from_python/     # Custom/synthetic inputs for Python-only tests
-│   └── kpp_input_{experiment}_{timestamp}.nc
 ├── outputs_from_python/    # Mixing coefficients, HBL from Python KPP port
-│   └── mitgcm_kpp_inputs_11k_1D_python.nc
+│   └── python_kpp_outputs_11k_1D.nc   # the current, actively-tested convention
 └── [documentation files]
 ```
+
+**Historical exception** (documented, not aspirational): `mitgcm_kpp_inputs_11k_1D_python.nc`
+actually lives in `inputs_from_mitgcm/`, not `outputs_from_python/` as the tree above
+would suggest by name — see step 4 below and `CAPTURES.md` in that directory
+(1DMIX-046) for why it is retained there rather than relocated.
 
 ### File Naming Conventions
 
 **Current validation dataset**:
 - `mitgcm_kpp_inputs_11k_1D.nc` - 11,000 timesteps of inputs
 - `mitgcm_kpp_outputs_11k_1D.nc` - 11,000 timesteps of MITgcm outputs
-- `mitgcm_kpp_inputs_11k_1D_python.nc` - Python port outputs (matches inputs)
+- `outputs_from_python/python_kpp_outputs_11k_1D.nc` - the current Python port
+  output for this capture, exercised by `tests/test_kpp_mitgcm_validation_extended.py`
+- `inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D_python.nc` - an early (2026-08-20),
+  pre-convention Python port output for the same capture, retained (not deleted)
+  only because `KPP_port_validation/scripts/compute_validation_statistics.py`
+  still opens it directly; see that directory's `CAPTURES.md`
 
 **General format**: `kpp_{type}_{experiment}_{timestamp}.nc` or descriptive names like above
 
@@ -442,6 +450,12 @@ This ensures complete traceability: given a Python output file, you can always f
 ---
 
 ## Python Input Files (`inputs_from_python/`)
+
+**Status (1DMIX-046)**: this directory was removed — it had sat empty and
+untracked since this document was first written (2026-08-20) with no file
+ever matching the convention below. Documented here as an available,
+never-yet-exercised convention rather than deleted outright: recreate the
+directory if a genuine synthetic/Python-only input is ever needed.
 
 ### Purpose
 
