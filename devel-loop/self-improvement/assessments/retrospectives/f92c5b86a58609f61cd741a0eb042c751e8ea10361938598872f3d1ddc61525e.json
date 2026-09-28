@@ -1,0 +1,73 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-049",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-27T18:31:29.182255+00:00",
+    "timestamp": "2026-09-28T02:44:09Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/84dd580e22ff473b506bdf8ba5052d3519e3d6b4b07e21ba02bc328d95548139.json",
+      "sha256": "84dd580e22ff473b506bdf8ba5052d3519e3d6b4b07e21ba02bc328d95548139"
+    },
+    "measured": {
+      "span_minutes": 0,
+      "dispatches": {},
+      "rounds": {},
+      "cost_usd": {},
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "dispatch_timeout_truncation",
+        "summary": "The wall-clock dispatch bound killed Bob's 1DMIX-049 implementation turn after its rebuild, rerun, capture and test-writing work was already durable on disk, discarding only the sealed report and forcing a whole extra followup dispatch to re-narrate completed work.",
+        "evidence": "dispatch_log.jsonl: 12 events with error=='timeout' out of 115 bob/richard role dispatches (10.4%) across 10 distinct issues (1DMIX-026/032/034/039/041/042/043/048/049/050). This iteration's own event a173627c4cb841f488d3ea177051a7aa: duration_seconds 2400.04, returncode 143 (SIGTERM), report sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (the digest of zero bytes). closed_issues.md:1407 records that no rebuild or measurement was redone on recovery.",
+        "minutes_lost": 10
+      },
+      {
+        "category": "unverified_cost_estimate",
+        "summary": "This issue's own filed text asserted 8760 timesteps and hours of wall clock for the global_oce_latlon rerun. That figure belongs to lab_sea/1DMIX-026; the real count is 720 and the real run+parse cost about 14 minutes, so the issue was scoped around a hedge more expensive than the work it hedged against.",
+        "evidence": "closed_issues.md:1391 records the correction and the measurement: 720x43,200s = 360 days = one externForcingCycle; full Docker run 6m52s, reparse of the 13.82 GB output.txt 6m57s, against a written expectation of hours. Richard independently reconfirmed by reading both closed issues and grepping the experiment's live data file rather than accepting the narrative (closed_issues.md:1401).",
+        "minutes_lost": 15
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-DISPATCH-TIMEOUT-001",
+        "reason": "Diagnosis first: measure whether a progress-aware bound is achievable before touching the wall-clock bound, which exists to cap genuinely runaway spend and must keep its default."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-ESTIMATE-EVIDENCE-001",
+        "reason": "Requires a documented sourcing rule in issue_priority.md plus a survey of the current open root ledger, neither of which belongs inside a scientific iteration."
+      }
+    ],
+    "carry_forward": [
+      "Before deferring work on cost grounds, measure a cheap prefix of the real command; a figure transferred from a neighbouring experiment's record is not a measurement.",
+      "Treat a timed-out dispatch as work-of-unknown-completeness: inspect the tree before re-dispatching, and resume with followup rather than restarting."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {},
+    "by_role": {},
+    "child_elapsed_seconds": 0,
+    "components": [],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-27T18:31:29.182255+00:00",
+    "issue_id": "1DMIX-049",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 0,
+    "phase_events": [],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 0.0,
+    "start": "2026-09-27T18:31:29.182255+00:00",
+    "unknown_cost_event_ids": []
+  }
+}
