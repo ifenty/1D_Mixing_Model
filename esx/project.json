@@ -109,6 +109,7 @@
       "import numpy,scipy,xarray,netCDF4; print(numpy.__version__, scipy.__version__, xarray.__version__, netCDF4.__version__)"
     ]
   ],
+  "python": "/home/ifenty/miniforge3/envs/ecco/bin/python3",
   "command_timeout_seconds": 1800,
   "verification": {
     "structural": [

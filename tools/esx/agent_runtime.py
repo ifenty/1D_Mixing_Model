@@ -296,6 +296,18 @@ def permission_denials(path):
             if e.get("type") == "system" and e.get("subtype") == "permission_denied"]
 
 
+APPROVAL_ERROR = 'approval needs a successful executed check and no must_fix findings'
+
+
+def changes_requested(role, footer, errors):
+    """A well-formed Richard review whose only defect is approving with must_fix items."""
+    if role != 'richard' or not isinstance(footer, dict) or not footer.get('must_fix'):
+        return None
+    if footer.get('verdict') not in ('APPROVE', 'APPROVE_WITH_FIXES'):
+        return None
+    return 'changes_requested' if errors and all(APPROVAL_ERROR in e for e in errors) else None
+
+
 def recover_orphans(root, session, reason):
     """Close turns that never wrote record.json (a crashed dispatcher), anywhere in history.
 
@@ -713,6 +725,7 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
         if settlement.get('provider_overshoot'):
             error = 'provider exceeded reservation; further launches are blocked'
         footer = footer_from(message)
+        review_outcome = None
         status = "completed"
         if error or code != 0 or not result or result.get("is_error"):
             status = "failed"
@@ -730,6 +743,12 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
                                              ((review or {}).get('maintenance') or {}).get('documentation'))
             if errors:
                 status, error = 'incomplete', '; '.join(errors)
+                review_outcome = changes_requested(role, footer, errors)
+                if review_outcome:
+                    error = ('review requested changes: verdict ' + str(footer.get('verdict')) + ' with '
+                             + str(len(footer['must_fix'])) + ' must_fix item(s) is recorded as a non-approving '
+                             'review, not a dispatch failure; relay must_fix to Bob. (Contract: required changes '
+                             'use REJECT with must_fix; APPROVE_WITH_FIXES needs an empty must_fix.)')
         (turn / "report.md").write_text(message)
         turn_source_signature = None
         if source_signature is not None:
@@ -745,6 +764,7 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
                   "issue_id": issue, "correction_round": correction_round,
                   "iteration_timestamp": iteration_timestamp,
                   "status": status, "error": error, "footer": footer,
+                  "review_outcome": review_outcome,
                   "execution_phase": ("launch_failed" if code is None else
                       "approved" if status == "completed" and (footer or {}).get("verdict") in ("APPROVE", "APPROVE_WITH_FIXES")
                       else "completed" if status == "completed" else "executed_" + status),
@@ -819,6 +839,8 @@ def probe_runtime(root, executable="claude", timeout=55):
 
 
 ALLOWED_CANDIDATES = ("printf %s {m}", "echo {m}", "python3 -c 'print(\"{m}\")'", "pwd", "ls", "true")
+# Each creates exactly {t} and nothing else; the first one the settings do not allow is used.
+DENIED_CANDIDATES = ("mkdir {t}", "touch {t}", "ln -s /dev/null {t}", "cp /dev/null {t}", "install -d {t}")
 
 
 def permission_witness(root, executable="claude", timeout=90):
@@ -835,18 +857,16 @@ def permission_witness(root, executable="claude", timeout=90):
     allowed = next((c.format(m=marker) for c in ALLOWED_CANDIDATES
                     if permission_match.decide(c.format(m=marker), rules) == "allow"), None)
     target = local(root, "devel-loop/loop_state/agent_runtime/probes/denied-" + marker)
-    denied = "mkdir " + str(target)
     if allowed is None:
         return {"status": "failed", "reason": "no harmless command is allowed by project settings "
                 "(tried: " + ", ".join(ALLOWED_CANDIDATES) + "); the allow path cannot be witnessed"}
-    if permission_match.decide(denied, rules) == "allow":
-        return {"status": "failed", "reason": "project settings allow `mkdir` everywhere, so no denied "
-                "command is available to witness", "allowed_command": allowed}
+    denied = next((c.format(t=target) for c in DENIED_CANDIDATES
+                   if permission_match.decide(c.format(t=target), rules) != "allow"), None)
     issue, role = "RUNTIME-PERMISSIONS", "scout"
     turn = run_turn(root, role=role, issue=issue, executable=executable, timeout=timeout, probe=True, witness=True,
                     prompt="Run these two Bash commands, exactly as written, as two separate tool calls, in order. "
                     "Do not modify, combine or retry them, and do not run anything else.\n1. " + allowed
-                    + "\n2. " + denied + "\nThen reply only this JSON fence:\n```json\n"
+                    + ("\n2. " + denied if denied else "") + "\nThen reply only this JSON fence:\n```json\n"
                     + json.dumps({"agent": role, "issue_id": issue, "correction_round": 0}) + "\n```")
     stream = local(root, turn["stream"]["path"]) if turn.get("stream") else None
     calls, results = {}, {}
@@ -860,18 +880,26 @@ def permission_witness(root, executable="claude", timeout=90):
     ran = [i for i, c in calls.items() if c == allowed and i in results and not results[i].get("is_error")
            and (marker in json.dumps(results[i].get("content")) or "{m}" not in next(
                c for c in ALLOWED_CANDIDATES if c.format(m=marker) == allowed))]
-    attempted_denied = [i for i, c in calls.items() if c == denied]
-    denied_held = bool(attempted_denied) and not target.exists()
+    attempted_denied = [i for i, c in calls.items() if denied and c == denied]
+    denied_held = bool(attempted_denied) and not (target.exists() or target.is_symlink())
     mode = turn.get("effective_permission_mode")
-    passed = bool(ran) and (denied_held or mode == "bypassPermissions")
-    if target.exists():
+    # A denial is only witnessable when the settings leave some write command unallowed
+    # and the CLI is not bypassing permissions; otherwise only the allow path is checked.
+    witnessable = denied is not None and mode != "bypassPermissions"
+    passed = bool(ran) and (denied_held or not witnessable)
+    if target.is_symlink() or target.is_file():
+        target.unlink()
+    elif target.exists():
         target.rmdir()
     return {"status": "passed" if passed else "failed", "allowed_command": allowed, "denied_command": denied,
             "allowed_ran": bool(ran), "denied_attempted": bool(attempted_denied), "denied_held": denied_held,
             "effective_permission_mode": mode, "permission_denials": turn.get("permission_denials"),
             "turn": {k: turn.get(k) for k in ("event_id", "session_id", "status", "error", "stream")},
             "note": ("bypassPermissions: a denial cannot be witnessed; only the allowed path was checked"
-                     if mode == "bypassPermissions" else None)}
+                     if mode == "bypassPermissions" else
+                     "project settings allow every candidate write command (" + ", ".join(
+                         c.split(" ")[0] for c in DENIED_CANDIDATES) + "); only the allowed path was checked"
+                     if denied is None else None)}
 
 
 def probe_status(root, executable="claude"):
@@ -1014,6 +1042,8 @@ def main(argv=None):
                     kwargs["transition"] = json.loads(input_file(root, args.transition).read_text())
             value = run_turn(root, **kwargs)
         print(json.dumps(value, indent=2))
+        if value.get("review_outcome") == "changes_requested":
+            return 0  # a review that asks for changes is a successful dispatch
         return 0 if value.get("status") not in ("failed", "incomplete", "missing") else 1
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         print(json.dumps({"status": "failed", "error": str(exc)}), file=sys.stderr)
