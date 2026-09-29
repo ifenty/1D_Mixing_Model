@@ -366,3 +366,185 @@ A closeout whose validation fails leaves no unqualified resolution in `closed_is
 
 ### Expected Effect
 The measured 3h10m window in which the permanent ledger asserted an unvalidated resolution goes to zero by construction, since the entry's resolved state and the gate's acceptance become the same event. A reader of `closed_issues.md`, including the owner asking for status, can treat the presence of a resolution as evidence that its acceptance suite passed.
+
+---
+
+## 🔴 PROPOSED: The coordinator's cost is structurally unmeasurable, so retrospectives under-measure the workflow they evaluate
+
+**Date Identified**: 2026-09-28  19:40
+**Status**: Proposed
+**UUID**: TEAM-COORDINATOR-COST-001
+**Category**: coordinator_cost_unmeasured
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-28-coordinator-cost-unmeasured/assessment.md
+**Anchors**: tools/esx/team_accounting.py:227; tools/esx/team_accounting.py::summary; devel-loop/loop_state/retrospective_history.jsonl
+
+### Issue
+`team_accounting.py:227` computes `'coordinator_coverage': 'recorded' if 'arch' in roles else 'missing'`, so the framework anticipates Arch costs and has a field for them. It has never received any, and cannot: Arch is the interactive main session rather than a dispatched agent, so no `dispatch_log.jsonl` entry meters it. Every `cost_usd` and `span_minutes` figure the self-improvement program reasons about therefore describes dispatched agents only, while presenting as the cost of the iteration.
+
+### Evidence
+`coordinator_coverage` reads `missing` in all **20** accepted retrospectives across the project's history (13 distinct issues); `by_role` composition varies across iterations (bob-only, bob+richard, or in two cases neither), so the coordinator gap is not an artifact of which issues were sampled. Independently re-derived by the reviewer over the full `retrospective_history.jsonl` population rather than the eight-issue subset this entry was first written from. The omitted share is not marginal: in the five-issue loop of 2026-09-28 Arch performed all packet assembly, all ledger writing, every independent re-verification of an implementer's headline claim, and all five `final_verification.py` runs, whose scientific suite alone consumed 496 to 656 seconds five times over — roughly 50 minutes of measured wall clock, none of it attributed. 1DMIX-063's retrospective reports that iteration as "40 minutes, bob $2.30 and richard $2.02".
+
+### Potential Impact
+The distortion lands precisely on the judgments retrospectives exist to make. Deciding whether a reviewer round earned its price compares a metered reviewer against unmetered coordination, which systematically favours the conclusion that review is expensive relative to the work around it. Any future decision to reduce review in favour of coordinator effort would be made on figures that cannot see the coordinator.
+
+### Proposed Fix
+Choose deliberately, as an Owner decision rather than an Arch one. Either make it measurable — have the main session write an accounting record per iteration phase, a shape `team_accounting.summary` already supports, so `coordinator_coverage` can read `recorded`; or accept it as a permanent limit and label every consumed figure as dispatched-agent-only at the point of consumption, so no reader infers a total. The present state is the worse of the two: a field that names the gap, reports it eight times out of eight, and is never acted on.
+
+### Acceptance Criteria
+Either `coordinator_coverage` reads `recorded` for a completed iteration, with an accounting record attributable to the main session and a test demonstrating that an iteration without one still reports `missing`; or `esx/project_profile.md` and the retrospective template both state that `cost_usd` and `span_minutes` exclude the coordinator, and `--draft-retro` emits that caveat inline so it appears in every retrospective rather than only in documentation. In either case no existing figure is silently redefined.
+
+### Expected Effect
+A reader of any retrospective can tell whether its cost figures are total or partial without reading the accounting implementation. If the measuring option is taken, cost-of-review judgments become comparisons between two measured quantities rather than between a measured and an invisible one.
+
+---
+
+## 🔴 PROPOSED: Closeout requirements are discovered one rejection at a time, including on first iterations
+
+**Date Identified**: 2026-09-28  19:40
+**Status**: Proposed
+**UUID**: TEAM-CLOSEOUT-DOCTOR-001
+**Category**: closeout_requirements_serial_discovery
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-28-closeout-serial-discovery/assessment.md
+**Anchors**: tools/esx/loop_gate.py::check_done; tools/esx/final_verification.py::ready; tools/esx/workflow_handoff.py::readiness
+
+### Issue
+Assembling a closeout means satisfying a requirement set that is never stated in advance: each tool reports the first unmet condition, the closer fixes it, reruns, and learns the next. `TEAM-REITERATION-CLOSEOUT-001` covers this but is scoped explicitly to an issue's second iteration after a partial close; the measurements here show the pattern is not confined to that case.
+
+### Evidence
+1DMIX-052, iteration 2 — eight sequential rejections: `map_delta needs updated or MAP-OK status`; `candidate reference is required`; `review packet still has pending preparation fields`; `bob: failed or incomplete turn remains unresolved`; `stale arch orientation`; `documentation_review.report must be the exact sealed report reference`; `record stable bob runtime identities`; `final verification receipt is stale`. 1DMIX-062, **iteration 1** — four rejections, so not a second-iteration effect. 1DMIX-063, iteration 1 — prerequisites passed on the first attempt, because by then the order had been learned. That contrast is the evidence that the cost is discovery rather than complexity: same closer, same tooling, same class of issue, and the difference between eight rejections and zero is prior exposure. Roughly 25 minutes on 1DMIX-052 and 10 on 1DMIX-062, entirely on bookkeeping, on issues whose reviewers had already approved.
+
+### Potential Impact
+Two of the eight are traps rather than instructions. `record stable bob runtime identities` does not say the wanted value is the list of `dispatch_id`s already present in `subagents`. And `final verification receipt is stale` fires *after* a passing suite, because the fields feeding `review_signature` were still being discovered when the receipt was taken — so the natural order of work guarantees the failure, and a closer meeting it for the first time will reasonably conclude the suite must be rerun. On this project that is an 11-minute penalty for a bookkeeping edit. Every individual check is correct and none should be relaxed; the defect is that a knowable set is not offered.
+
+### Proposed Fix
+Add a dry run that reports all unmet closeout requirements at once instead of the first. The information already exists: `final_verification.ready` and `loop_gate.check_done` compute these conditions, and `workflow_records.readiness` already demonstrates returning a `findings` list rather than raising on the first problem. Extend that shape to `--check-done` behind a flag, or add `loop_gate.py --closeout-doctor`. State the `review_signature` ordering constraint explicitly in the output — finalize every signed field before taking the receipt — so it is read rather than learned by rejection.
+
+### Acceptance Criteria
+A closeout draft missing several requirements yields a single report listing all of them, demonstrated by a test that omits at least three and asserts all three appear in one invocation. The `review_signature` dependency is named in that output, with the fields it covers enumerated. The existing strict behaviour of `--check-done` is unchanged for callers that do not request the dry run, and the current suite passes unchanged.
+
+### Expected Effect
+A first-time closer sees the whole requirement set before the first fix instead of after the seventh. The measured 25 minutes of serial discovery collapses to one report, and the specific trap where a passing receipt is invalidated by a subsequently-discovered field stops being reachable by following the tools in their natural order.
+
+---
+
+## 🔴 PROPOSED: The reviewer is never told which sealed documentation report to cite, and cites a superseded one
+
+**Date Identified**: 2026-09-28  19:40
+**Status**: Proposed
+**UUID**: TEAM-SEAL-CITATION-001
+**Category**: reviewer_uninformed_of_current_seal
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-28-reviewer-seal-citation/assessment.md
+**Anchors**: tools/esx/brief.py::build; tools/esx/final_verification.py::ready; tools/esx/doc_contract.py::seal
+
+### Issue
+A reviewer's footer must carry `documentation_review.report` equal to the current sealed documentation plan. Every implementer correction forces a re-seal, because sealing binds the plan to the exact current candidate bytes, so by a confirming round the seal the reviewer first read is one or two generations stale. Nothing in the brief makes the current hash salient against the one already in his context, and the mismatch surfaces only at final verification — after his round is spent.
+
+### Evidence
+Three occurrences, three wasted rounds, one cause. 1DMIX-052 round 2 cited `093e1c22…`, the round-1 seal, with the reviewer's own note reading "Same sealed plan cited in round 1"; current was `9029b239…`. 1DMIX-062 round 2 cited `4cac34ee…`, the round-0 seal, after two re-seals; current was `e56f80ca…`. 1DMIX-057 records the same failure before this session: "round 1 solely because its footer cited a navigate receipt instead of the sealed documentation report, which round 2 corrected with no change to the verdict." Each was resolved by a footer-only correction naming the current hash explicitly — 142 seconds in the 1DMIX-062 case — with the `APPROVE` verdict unchanged every time.
+
+### Potential Impact
+The wasted round is the smaller cost. The larger one is that a footer-only correction round is indistinguishable in the record from a substantive one, so an iteration's round count overstates the review effort actually spent on correctness. And a reviewer asked three times to re-cite without being told why may reasonably start treating the citation as bookkeeping rather than as the attestation it is — which is the property the field exists to capture.
+
+### Proposed Fix
+Have `brief.py` inject the current sealed documentation reference into every reviewer brief verbatim as a required footer input, with an instruction to read that exact file rather than assume it matches one already seen. The current sealed documentation reference is **already** dumped verbatim into every reviewer brief (`brief.py::build`, `json.dumps(packet)`, present since commit 1482fe5), but buried undifferentiated inside the full packet JSON with nothing marking it as the field to re-check against context. The fix is to give it a labeled, standalone line, not to add information that is currently absent. Additionally, validate the citation at packet-build or report-capture time rather than only at final verification, so a stale citation is caught before a round is spent. Both halves are additive and neither weakens the attestation.
+
+### Acceptance Criteria
+A generated reviewer brief contains the current sealed report path and sha256, demonstrated by a test comparing the brief text against the packet's documentation reference. A footer citing a superseded seal is rejected at report capture with a message naming both the cited and the expected hash, demonstrated in both directions. No existing integrity check is relaxed: a footer citing a non-existent or altered report still fails.
+
+### Expected Effect
+The three-for-three failure rate on confirming rounds goes to zero, and a reviewer who cites the wrong seal learns so from his own turn rather than from a later refusal. Round counts in retrospectives start reflecting correctness effort rather than citation bookkeeping.
+
+---
+
+## 🔴 PROPOSED: The retrospective schema has no success channel, so validated approaches are recorded as problems
+
+**Date Identified**: 2026-09-28  19:40
+**Status**: Proposed
+**UUID**: TEAM-RETRO-SUCCESS-001
+**Category**: retrospective_lacks_success_channel
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-28-retrospective-success-channel/assessment.md
+**Anchors**: tools/esx/team_retrospective.py::accept; tools/esx/team_retrospective.py:97; devel-loop/self-improvement/README.md
+
+### Issue
+A schema-version-2 retrospective carries `problems`, `solutions`, `carry_forward` and `no_problem_reason`, and nothing else. There is no field for a confirmation — an approach tried deliberately, which worked, and should be repeated. `validate` requires every `problems` entry to carry `minutes_lost` and to receive a `solutions` disposition naming an open process owner. Recording a success therefore means writing it into the failure array with `minutes_lost: 0` and nominating an owner for it as though it were a defect.
+
+### Evidence
+Six instances across two sessions, each saying in prose what the schema cannot say structurally. 1DMIX-054's and 1DMIX-059's `bounded_first_step_paid_off` entries both carry the same complaint. 1DMIX-058's `distinct_reviewer_questions_found_new_ground` opens "Recorded because the schema has no success channel". 1DMIX-061's `restated_rules_prevented_rework` opens "Recorded because the schema has no success channel, and because this iteration is the controlled comparison for the immediately preceding one". 1DMIX-063's `handbuilt_witness_guards_callee_not_pipeline` opens "Recorded because it is the third consecutive demonstration of one structural fact and the schema has no channel for a finding that is neither a process failure nor a success". Two further entries in the same window carry `minutes_lost: 0` for the same reason.
+
+### Potential Impact
+The project's own guidance is to record from success as well as failure, on the stated grounds that recording only corrections avoids past mistakes while drifting away from approaches already validated. The schema contradicts that guidance. Two concrete consequences follow: anyone counting defects from `problems` arrays over-counts, because some entries are successes distinguishable only by `minutes_lost: 0` and a prose disclaimer; and anyone looking for what to keep doing has nowhere to look. The 1DMIX-061 entry is the sharpest case — it exists specifically as the controlled comparison against an iteration where the same rule was unstated and cost a 59-tool-call turn, which is the most useful process evidence this program can produce, and it is filed as a problem.
+
+### Proposed Fix
+Add a `confirmations` array in schema version 3: entries carrying `category`, `summary` and `evidence`, with no `minutes_lost` and no `solutions` requirement, since a confirmation needs no owner. Keep `problems` for defects. Have `--draft-retro` emit both arrays, and have `validate` accept a retrospective whose `problems` is empty when `confirmations` is not, without demanding a 60-character `no_problem_reason` — the confirmations are themselves the measured evidence that reason exists to supply. Leave the recurring-category machinery applying to `problems` only. Confirmations must still meet the evidentiary floor `accept()` already applies to `problems` (an `evidence` field of substantive length), and an empty `problems` array is exempted only from *duplicating* the explanation, never from supplying one: it requires either a `no_problem_reason` of 60 characters or at least one confirmation whose own evidence meets that bar. Without that floor the new path would be a strictly lower bar than today's.
+
+### Acceptance Criteria
+A schema-version-3 retrospective with a populated `confirmations` array and an empty `problems` array validates and is accepted, demonstrated by a test. A confirmation entry is rejected if it lacks substantive `evidence`, and is not required to carry `minutes_lost` or a disposition. A retrospective with an empty `problems` array, an empty `no_problem_reason` and only a content-free confirmation is refused, demonstrated by a test. Existing version-2 records remain readable and their recurring-category checks behave unchanged. `--draft-retro` emits both arrays.
+
+### Expected Effect
+Confirmations stop being filed as zero-cost defects, so `problems` counts mean what they say. The prose disclaimer "recorded because the schema has no success channel", now written five times, stops being necessary. A reader can answer "what has this project validated and should keep doing" from a field instead of by inference.
+
+---
+
+## 🔴 PROPOSED: Arch's orientation is invalidated by exactly the edits Arch commissioned, and the remedy is retyping
+
+**Date Identified**: 2026-09-28  19:40
+**Status**: Proposed
+**UUID**: TEAM-ARCH-REORIENT-001
+**Category**: arch_orientation_invalidated_by_commissioned_edits
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-28-arch-reorientation-ceremony/assessment.md
+**Anchors**: tools/esx/doc_contract.py::validate_orientation; tools/esx/doc_contract.py::navigate; tools/esx/workflow_handoff.py::assemble
+
+### Issue
+Arch records an orientation at `--prepare`. The implementer then edits those documents, because that is the assignment, and the packet build refuses with `ARCH_ORIENTATION_INVALID`. The remedy is to rerun `doc_contract.py navigate` with the same map, the same targets and the same documents, changing only the free-text `--use`. This is distinct from `TEAM-ORIENTATION-RESEAL-001`, which covers an implementer invalidating his *own* receipt; here the coordinator's orientation is invalidated by an agent doing what the coordinator asked.
+
+### Evidence
+Five re-navigations across four issues on 2026-09-28, every one triggered by a commissioned edit. 1DMIX-052 reported `changes=[{"target": "MITgcm_to_Python_port_verification/README.md#current-validation-status", "changed": ["documentation"], "before": "f252270f…", "after": "ddd389e5…"}]` — the exact edit Arch had directed, to the line Arch had oriented on. 1DMIX-061 once, 1DMIX-062 twice (after the repair and again after the sweep correction), 1DMIX-063 once. In all five the `navigate` arguments were unchanged apart from `--use`; no case surfaced a change Arch had not already directed or already read, and no re-navigation altered any later judgment.
+
+### Potential Impact
+The integrity property is sound — a coordinator must not carry a stale picture into a review packet — but the check cannot distinguish "the dependency slice moved under you" from "the agent did what you asked in the file you asked about", and only the first is a staleness risk. Because the remedy is a re-issued command with identical arguments, the check has the property that makes controls decay: it is satisfied by ceremony rather than attention, and an Arch who has performed it five times will perform the sixth without reading the diff, which is exactly the failure the check exists to prevent.
+
+### Proposed Fix
+**A hash-citation acknowledgement was considered and rejected on review.** `validate_orientation` already embeds each changed target's `after` hash in its own refusal text, so an acknowledgement citing those hashes back can be satisfied by copying the refusal output, with zero exposure to file content — strictly less assurance than re-running `navigate`, which at least reprints the current 65-line excerpt via `_navigate`. That would have been a regression on the property it claimed to preserve.
+
+Instead remove the retyping without removing the exposure: add a `navigate --reuse-args <original-orientation-ref>` shortcut that reloads the recorded map, targets and documents so they need not be re-supplied by hand, still executes the excerpt-printing path, and still requires a freshly written `--use`. That deletes the ceremony (re-typing identical arguments) while keeping the one element that actually forces attention (the freshly printed excerpt). Additionally refuse the shortcut when a changed target was **not** in the original orientation's own target or document list, since that is the case the check exists for — the slice moving somewhere Arch never looked.
+
+### Acceptance Criteria
+`navigate --reuse-args` reloads the recorded map, targets and documents from a named prior orientation, prints the current excerpt for every one of them, and refuses without a fresh `--use`, demonstrated by a test. It is refused when any changed target lies outside the original orientation's declared targets and documents. No path exists to clear a stale orientation using only values echoed by the refusal message itself. Re-issuing `navigate` in full remains available and unchanged.
+
+### Expected Effect
+The five ceremonial re-navigations measured in one session stop requiring identical arguments to be re-supplied by hand, while still putting the current excerpt in front of the coordinator every time. The check keeps its force at the boundary it was built for — an unexpected target moving — and no cheaper path exists that a coordinator could satisfy without reading anything.
+
+---
+
+## 🔴 PROPOSED: A provider known dead for the whole session still requires one disposition per queued event
+
+**Date Identified**: 2026-09-28  19:40
+**Status**: Proposed
+**UUID**: TEAM-DEAD-TRANSPORT-001
+**Category**: per_event_disposition_for_dead_transport
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-28-dead-transport-dispositions/assessment.md
+**Anchors**: tools/esx/notifications.py (record); devel-loop/communication.md; .claude/skills/esx-announce/SKILL.md
+
+### Issue
+The communication contract is correct that a pending event cannot satisfy the delivery duty and that each event needs a real receipt or a concrete failure. But when the provider is established dead for an entire session, that contract costs one tool call and one hand-written justification per event, each restating the same discovery, and the gate blocks issue selection until every one is individually adjudicated.
+
+### Evidence
+Slack was unauthenticated throughout 2026-09-28: only `authenticate` and `complete_authentication` were exposed, and `slack_send_message` — which delivered events on 2026-09-20 — was absent. `authenticate` was called once, returned an OAuth URL requiring an owner browser step, and that step was never completed, so no send tool appeared and retry was never possible. **76 events** were dispositioned `unavailable`, each needing its own `notifications.py record` invocation (the CLI takes exactly one event positional and has no batch mode) carrying a 300-to-500-character `--detail` restating that same finding. Some invocations were wrapped in shell loops, so the number of separate tool calls is not logged and is not claimed here. Breakdown: 19 `issue_start`, 19 `issue_closeout`, 19 `progress`, 9 `issue_opened`, 4 `loop_start`, 4 `loop_end`, 2 `lesson`. Final ledger state: 0 pending, 0 undispositioned. `--next` refused to advance to issue selection while any event was pending, so this recurred at every closeout, five times over.
+
+### Potential Impact
+No correctness problem — the ledger is accurate and the owner-facing report could state exactly what was undelivered and why. The costs are that a justification retyped fifteen times becomes boilerplate, and boilerplate is where a genuinely different failure gets mislabelled as the familiar one; and that the ledger now holds fifteen near-copies of one discovery, so a future auditor cannot tell whether the transport was probed fifteen times or once. The distinction the ledger cannot express is the one that matters: a per-event failure, where this send was attempted and failed, versus a session-scoped outage where no send was possible at all.
+
+### Proposed Fix
+Allow one session-scoped provider-outage disposition covering every queued event and events queued later in the same session, recording the discovery once with its probe evidence and marking each event as covered by that outage rather than individually adjudicated. Require an explicit re-probe to clear it, so recovery is never assumed. Keep per-event dispositions for `failed`, since an executed send that failed is genuinely per-event information. Have `--next` treat outage-covered events as dispositioned so the gate stops blocking issue selection on a transport known to be down.
+
+### Acceptance Criteria
+A single outage record dispositions all queued events for its provider and is applied automatically to events queued afterwards in the same session, demonstrated by a test. `notifications.py status` distinguishes outage-covered events from individually `failed` ones. Clearing the outage requires an explicit re-probe, and the re-probe is **forced rather than discretionary**: `--next` requires one probe attempt per loop iteration (or per N covered events, whichever comes sooner) while an outage is active, and the outage record carries an iteration-count bound after which it must be renewed with fresh probe evidence rather than silently continuing to apply. An event queued after clearing is again individually adjudicated. `--next` does not block on outage-covered events, and `pending` still blocks as it does today.
+
+### Expected Effect
+One recorded discovery with its probe evidence replaces fifteen near-duplicate justifications, and the ledger states plainly whether a transport was down or a send was attempted and failed. The loop stops requiring five separate adjudication rounds to advance past a provider that was dead before the first one.
