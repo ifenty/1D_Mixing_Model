@@ -81,6 +81,25 @@ python3 tools/esx/verify.py --suite structural --owner arch
 python3 tools/esx/brief.py --role richard --issue UUID --design design.md --question 'Check the independent conservation oracle.' --packet review-packet.json --output richard-brief.md
 ```
 
+Before briefing any change to a named default, symbol or documented contract,
+declare each affected name with a repeatable `--sweep-symbol NAME` so its
+mentions are enumerated rather than recalled:
+
+```sh
+python3 tools/esx/brief.py --role bob --issue UUID --design design.md --sweep-symbol keep_mitgcm_bugs --output bob-brief.md
+```
+
+The brief then carries a "Documents mentioning `NAME`" section listing every
+file in the project tree with a whole-word mention, one `path:line,line,...`
+row per file (Git-tracked and unignored text files; loop state, `.git`, output
+and archive roots, binary files and ESX self-improvement records are excluded).
+At most 50 files and 20 line numbers per file are shown, each with the count
+omitted, so one verbose file cannot hide another. Those files are explicit
+targets whether or not the change touches them: the documentation
+contract's disposition only enumerates changed files, so an unchanged document
+still stating the old meaning is otherwise found only by a reviewer, one
+correction round at a time.
+
 A brief gives the actual iteration identity, budget, own-orientation command,
 acceptance question and role report template. Run the complete structural suite
 before review; current evidence is reused. A retained completion validates nested
@@ -91,8 +110,8 @@ new correction_round. Existing packet helpers retain the exact completion IDs.
 Use `loop_lifecycle.py prepare-done --packet ... --verification ... --metadata ...`
 for a draft completion from the accepted packet and final_verification result.
 Metadata supplies a substantive summary, tests_status, Git and communication
-dispositions. This does not accept the issue. Preview/apply `loop_lifecycle.py
-promote`, then `loop_gate.py --check-done`. The timestamp stays equal to the start;
+dispositions. This does not accept the issue and leaves its open entry in place.
+Run `loop_gate.py --check-done`; acceptance moves the entry into closed_issues.md. The timestamp stays equal to the start;
 closed_at records completion time separately. A successful content-bound start
 receipt is required. Preserve partial/blocked work and its next action.
 
@@ -109,6 +128,33 @@ corrections, missing costs and timed phases. Overlapping intervals use unions;
 summed agent effort is distinguished from elapsed time. Orientation, implementation,
 review, verification, closeout, retrospective and coordination are instrumented.
 Other waiting can be measured through `team_accounting.phase(..., 'waiting', reason)`.
+
+### Coordinator (Arch) cost
+
+Arch is the interactive main session, not a dispatched agent, so no turn record
+meters it. Two sources fill the gap, reported in the summary's `coordinator`
+block and never added to dispatched-agent `cost_usd`, `reported_usd` or child
+elapsed time:
+
+- **Tool-measured** (automatic): `--check-start`, orientation, `prepare-done`,
+  verification owned by `arch`, `--check-done` and `--check-retro` append phase
+  events with `role: arch`. This is gate wall time only, so it never by itself
+  sets `coordinator_coverage` to `recorded`.
+- **Self-reported** (Arch, every iteration): after `--check-done` and before
+  `--draft-retro`, record the session's coordination time and cost with its
+  provenance, for example from the host's session cost display:
+
+```sh
+python3 tools/esx/team_accounting.py record-arch --issue UUID --phase coordination \
+  --minutes 35 --usd 4.10 --source "Claude Code /cost delta since --prepare"
+```
+
+A record made after the iteration closed attaches to that closed iteration; one
+made while it is active falls inside its window. Omit `--usd` when the cost is not
+visible; it stays unknown, never zero. `coordinator_coverage` reads `recorded`
+when a self-report or a `team_driver.py` coordinator receipt exists for the
+iteration and `missing` otherwise; the retrospective's `measured.cost_scope`
+states which applies. Recording after `--draft-retro` makes that draft stale.
 Unobserved time, native turn duration and host usage remain coverage gaps; reported
 USD is not an invoice reconciliation. Do not describe missing values as zero.
 

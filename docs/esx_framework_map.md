@@ -32,6 +32,7 @@ that an unexecuted scientific oracle passes.
 | Mechanism | Owning source | Contract | Kit regression |
 |---|---|---|---|
 | Staged review packets and read-only readiness | tools/esx/workflow_handoff.py | devel-loop/recovery.md | test_workflow_recovery.py, test_execution.py |
+| Read-only closeout dry run and reiteration drafting | tools/esx/closeout_doctor.py, workflow_records.py | devel-loop/loop_contract.md, devel-loop/execution.md | test_closeout_doctor.py |
 | Assessed session transitions and hook diagnostics | tools/esx/runtime_recovery.py | devel-loop/recovery.md | test_runtime.py, test_workflow_recovery.py |
 | Real retained-session instruction refresh | tools/esx/agent_runtime.py | devel-loop/recovery.md | live_runtime_transition.py (opt-in) |
 
@@ -55,11 +56,11 @@ recorded provider failures remain visible while scientific work proceeds.
 
 | Responsibility | Owner | Validation in master |
 |---|---|---|
-| Role briefs and early completion contracts | tools/esx/brief.py, footer_contract.py, agent_runtime.py | tests/test_parity_integration.py, test_runtime.py |
-| Shared reservations and coordinator receipts | tools/esx/team_budget.py, team_driver.py, team_accounting.py | tests/test_team_operations.py |
+| Role briefs and early completion contracts | tools/esx/brief.py, footer_contract.py, agent_runtime.py | tests/test_parity_integration.py, test_runtime.py, test_seal_citation.py |
+| Shared reservations, coordinator receipts and Arch self-reports | tools/esx/team_budget.py, team_driver.py, team_accounting.py | tests/test_team_operations.py, tests/test_coordinator_cost.py |
 | Bounded tool groups and hook counters | tools/esx/bounded_command.py, runtime_tool_hook.py | tests/test_team_operations.py, test_execution.py |
 | Successful starts and immutable iteration identity | tools/esx/loop_iteration.py, loop_gate.py | tests/test_parity_integration.py, test_execution.py |
-| Required measured reflection and recurring owners | tools/esx/team_retrospective.py | tests/test_parity_integration.py, test_team_operations.py |
+| Required measured reflection and recurring owners | tools/esx/team_retrospective.py | tests/test_parity_integration.py, test_team_operations.py, test_retro_success.py |
 | Process evidence and recoverable ledger promotion | tools/esx/process_evidence.py, self_improvement.py, ledger_transaction.py, loop_lifecycle.py | tests/test_self_improvement.py, test_process_improvements.py, test_parity_integration.py |
 
 Owning contracts: [bounded operations](../devel-loop/team_operations.md),

@@ -601,7 +601,7 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
             progress({"status": "running", "session_id": session, "event_id": event_id,
                       "role": role, "issue_id": issue})
         started = time.monotonic()
-        with team_accounting.phase(root, issue, 'review' if role == 'richard' else 'implementation'):
+        with team_accounting.phase(root, issue, 'review' if role == 'richard' else 'implementation', role=role):
             result, message, init, code, error, watchdog_kills = _execute(
                 root, turn, state, command, prompt, timeout, tool_timeout)
         usage = team_accounting.stream_usage(turn / 'stdout.jsonl')
@@ -627,7 +627,8 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
               or (iteration_timestamp and footer.get("iteration_timestamp") != iteration_timestamp)):
             status, error = "incomplete", "missing, malformed, or mismatched report footer"
         if status == 'completed' and not probe:
-            errors = footer_contract.validate(root, role, footer, issue, correction_round, active, session)
+            errors = footer_contract.validate(root, role, footer, issue, correction_round, active, session,
+                                             ((review or {}).get('maintenance') or {}).get('documentation'))
             if errors:
                 status, error = 'incomplete', '; '.join(errors)
         (turn / "report.md").write_text(message)

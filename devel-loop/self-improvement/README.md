@@ -7,7 +7,8 @@ the debt without extending a time or money allocation.
 
 ## Close the feedback loop
 
-After `python3 tools/esx/loop_gate.py --check-done`:
+After `python3 tools/esx/loop_gate.py --check-done`, record coordinator cost
+([record-arch](../team_operations.md#coordinator-arch-cost)), then:
 
 ```sh
 python3 tools/esx/loop_gate.py --draft-retro
@@ -22,13 +23,24 @@ python3 tools/esx/loop_gate.py --check-retro
 python3 tools/esx/loop_gate.py --next
 ```
 
-Describe each problem using category, summary, evidence and integer minutes_lost.
-Each solution indexes a problem and either files it, defers it with a substantive
-reason and open process owner, or cites a closed implemented process issue.
-Unpublished fixes stay open with an Implementation-Reference. A verified-effective
-claim additionally needs hashed, comparable before/after measurements showing the
-stated improvement. An empty problems list needs an evidence-based explanation of
-at least 60 characters. Missing cost observations are explicitly unknown.
+The draft is `schema_version` 3; accepted schema-2 records stay valid and a
+schema-2 submission is still accepted unchanged (it may not carry confirmations).
+Describe each problem (a defect) using category, summary, evidence and integer
+minutes_lost. Each solution indexes a problem and either files it, defers it with
+a substantive reason and open process owner, or cites a closed implemented
+process issue. Unpublished fixes stay open with an Implementation-Reference. A
+verified-effective claim additionally needs hashed, comparable before/after
+measurements showing the stated improvement. Missing cost observations are
+explicitly unknown.
+`measured.cost_scope` states whether coordinator cost is included; cite it rather
+than presenting dispatched-agent `cost_usd` as the iteration's total.
+
+Record an approach that was tried deliberately, worked and should be repeated in
+`confirmations`, not as a zero-cost problem. Each confirmation carries category,
+summary and evidence (at least 20 characters each) and no minutes_lost or
+solution. An empty problems list needs an evidence-based explanation: either a
+`no_problem_reason` of at least 60 characters or at least one confirmation whose
+evidence is at least 60 characters. Recurrence scheduling counts problems only.
 
 Use `carry_forward` for new brief rules. Repeated rules are flagged for promotion
 into [the standing rules](../loop_rules.md); retire rules once code enforces them.
@@ -68,7 +80,8 @@ Promotion previews complete ledgers, validates them, checks expected source hash
 then applies under a lock with original-byte archives and a durable journal. Repeat
 requests are idempotent. `self_improvement.py recover` completes an interrupted
 transaction; `recover --rollback` restores originals. Concurrent edits are refused.
-Scientific promotion uses `loop_lifecycle.py promote` and the full scientific gate.
+Scientific promotion uses `loop_lifecycle.py promote` and the full scientific gate;
+without it, `loop_gate.py --check-done` performs the move itself on acceptance.
 
 Administrative process ledgers, generated indices and prose/data assessment files
 are excluded from costly candidate/documentation signatures, but their current

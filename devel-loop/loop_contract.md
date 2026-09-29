@@ -64,14 +64,25 @@ when diagnosing termination. Never edit a counter to conceal failed progress.
 5. Assemble a review packet with exact completion events. For a scientific change,
    the assigned owner uses final_verification.py after readiness passes. Preserve
    its result and receipt. A failed attempt cannot reuse an earlier approval result.
-6. Prepare the closeout and use loop_lifecycle.py promote to preview/apply an
-   accepted issue move with recovery evidence, or retain partial/blocked work with
-   its next step and dependency. Complete issue-done.json using the start timestamp.
-7. Run --check-done. PASS saves the complete closeout in durable history.
+6. Prepare the closeout, or retain partial/blocked work with its next step and
+   dependency. Complete issue-done.json using the start timestamp. Do not move a
+   completed entry out of open_issues.md yourself: the ledger records only accepted work.
+7. Run --closeout-doctor (read-only; `--done PATH` inspects a draft) to list every
+   unmet closeout requirement at once. Finalize every field that review_signature
+   covers (listed in the doctor output) before taking the final verification receipt;
+   a later edit makes the receipt stale, and final_verification.py run without --fresh
+   then rebinds the unchanged execution. After a genuine re-run, `loop_lifecycle.py
+   rebind-receipt` re-points the prepared closeout at the new receipt.
+   Then run --check-done. PASS moves a completed entry into closed_issues.md (Status
+   Resolved, Date Resolved = acceptance time) under a journaled transaction and saves
+   the complete closeout in durable history. A refusal moves nothing. `loop_lifecycle.py
+   promote` remains available to stage a curated closed entry through the same gate.
 8. Drain required authorized notifications, retaining provider receipts or concrete
    errors in the outbox. If issue-done communication fields change, rerun --check-done
    to refresh the matching history entry atomically.
-9. Generate --draft-retro, review its measured accounting, and save retrospective.json.
+9. Record coordinator cost with `team_accounting.py record-arch` (see
+   [bounded operations](team_operations.md)), then generate --draft-retro, review
+   its measured accounting and cost_scope, and save retrospective.json.
    Run --check-retro; resolve due process follow-ups. This is mandatory even with
    an empty queue. See [self-improvement](self-improvement/README.md).
 10. Continue through --next. An interruption resumes existing assignments and
