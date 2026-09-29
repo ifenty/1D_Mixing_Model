@@ -139,7 +139,7 @@
   },
   "communication": {
     "provider": "slack",
-    "channel": "C0C27T304GH",
+    "channel": "C0C4ZNQNG1M",
     "message_prefix": "[1D-Mixing]",
     "authorization_reference": "esx/project_profile.md#runtime-and-operations (communication)"
   },
