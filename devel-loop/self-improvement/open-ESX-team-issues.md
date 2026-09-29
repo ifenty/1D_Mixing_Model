@@ -583,3 +583,33 @@ A single outage record dispositions all queued events for its provider and is ap
 
 ### Expected Effect
 One recorded discovery with its probe evidence replaces fifteen near-duplicate justifications, and the ledger states plainly whether a transport was down or a send was attempted and failed. The loop stops requiring five separate adjudication rounds to advance past a provider that was dead before the first one.
+
+---
+
+## 🔴 PROPOSED: The ESX template imports `adx_workflow`, a module that exists only in the ADX project
+
+**Date Identified**: 2026-09-29  12:00
+**Status**: Proposed
+**UUID**: TEAM-TEMPLATE-ADX-IMPORT-001
+**Category**: template_foreign_project_import
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-template-adx-import-leak/assessment.md
+**Anchors**: tools/esx/workflow_handoff.py:142
+
+### Issue
+`tools/esx/workflow_handoff.py` tries `import adx_workflow as lifecycle` and falls back to `workflow_policy` on `ImportError`. `adx_workflow` doesn't exist in this project. It is left over from the ADX project the ESX framework was extracted from, and it ships in the upstream template (`ESX-Team/template/tools/esx/workflow_handoff.py:142`, present since ESX-Team's first commit `f8f6df1`).
+
+### Evidence
+A whole-repo import scan run on 2026-09-29 while building the `ecco` env flagged `adx_workflow` as unresolvable. The only file with that name on the workstation is `~/Projects/ADX/tools/adx_workflow.py`. `git log -S adx_workflow` in ESX-Team finds only `f8f6df1`, and the deployed copy is byte-identical to the 1.5.0 template (`c630fc3`). The project owner confirmed there is no `adx_workflow` in this project. `loop_gate.py --doctor` passes because the fallback always runs.
+
+### Potential Impact
+No current runtime failure. It is a misleading dependency: in this session it was first misreported as an optional ESX import. It is also a silent-substitution hazard: if an importable `adx_workflow` is ever on `sys.path`, the handoff gate uses ADX's `resolved_dispatch` rules instead of this project's, and nothing records the switch.
+
+### Proposed Fix
+Upstream in ESX-Team, replace the `try`/`except` with `import workflow_policy as lifecycle`, grep the template for any other ADX-specific names, and redeploy. Don't make a project-local edit meanwhile, so `tools/esx` stays byte-identical to the template.
+
+### Acceptance Criteria
+`grep -rn adx_workflow tools/esx` returns nothing after redeploy. `python3 tools/esx/loop_gate.py --doctor` and `python3 tools/esx/self_improvement.py check` pass. The upstream template has no remaining references to modules that exist only in ADX.
+
+### Expected Effect
+The handoff gate always uses this project's own lifecycle module, and the import no longer needs explaining. Invariant: the template imports only modules it ships.
