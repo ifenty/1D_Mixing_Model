@@ -82,7 +82,7 @@ Metric: recovery dispatches per timeout event, measured from `dispatch_log.jsonl
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-27-unverified-cost-estimate/assessment.md
 **Anchors**: closed_issues.md:1391; devel-loop/issue_priority.md
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 1DMIX-049's filed text asserted that regenerating the `global_oce_latlon` KPP capture meant "8760 timesteps" and hours of wall clock. That figure belongs to a different experiment (`lab_sea`/1DMIX-026, hourly steps); `global_oce_latlon` uses 12-hour steps and `nTimeSteps=720`, directly confirmable from the experiment's own `data` file. The figure was obtained by grepping for a timestep count and taking a match without confirming which experiment's record it belonged to. Nothing in the issue-filing path requires a quantitative claim in an issue's scoping text to name where it was measured.
@@ -181,7 +181,7 @@ Metric: correction rounds spent solely on orientation reseal, counted from `disp
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-doc-staleness-sweep/assessment.md
 **Anchors**: tools/esx/brief.py::build; tools/esx/doc_contract.py::validate_report
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 1DMIX-057 flipped the `keep_mitgcm_bugs` default. That invalidated statements in five separate documents, but Arch scoped the brief around only the three it had thought of, and the other two -- plus three further unannotated spots inside one of them -- surfaced one reviewer round at a time. The documentation contract's own disposition machinery does not help here: it enumerates targets in the *changed candidate*, and these stale documents were not changed by the work, which is precisely why they were missed. Nothing in the dispatch path asks the obvious question, which is which documents currently mention the symbol whose meaning is about to change.
@@ -312,7 +312,7 @@ Metric: framework-owned disposition targets required to close a project issue th
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-reiteration-closeout/assessment.md
 **Anchors**: tools/esx/workflow_records.py::prepare_done; tools/esx/workflow_policy.py::validate_reviews; tools/esx/workflow_policy.py::resolved_dispatch; tools/esx/workflow_policy.py::validate_scope_decisions
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 An issue that closed partial leaves failed turns in the dispatch log. Its next iteration must then satisfy five separate requirements that nothing announces in advance: `prepare-done --prior <previous closeout>` to retain pre-iteration attempts; an explicit `agent_continuity.replacements` disposition per failed identity, carrying `role`, `old_id`, `new_id`, `reason` and `evidence_refs`; a `verification` block naming `structural`, `scientific` and `receipt` separately; and a `scope_decisions` classification drawn from a set that has no member for "the review found this and I filed it". Each requirement announced itself only as a rejection, after the fact. The cost lands exactly where it is least affordable: a second iteration exists *because* the first went badly, so the closer is guaranteed to be carrying failed turns and guaranteed to hit the whole sequence.
@@ -345,7 +345,7 @@ A second iteration of an issue whose first closed partial is assembled into a co
 **Severity**: High
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-final-verification-rerun/assessment.md
 **Anchors**: tools/esx/final_verification.py::ready; tools/esx/final_verification.py::check_receipt; tools/esx/loop_gate.py:158; tools/esx/loop_lifecycle.py::prepare_done
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 The scientific suite is the most expensive step in the loop and its receipt is the artifact whose truthfulness matters most, but that receipt cannot currently distinguish "this candidate is wrong" from "this process was killed". Three defects compound. An interrupted run is recorded `status: FAILED` with the error text `verification failed or source changed`, which conflates a real test failure, a source change under the run, and a run that never finished. `--check-done` then reports only the resulting missing artifact — `[Errno 2] No such file or directory: …/final-verification/current.json` — naming neither the last attempt nor its status nor its log. And because `prepare_done` writes `verification.receipt` once at prepare time, a successful re-run leaves the closeout record still citing the superseded receipt, with no supported operation to re-point it at `current.json`.
@@ -376,7 +376,7 @@ The distinction that costs the most to get wrong — candidate is wrong versus p
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-ledger-precedes-validation/assessment.md
 **Anchors**: tools/esx/loop_gate.py:158; tools/esx/loop_lifecycle.py::prepare_done; closed_issues.md; open_issues.md
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 `loop_gate.py:158` requires `done['id'] in closed and done['id'] not in opened` for a completed outcome, so an issue's entry must already have been moved into `closed_issues.md` before `--check-done` will accept its closeout. The permanent record is written first and validated second. When validation then fails for any reason, the ledger is left asserting a resolution that nothing has qualified, and the width of that window equals however long validation takes to succeed. Nothing is done out of order to produce this: `prepare_done` sets `open_issues_md_updated=True` unconditionally, and an Arch who moved the entry only after a passing gate could never pass the gate at all.
@@ -407,7 +407,7 @@ The measured 3h10m window in which the permanent ledger asserted an unvalidated 
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-coordinator-cost-unmeasured/assessment.md
 **Anchors**: tools/esx/team_accounting.py:227; tools/esx/team_accounting.py::summary
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 `team_accounting.py:227` computes `'coordinator_coverage': 'recorded' if 'arch' in roles else 'missing'`, so the framework anticipates Arch costs and has a field for them. It has never received any, and cannot: Arch is the interactive main session rather than a dispatched agent, so no `dispatch_log.jsonl` entry meters it. Every `cost_usd` and `span_minutes` figure the self-improvement program reasons about therefore describes dispatched agents only, while presenting as the cost of the iteration.
@@ -438,7 +438,7 @@ A reader of any retrospective can tell whether its cost figures are total or par
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-closeout-serial-discovery/assessment.md
 **Anchors**: tools/esx/loop_gate.py::check_done; tools/esx/final_verification.py::ready; tools/esx/workflow_handoff.py::readiness
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 Assembling a closeout means satisfying a requirement set that is never stated in advance: each tool reports the first unmet condition, the closer fixes it, reruns, and learns the next. `TEAM-REITERATION-CLOSEOUT-001` covers this but is scoped explicitly to an issue's second iteration after a partial close; the measurements here show the pattern is not confined to that case.
@@ -469,7 +469,7 @@ A first-time closer sees the whole requirement set before the first fix instead 
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-reviewer-seal-citation/assessment.md
 **Anchors**: tools/esx/brief.py::build; tools/esx/final_verification.py::ready; tools/esx/doc_contract.py::seal
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 A reviewer's footer must carry `documentation_review.report` equal to the current sealed documentation plan. Every implementer correction forces a re-seal, because sealing binds the plan to the exact current candidate bytes, so by a confirming round the seal the reviewer first read is one or two generations stale. Nothing in the brief makes the current hash salient against the one already in his context, and the mismatch surfaces only at final verification — after his round is spent.
@@ -500,7 +500,7 @@ The three-for-three failure rate on confirming rounds goes to zero, and a review
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-retrospective-success-channel/assessment.md
 **Anchors**: tools/esx/team_retrospective.py::accept; tools/esx/team_retrospective.py:97; devel-loop/self-improvement/README.md
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 A schema-version-2 retrospective carries `problems`, `solutions`, `carry_forward` and `no_problem_reason`, and nothing else. There is no field for a confirmation — an approach tried deliberately, which worked, and should be repeated. `validate` requires every `problems` entry to carry `minutes_lost` and to receive a `solutions` disposition naming an open process owner. Recording a success therefore means writing it into the failure array with `minutes_lost: 0` and nominating an owner for it as though it were a defect.
@@ -531,7 +531,7 @@ Confirmations stop being filed as zero-cost defects, so `problems` counts mean w
 **Severity**: Low
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-arch-reorientation-ceremony/assessment.md
 **Anchors**: tools/esx/doc_contract.py::validate_orientation; tools/esx/doc_contract.py::navigate; tools/esx/workflow_handoff.py::assemble
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 Arch records an orientation at `--prepare`. The implementer then edits those documents, because that is the assignment, and the packet build refuses with `ARCH_ORIENTATION_INVALID`. The remedy is to rerun `doc_contract.py navigate` with the same map, the same targets and the same documents, changing only the free-text `--use`. This is distinct from `TEAM-ORIENTATION-RESEAL-001`, which covers an implementer invalidating his *own* receipt; here the coordinator's orientation is invalidated by an agent doing what the coordinator asked.
@@ -564,7 +564,7 @@ The five ceremonial re-navigations measured in one session stop requiring identi
 **Severity**: Low
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-28-dead-transport-dispositions/assessment.md
 **Anchors**: tools/esx/notifications.py (record); devel-loop/communication.md; .claude/skills/esx-announce/SKILL.md
-**Implementation-Reference**: ESX-Team 3e44611 (1.5.0), deployed 2026-09-29
+**Implementation-Reference**: ESX-Team c630fc3 (1.5.0), deployed 2026-09-29
 
 ### Issue
 The communication contract is correct that a pending event cannot satisfy the delivery duty and that each event needs a real receipt or a concrete failure. But when the provider is established dead for an entire session, that contract costs one tool call and one hand-written justification per event, each restating the same discovery, and the gate blocks issue selection until every one is individually adjudicated.
