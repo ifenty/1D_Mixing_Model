@@ -613,3 +613,127 @@ Upstream in ESX-Team, replace the `try`/`except` with `import workflow_policy as
 
 ### Expected Effect
 The handoff gate always uses this project's own lifecycle module, and the import no longer needs explaining. Invariant: the template imports only modules it ships.
+
+---
+
+## 🔴 PROPOSED: `agent_runtime.py` crashes when the CLI streams a `permission_denied` event
+
+**Date Identified**: 2026-09-29  21:45
+**Status**: Implemented — awaiting publication/effectiveness evidence
+**UUID**: TEAM-RUNTIME-PERMDENIED-CRASH-001
+**Category**: runtime_stream_parsing
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/agent_runtime.py:363
+**Implementation-Reference**: ESX-Team 8c7ea7d (1.5.1), deployed 2026-09-29
+
+### Issue
+`_read_tool_events` assumes every stream event's `message` is a dict. Claude CLI 2.1.285 emits `{"type":"system","subtype":"permission_denied","message":"This command requires approval",...}` with a string `message`, so `event.get("message", {}).get(...)` raises `AttributeError` in the watchdog and the adapter dies without a footer or turn record.
+
+### Evidence
+1DMIX-064 Bob dispatch, session `c641620b-315d-44ad-9c0c-98d6aadf2b12`, turn `404e048cf06a4a028cab33b9858d07fc`: `stdout.jsonl` line 28 is the event above; the dispatcher traceback ends at `agent_runtime.py:363`. No working-tree edits were made before the crash.
+
+### Potential Impact
+Any permission denial in a headless role turns into a dispatcher crash and an unrecorded, unknown-completeness turn, rather than a denial the role can report.
+
+### Proposed Fix
+Upstream in ESX-Team: take `message = event.get("message")` and read `content` only when it is a dict; consider recording `permission_denied` events in the turn evidence so the coordinator sees them. Keep the deployed copy byte-identical until redeploy.
+
+### Acceptance Criteria
+A replayed stream containing a `permission_denied` event completes the turn with a footer/failed status and no traceback; the denial appears in turn evidence.
+
+### Expected Effect
+Permission problems surface as recorded role evidence instead of dispatcher crashes. Invariant: the stream parser tolerates any JSON event shape.
+
+---
+
+## 🔴 PROPOSED: Missing `external_inputs` on a fresh checkout are only discovered at review-packet time, after implementation
+
+**Date Identified**: 2026-09-29  21:55
+**Status**: Implemented — awaiting publication/effectiveness evidence
+**UUID**: TEAM-VERIFY-EXTERNAL-INPUTS-PREFLIGHT-001
+**Category**: environment_preflight
+**Severity**: High
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/verify.py; tools/esx/loop_gate.py; esx/project.json:external_inputs
+**Implementation-Reference**: ESX-Team 8c7ea7d (1.5.1), deployed 2026-09-29
+
+### Issue
+`verify.py` fingerprints every `external_inputs` path before running any suite, so a checkout missing gitignored captures cannot produce even structural evidence. `loop_control.py run`, `--next`, `--prepare` and dispatch all succeed on such a checkout; the gap first surfaces when `workflow_records.py review-packet` demands structural evidence, after Bob's implementation is done.
+
+### Evidence
+1DMIX-064 on the new WSL checkout (2026-09-29): all 31 of 31 `external_inputs` absent; `verify.py --suite structural --owner arch` → `[Errno 2] No such file or directory: .../mitgcm_kpp_inputs_11k_1D.nc`; review packet refused with `STRUCTURAL_STALE_OR_FAILING`; issue parked as blocked after implementation.
+
+### Potential Impact
+Implementation and loop iterations are spent on work that cannot reach review on this machine; every scientific issue blocks the same way.
+
+### Proposed Fix
+Have `loop_control.py run` / `--next` (or `--doctor`) check `external_inputs` existence and report a single environment blocker before selecting work; optionally distinguish inputs required by the structural suite from those only needed by scientific suites.
+
+### Acceptance Criteria
+On a checkout with a missing `external_inputs` path, `loop_gate.py --next` prints an environment-blocker NEXT naming the missing paths before any issue preparation or dispatch.
+
+### Expected Effect
+Zero implementation dispatches on checkouts that cannot produce verification evidence.
+
+---
+
+## 🔴 PROPOSED: Stop hook consumes a loop iteration each time Arch ends a turn to await a background dispatch
+
+**Date Identified**: 2026-09-29  21:55
+**Status**: Implemented — awaiting publication/effectiveness evidence
+**UUID**: TEAM-LOOP-WAIT-BURNS-ITERATION-001
+**Category**: loop_budget_accounting
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/ralph_stop.py; tools/esx/loop_control.py
+**Implementation-Reference**: ESX-Team 8c7ea7d (1.5.1), deployed 2026-09-29
+
+### Issue
+When Arch dispatches a role in the background and ends its turn to wait, the Stop hook advances the loop iteration counter and re-injects the prompt, though no issue work completed. A 5-iteration budget lost 2 iterations (1→2→3) to waiting on one 1DMIX-064 dispatch, each also emitting a Slack progress post.
+
+### Evidence
+Session 377c3c70 (2026-09-29): iterations 2 and 3 began at 21:44:47 and 21:45:42 while the same Bob dispatch was in flight; notifications fea26d5f4178a2604bdb66a0 and 6d038b0c80cc8255f520d3aa.
+
+### Potential Impact
+Loop budgets are exhausted by waits rather than work; channel receives redundant progress posts.
+
+### Proposed Fix
+Do not advance the iteration while the active issue has an in-flight retained or native dispatch (or while `--next` returns the same "finish active iteration" instruction without new completion records); alternatively document that Arch must block in-turn on dispatch completion.
+
+### Acceptance Criteria
+A Stop during an in-flight dispatch of the active issue leaves `iteration` unchanged and queues no progress notification.
+
+### Expected Effect
+Iteration count equals issue iterations actually attempted.
+
+---
+
+## 🔴 PROPOSED: Stop hook misses a fulfilled completion promise in the final assistant message (transcript flush race)
+
+**Date Identified**: 2026-09-29  22:00
+**Status**: Implemented — awaiting publication/effectiveness evidence
+**UUID**: TEAM-LOOP-PROMISE-FLUSH-RACE-001
+**Category**: loop_termination
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/ralph_stop.py:current_text; tools/esx/ralph_stop.py:211
+**Implementation-Reference**: ESX-Team 8c7ea7d (1.5.1), deployed 2026-09-29
+
+### Issue
+After `loop_gate.py --next` exited 3 and printed `ESX-LOOP-NO-ACTIONABLE-WORK`, Arch ended two consecutive turns with `<promise>ESX-LOOP-NO-ACTIONABLE-WORK</promise>` as the last text, yet the Stop hook logged `CONTINUE` both times (iterations 3→4, 4→5) with no `DEGRADED` entry.
+
+### Evidence
+Session transcript `377c3c70-d8ce-48e1-a428-09f6aadfdfb7.jsonl` record 669 (message `msg_011CfYUcWKUpdduPaeAoaGQo`, timestamp 21:56:01.018Z) ends with the exact promise; `.claude/esx-loop-exit.log` shows `21:56:01.063380 CONTINUE iteration=5`, 45 ms later. `current_text` logic handles this record correctly when run afterwards, implying the record was not yet on disk when the hook read the transcript.
+
+### Potential Impact
+Completed loops cannot terminate by promise; they run to the iteration budget, each extra turn posting a misleading progress notification.
+
+### Proposed Fix
+Before concluding no promise, have the hook fall back to `hook_input['last_assistant_message']` (if provided by the CLI) or briefly retry reading the transcript tail; alternatively let `loop_gate.py --next` exit 3 record a terminal marker the hook honours directly.
+
+### Acceptance Criteria
+With a final assistant message containing the promise and a transcript that is flushed only after hook start, the hook archives `END current completion promise fulfilled`.
+
+### Expected Effect
+Zero iterations consumed after a gate-confirmed no-actionable-work state.

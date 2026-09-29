@@ -1,0 +1,267 @@
+{
+  "retrospective": {
+    "schema_version": 3,
+    "id": "1DMIX-064",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-29T21:32:33.503555+00:00",
+    "timestamp": "2026-09-29T21:53:56Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/1c67a021cd1d5d079b0a4536fa83e04a8d07eaf27c548a0887de2ab3d9a5ad4a.json",
+      "sha256": "1c67a021cd1d5d079b0a4536fa83e04a8d07eaf27c548a0887de2ab3d9a5ad4a"
+    },
+    "measured": {
+      "span_minutes": 21,
+      "dispatches": {
+        "bob": 2
+      },
+      "rounds": {
+        "bob": 1
+      },
+      "cost_usd": {
+        "bob": 0.0
+      },
+      "unknown_cost_event_ids": [
+        "de10e8754d714095b107ee9bf902a43e",
+        "39c9d6f6d5c3416e96d5d09816bf25d2"
+      ],
+      "coordinator_coverage": "recorded",
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator": {
+        "tool_measured_minutes": 0.0,
+        "self_reported_minutes": 25.0,
+        "self_reported_usd": null,
+        "provider_reported_usd": null
+      },
+      "cost_scope": "cost_usd and span-based figures describe dispatched agents; coordinator cost is recorded separately: Arch self-reported 25 min, cost unknown (coordinator.self_reported; not added to cost_usd)"
+    },
+    "problems": [
+      {
+        "category": "runtime_stream_parsing",
+        "summary": "Two headless agent_runtime Bob dispatches crashed in the watchdog on a permission_denied stream event, leaving stuck running sessions that block the review packet.",
+        "evidence": "sessions c641620b-315d-44ad-9c0c-98d6aadf2b12 and 27bfb972-f560-44dc-b2d3-61c7df9f89b0; traceback at tools/esx/agent_runtime.py:363; review-packet ATTEMPT_RUNNING findings",
+        "minutes_lost": 15
+      },
+      {
+        "category": "environment_preflight",
+        "summary": "All 31 external_inputs are missing on the fresh WSL checkout, so verify.py cannot produce even structural evidence; discovered only after implementation, at review-packet time.",
+        "evidence": "verify.py --suite structural: [Errno 2] mitgcm_kpp_inputs_11k_1D.nc; review-packet STRUCTURAL_STALE_OR_FAILING; 1DMIX-064 closed as blocked",
+        "minutes_lost": 10
+      },
+      {
+        "category": "loop_budget_accounting",
+        "summary": "Stop hook advanced the loop from iteration 1 to 3 while Arch waited on a single in-flight Bob dispatch, spending 2 of 5 iterations and posting 2 redundant Slack progress messages.",
+        "evidence": "notifications fea26d5f4178a2604bdb66a0 (21:44:47) and 6d038b0c80cc8255f520d3aa (21:45:42) during one dispatch",
+        "minutes_lost": 3
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-RUNTIME-PERMDENIED-CRASH-001"
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-VERIFY-EXTERNAL-INPUTS-PREFLIGHT-001"
+      },
+      {
+        "problem": 2,
+        "action": "filed",
+        "issue": "TEAM-LOOP-WAIT-BURNS-ITERATION-001"
+      }
+    ],
+    "confirmations": [
+      {
+        "category": "dispatch_transport",
+        "summary": "Native bob subagent with an explicit footer instruction completed the implementation and was recorded as a valid completion by the SubagentStop hook.",
+        "evidence": "dispatch_log event de10e8754d714095b107ee9bf902a43e status completed agent_type bob; follow-up 39c9d6f6d5c3416e96d5d09816bf25d2 supplied orientation"
+      }
+    ],
+    "carry_forward": [
+      "Before dispatching implementation on a new checkout, run verify.py --suite structural once; if it cannot start, park the queue as environment-blocked instead of implementing.",
+      "While a dispatch for the active issue is in flight, block in-turn on its completion record rather than ending the turn."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.5981748104095459,
+        "elapsed_seconds": 0.5981748104095459,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 18.985378980636597,
+        "elapsed_seconds": 18.985378980636597,
+        "events": 2
+      },
+      "orientation": {
+        "effort_seconds": 0.14995694160461426,
+        "elapsed_seconds": 0.14995694160461426,
+        "events": 3
+      },
+      "verification": {
+        "effort_seconds": 1.0598177909851074,
+        "elapsed_seconds": 1.0598177909851074,
+        "events": 2
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 1,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      }
+    },
+    "child_elapsed_seconds": 0,
+    "components": [
+      {
+        "event_id": "de10e8754d714095b107ee9bf902a43e",
+        "kind": "unmetered_native",
+        "parent_event_id": "de10e8754d714095b107ee9bf902a43e",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "39c9d6f6d5c3416e96d5d09816bf25d2",
+        "kind": "unmetered_native",
+        "parent_event_id": "39c9d6f6d5c3416e96d5d09816bf25d2",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      }
+    ],
+    "coordinator": {
+      "coverage": "recorded",
+      "included_in_reported_usd": "no",
+      "provider_reported_usd": null,
+      "self_reported": {
+        "minutes": 25.0,
+        "records": [
+          {
+            "minutes": 25.0,
+            "phase": "coordination",
+            "record_id": "ae244cba81e74f3ca9e2e9193d3a10c1",
+            "recorded_at": "2026-09-29T21:53:55.475168+00:00",
+            "source": "Arch estimate from session wall-clock (21:43-21:55 UTC plus orientation); USD not observable from inside the interactive session",
+            "usd": null
+          }
+        ],
+        "records_without_usd": 1,
+        "usd": null
+      },
+      "tool_measured": {
+        "basis": "wall time of gate commands run as arch; excludes interactive session time",
+        "effort_seconds": 1.1290817260742188,
+        "elapsed_seconds": 1.1290817260742188,
+        "events": 4
+      }
+    },
+    "coordinator_coverage": "recorded",
+    "end": "2026-09-29T21:53:28.130648+00:00",
+    "issue_id": "1DMIX-064",
+    "missing_timing_event_ids": [
+      "de10e8754d714095b107ee9bf902a43e",
+      "39c9d6f6d5c3416e96d5d09816bf25d2"
+    ],
+    "outside_child_intervals_seconds": 1254.6270928382874,
+    "phase_events": [
+      {
+        "event_id": "0662db4f4f864ecb9e77db7151ef3e75",
+        "finished_at": "2026-09-29T21:32:51.025197+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.07809651400020812,
+        "started_at": "2026-09-29T21:32:50.947097+00:00"
+      },
+      {
+        "event_id": "0d1f2156bfa94b81ad63deeb910ec6c5",
+        "finished_at": "2026-09-29T21:33:45.710175+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "implementation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 11.948835261995555,
+        "started_at": "2026-09-29T21:33:33.761352+00:00"
+      },
+      {
+        "event_id": "677f9e6f33e545538122c3398d246429",
+        "finished_at": "2026-09-29T21:44:48.726594+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "implementation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 7.03656947799027,
+        "started_at": "2026-09-29T21:44:41.690038+00:00"
+      },
+      {
+        "event_id": "984e28f848424540b8aea506653d138f",
+        "finished_at": "2026-09-29T21:49:07.984932+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.6419132449955214,
+        "started_at": "2026-09-29T21:49:07.343023+00:00"
+      },
+      {
+        "event_id": "3d95d89ef2e644ee9cf1305f03600ae8",
+        "finished_at": "2026-09-29T21:49:50.738636+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.4178989339998225,
+        "started_at": "2026-09-29T21:49:50.320727+00:00"
+      },
+      {
+        "event_id": "85c07b4c611848bb9de2f598fd05bf60",
+        "finished_at": "2026-09-29T21:51:15.783822+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.03489524099859409,
+        "started_at": "2026-09-29T21:51:15.748924+00:00"
+      },
+      {
+        "event_id": "5d93e09608f545eb8c25b505a51b3cd7",
+        "finished_at": "2026-09-29T21:53:02.834132+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.03695701299875509,
+        "started_at": "2026-09-29T21:53:02.797173+00:00"
+      },
+      {
+        "event_id": "0dc37ef0c08c41b3be8afa3aadc015ad",
+        "finished_at": "2026-09-29T21:53:28.130820+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.5983481540024513,
+        "started_at": "2026-09-29T21:53:27.532473+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 1254.6270928382874,
+    "start": "2026-09-29T21:32:33.503555+00:00",
+    "unknown_cost_event_ids": [
+      "de10e8754d714095b107ee9bf902a43e",
+      "39c9d6f6d5c3416e96d5d09816bf25d2"
+    ]
+  }
+}
