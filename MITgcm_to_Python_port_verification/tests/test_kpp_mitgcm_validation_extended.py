@@ -325,12 +325,37 @@ def test_11k_ocean_ice_column_ghat(result_11k, ocean_mask_11k):
     """`ghat` (cell-center nonlocal transport coefficient) over the full,
     now-clean sample. Measured fresh this round (via `_mixing_diff_rel`'s own
     `active = mitgcm_ghat > 1e-6` filter, applied here exactly as for the
-    other mixing fields): median_abs 1.52e-3, max_abs 1321.7 (n=13,391;
-    rare, tied to the same Rib/Ricr hbl-misdiagnosis tail
-    `test_11k_ocean_ice_column_hbl` characterizes -- `ghat` is only nonzero
-    inside the diagnosed boundary layer, so a misdiagnosed `hbl` can flip a
-    whole near-surface region between "inside"/"outside", producing a large
-    absolute swing even though the underlying formula is correct). Tighter
+    other mixing fields): median_abs 1.521e-3, max_abs 1321.7 (n=13,391).
+
+    **Mechanism measured, not inherited (1DMIX-060).** This docstring used
+    to attribute the residual to "the same Rib/Ricr hbl-misdiagnosis tail"
+    by analogy with `test_11k_ocean_ice_column_hbl`, without measuring it --
+    the same unmeasured-attribution pattern 1DMIX-056/057/058 found and
+    corrected for three *other* captures/scenarios. Measured directly this
+    round (`devel-loop/loop_state/1dmix060-11k-ghat-mechanism.txt`): the
+    global max_abs cell (t=2349, z=0) has `mit_hbl=24.574 m` vs
+    `py_hbl=15.024 m`, a 9.55 m disagreement -- squarely inside the same
+    Rib/Ricr threshold-sensitivity tail `test_11k_ocean_ice_column_hbl`
+    characterizes (its own cited max, 20.28 m). Over all 13,391 active
+    cells, `|hbl diff|` and `|ghat diff|` correlate at Pearson r=0.73
+    (r=0.81 excluding the 13 cells below). 13 cells (0.097% of active
+    cells, 26.2% of the total |diff| sum) show Python's `ghat` exactly
+    `0.0` against a large MITgcm value (median 259.9, max 974.5) -- the
+    1DMIX-058 exact-zero signature -- but unlike `global_oce_latlon` this
+    is NOT a stability-branch flip: a direct rerun at the largest such cell
+    (t=2282) shows `bfsfc` on the identical (unstable) branch in both
+    models (`py_bfsfc=-5.015e-10` vs `mit_bfsfc_final=-5.090e-10`), and
+    these 13 cells' own `hbl` disagreement (median 10.75 m, max 20.28 m) is
+    itself large -- they are simply the most extreme members of the SAME
+    `hbl`-disagreement tail, not a separate mechanism. So for this capture
+    the inherited attribution is CONFIRMED by measurement, not disproved:
+    `hbl` misdiagnosis (1DMIX-019's Rib/Ricr threshold sensitivity)
+    measurably drives this residual, exact-zero cells included. Bulk/median
+    cells (e.g. t=10132) show `hbl` matching to ~6e-5 m and correspondingly
+    tiny `ghat` diff (~1.5e-3), consistent with the same continuous
+    relationship at small scale. Bound unchanged: max_abs<1800.0 retains
+    ~36% headroom above the measured 1321.7 (matching this file's
+    established per-capture margin) and is not found to be loose. Tighter
     max_abs bound than the pre-refresh clean-subset number (1907.6).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_11k
@@ -447,12 +472,60 @@ def test_lab_sea_6mo_mixing(result_labsea_6mo, ocean_mask_labsea_6mo, field,
 
 
 def test_lab_sea_6mo_ghat(result_labsea_6mo, ocean_mask_labsea_6mo):
-    """`ghat` over the full, now-clean ocean-column sample. Measured fresh
-    this round (via `_mixing_diff_rel`'s own `active = mitgcm_ghat > 1e-6`
-    filter, applied here exactly as for the other mixing fields): median_abs
-    2.40e-2, max_abs 362.4 (n=34,540) -- same hbl-misdiagnosis-tail mechanism
-    as `test_11k_ocean_ice_column_ghat`. Tighter max_abs bound than the
-    pre-refresh clean-subset number (500.0).
+    """`ghat` over the full, now-clean ocean-column sample (bounded by this
+    file's own first-100-of-4368-timestep subsample, `_LABSEA_6MO_N`).
+    Measured fresh this round (via `_mixing_diff_rel`'s own
+    `active = mitgcm_ghat > 1e-6` filter): median_abs 2.404e-2, max_abs
+    362.4 (n=34,540).
+
+    **Mechanism measured over this subsample, not inherited (1DMIX-060).**
+    Measured directly
+    (`devel-loop/loop_state/1dmix060-lab_sea_6mo-ghat-mechanism.txt`): the
+    global max_abs cell (t=28, i=8, j=6, z=0) has `mit_hbl=10.491 m` vs
+    `py_hbl=9.965 m` -- only a 0.53 m (5%) disagreement, but one that
+    straddles this capture's 10 m grid-cell boundary (cell 0 spans
+    0-10 m): MITgcm's `hbl` places all of cell 0 inside the boundary layer
+    while Python's places it just outside, flipping `ghat` from 362.4 to
+    exactly `0.0`. A direct rerun confirms `bfsfc` lands on the identical
+    (unstable) branch in both models (`py_bfsfc=-2.371e-9` vs
+    `mit_bfsfc_final=-2.387e-9`) -- ruling out 1DMIX-058's
+    stability-branch-flip mechanism here too. 54 cells (0.156% of active
+    cells, 52.6% of the total |diff| sum) show this same exact-`0.0`
+    signature; among them, **42** (corrected, round 1; recounted directly
+    by `(x,y)` grouping) cluster at a persistent, small (0.24-0.25 m)
+    `hbl` offset at one column (i=13, j=1), all at z=1, running timesteps
+    58-99 -- the very last timestep of this test's own 100-step subsample,
+    so this cluster's own extent beyond t=99 is unknown and bounded by the
+    same subsample caveat above. **6** (corrected count) more show
+    genuinely large `hbl` disagreement (17.4-22.1 m, at columns (9,5)
+    [x4], (19,7) and (8,6) -- matching the known Rib/Ricr tail;
+    `test_lab_sea_6mo_hbl_ocean_columns` cites a comparable max of 40.72 m
+    for this same capture). The remaining 6 do not all fit cleanly into
+    either route: 4 of them (the global max_abs cell itself plus
+    (55,8,6,1), (33,8,6,1) and (2,10,5,1)) have `hbl` differences of
+    0.35-0.59 m -- the same order as the (i=13,1) cluster's own ~0.24-
+    0.25 m offset, just at different columns/timesteps, so they plausibly
+    belong to the same small-offset mechanism without being part of that
+    literal cluster. The other 2 -- (t=3, i=7, j=11, z=0),
+    `hbl_diff=0.0124 m`, and (t=23, i=13, j=7, z=1), `hbl_diff=0.0281 m`
+    -- have `hbl` differences smaller even than the small-offset group's
+    own ~0.24-0.59 m range, so they fit **neither** the large-miss route
+    nor the small-offset route at all; no mechanism is asserted for them
+    here (correction, round 1: the two named routes are not exhaustive of
+    all 54 cells). Over all active cells, `|hbl diff|` and `|ghat diff|`
+    correlate at r=0.22 (r=0.48 excluding the 54 zero cells) -- weaker than
+    `11k`'s r=0.73/0.81, because most of this capture's zero-signature
+    cells come from a small edge-of-boundary-layer offset rather than a
+    large misdiagnosis. So `hbl` disagreement -- not a stability-branch
+    flip -- is the measured driver of this residual's largest cells, via
+    (at least) two distinct routes (a handful of genuine large `hbl`
+    misses, and a larger cluster of small offsets that happen to straddle
+    a grid-cell edge), with a small remainder fitting neither; this
+    refines, rather than repeats unmeasured, the prior "same mechanism as
+    11k" claim. Bound unchanged: max_abs<450.0 retains ~24% headroom above
+    the measured 362.4 (matching this file's established margin) and is
+    not found to be loose. Tighter max_abs bound than the pre-refresh
+    clean-subset number (500.0).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_labsea_6mo
     diff, _rel = _mixing_diff_rel(mitgcm_ds['ghat'].values, python_ds['ghat'].values,
@@ -551,11 +624,57 @@ def test_seaice_obcs_mixing(result_seaice_obcs, ocean_mask_seaice_obcs, field,
 
 def test_seaice_obcs_ghat(result_seaice_obcs, ocean_mask_seaice_obcs):
     """Measured fresh this round: median_abs 0.386, p99_abs 124.4, max_abs
-    572.4 -- the same hbl-misdiagnosis-tail mechanism as the other two
-    experiments' own `ghat` tests, here additionally interacting with the
-    salt-plume `boplume` term's own bfsfc sign-sensitivity near the
-    `phepsi=1e-10` regularization floor (1DMIX-034's own characterized
-    residual).
+    572.4 (n=209 active cells).
+
+    **Mechanism measured, not inherited (1DMIX-060) -- and NOT the same
+    mechanism as `11k`/`lab_sea_6mo` above.** This docstring used to borrow
+    "the same hbl-misdiagnosis-tail mechanism" from the other two
+    experiments' own (then-unmeasured) `ghat` tests, plus an unmeasured
+    "boplume/bfsfc sign-sensitivity" guess. Measured directly
+    (`devel-loop/loop_state/1dmix060-seaice_obcs-ghat-mechanism.txt`): 12 of
+    the 209 active cells (5.7%) show Python's `ghat` exactly `0.0` against
+    a large MITgcm value (median 99.4, max 572.4) -- the 1DMIX-058
+    exact-zero signature -- and these 12 cells carry 75.8% of the total
+    |diff| sum, including the entire max_abs. At the single worst cell
+    (t=0, i=5, j=7, z=0): `hbl` differs by only 0.12 m (1.2% of 10.07 m) --
+    NOT a large misdiagnosis -- and a direct rerun shows `bfsfc` on the
+    IDENTICAL (unstable) branch in both models, both regularized to
+    exactly the same `phepsi` floor (`py_bfsfc = mit_bfsfc_final =
+    -1.000e-10`) -- ruling out 1DMIX-058's stability-branch-flip mechanism
+    too. Python's own diagnosed `kbl=1` places this cell (k=0) *inside*
+    the boundary layer (the ordinary in-layer branch, not the `k>=kbl`
+    outside-layer zeroing at
+    `Vertical_Mixing_Models/KPP/kpp_core_driver.py:428-438`), yet
+    `compute_bl_mixing`'s own shape-function evaluation
+    (`Vertical_Mixing_Models/KPP/kpp_scheme_specific.py:520-572`) still
+    returns exactly `0.0` there. The deeper numerical trigger inside that
+    evaluation is NOT established by this measurement and is not
+    root-caused further here -- that is beyond this issue's scope and is
+    flagged as a candidate for separate investigation if it recurs, not
+    fixed or asserted.
+
+    **This ruling-out is scoped to the single worst cell, not the whole
+    12-cell group** (correction, round 1): the group is heterogeneous, not
+    uniformly non-hbl-driven. Cell (t=4, i=2, j=4, z=1), also in the
+    exact-zero group, has `mit_hbl=28.035 m` vs `py_hbl=14.891 m` -- a
+    13.14 m disagreement, the same order as the genuine `hbl`-misdiagnosis
+    tail `11k`/`lab_sea_6mo` show, with `bfsfc` on the same branch in both
+    models -- so that cell IS hbl-misdiagnosis-driven. Only the single
+    worst cell was characterized in depth; the group mixes at least one
+    hbl-driven member with the worst cell's own not-yet-explained
+    behavior, and no single mechanism is asserted for the group as a
+    whole. The remaining 197 active cells (median 0.386)
+    correlate only moderately with `hbl` disagreement (r=0.71) while `hbl`
+    itself matches closely there too (median 0.009 m) -- so `hbl` mismatch
+    is at most a partial contributor to the ordinary residual, not an
+    established dominant cause; this project's own salt-plume `boplume`
+    forcing is active throughout this capture (1DMIX-034), but no
+    quantitative connection between it and this residual was measured this
+    round, so that prior guess is dropped rather than repeated unmeasured.
+    Bounds unchanged: median<2.0 (~5.2x headroom above the measured 0.386)
+    and max_abs<700.0 (~22% headroom above the measured 572.4, matching
+    this file's established margin style) both remain adequate for the
+    measured values and are not found to be loose.
     """
     _inputs_ds, python_ds, mitgcm_ds = result_seaice_obcs
     diff, _rel = _mixing_diff_rel(mitgcm_ds['ghat'].values, python_ds['ghat'].values,
@@ -638,14 +757,31 @@ def test_global_oce_latlon_capture_is_not_truncated(result_global_oce_latlon,
 
 
 def test_global_oce_latlon_hbl(result_global_oce_latlon, ocean_mask_global_oce_latlon):
-    """Measured fresh this round over the first 5 (of 720) timesteps' 11,575
-    ocean column-timesteps: median 1.36e-3 m, p95 0.0239 m, p99 0.672 m, max
-    33.9 m (0.78%/0.16% exceed 1 m/5 m) -- the same Rib/Ricr threshold-
-    sensitivity tail 1DMIX-019 characterized for every other multi-column
-    experiment, at a magnitude fully consistent with 1DMIX-027's own
-    historical result for this same experiment (median 0.0074 m, max 513.7 m
-    over the full 720-timestep sample) despite the much smaller subsample
-    here.
+    """Measured fresh this round (1DMIX-057, `keep_mitgcm_bugs=True`, the
+    default since this issue) over the first 5 (of 720) timesteps' 11,575
+    ocean column-timesteps: median 1.35e-3 m, p95 0.0187 m, p99 0.0563 m, max
+    3.09 m (0.035%/0% exceed 1 m/5 m).
+
+    **This bound was previously much looser** (median<0.02, max<60.0) under
+    the old `keep_mitgcm_bugs=False` default, whose own measured worst case
+    was max 33.9 m / 146 of 11,575 columns >1% rel -- attributed at the time
+    entirely to "the same Rib/Ricr threshold-sensitivity tail... as the other
+    three experiments" (1DMIX-019). 1DMIX-057 measured that attribution to be
+    substantially wrong for this capture: a direct `keep_mitgcm_bugs`
+    False-vs-True A/B (`devel-loop/loop_state/
+    1dmix057-wscale-capture-threeway.txt`) shows the flip alone -- with no
+    other change -- cuts this same worst-case disagreement by ~11x (33.9 m ->
+    3.09 m), i.e. most of the old tail was the `wscale` lookup-table-clamp
+    difference (`KPP/kpp_routines.py::wscale`, `keep_mitgcm_bugs`; see
+    `docs/model_contract.md`'s KPP section), not an independent Rib/Ricr
+    effect. The bound below is re-derived from the new (`True`) measurement
+    with headroom, not widened -- it is *tighter* than the old bound because
+    the new default measurably agrees better with real MITgcm here. Still
+    broadly consistent with 1DMIX-027's own historical full-720-timestep
+    result for this experiment (median 0.0074 m -- that earlier run predates
+    this default flip and used the then-default `False`; not directly
+    comparable to this bound without rerunning it under `True`, which this
+    issue's scope did not require).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)[
@@ -653,31 +789,36 @@ def test_global_oce_latlon_hbl(result_global_oce_latlon, ocean_mask_global_oce_l
     median = float(np.median(diff))
     frac_gt5m = float(np.mean(diff > 5.0))
     max_diff = float(np.max(diff))
-    assert median < 0.02, f"global_oce_latlon hbl median diff {median:.4g} m regressed"
-    assert frac_gt5m < 0.01, f"global_oce_latlon hbl fraction >5m diff {frac_gt5m:.4%} regressed"
-    assert max_diff < 60.0, f"global_oce_latlon hbl max diff {max_diff:.4g} m regressed"
+    assert median < 0.005, f"global_oce_latlon hbl median diff {median:.4g} m regressed"
+    assert frac_gt5m < 0.001, f"global_oce_latlon hbl fraction >5m diff {frac_gt5m:.4%} regressed"
+    assert max_diff < 8.0, f"global_oce_latlon hbl max diff {max_diff:.4g} m regressed"
 
 
 @pytest.mark.parametrize('field,median_bound,max_abs_bound,frac_gt1pct_bound', [
-    ('visc_az', 1e-5, 0.5, 0.02),
-    ('diff_kz_s', 1e-5, 1.2, 0.03),
-    ('diff_kz_t', 1e-5, 1.2, 0.03),
+    ('visc_az', 1e-5, 0.15, 0.01),
+    ('diff_kz_s', 1e-5, 0.15, 0.02),
+    ('diff_kz_t', 1e-5, 0.15, 0.02),
 ])
 def test_global_oce_latlon_mixing(result_global_oce_latlon, ocean_mask_global_oce_latlon,
                                    field, median_bound, max_abs_bound, frac_gt1pct_bound):
     """Mixing-coefficient agreement over the first 5 (of 720) timesteps' full
     spatial sample (11,575 ocean column-timesteps, 134,970 active interior
-    cells). Measured fresh this round: `visc_az` median_abs 0 (exact), max_abs
-    0.332, 0.42% of active cells exceed 1% rel; `diff_kz_s`/`diff_kz_t`
+    cells). Measured fresh this round (1DMIX-057, `keep_mitgcm_bugs=True`,
+    the default since this issue): `visc_az` median_abs 0 (exact), max_abs
+    0.0957, 0.23% of active cells exceed 1% rel; `diff_kz_s`/`diff_kz_t`
     (identical here, `diffKzS=diffKzT` in this configuration) median_abs 0,
-    max_abs 0.959, 1.31% exceed 1% rel. This is this project's only
-    `useCDscheme`+`useGMRedi`+climatological-restoring KPP capture; the
-    forcing-validation gate correctly falls back to MITgcm's own captured
-    `ustar`/`bo`/`bosol` for the actual mixing computation regardless of the
-    known, diagnostic-only `bo` mismatch (1DMIX-022's root cause 2, climate-
-    restoring flux not replicated in the raw-flux pipeline) -- confirmed by
-    these bounds matching, not exceeding, the other multi-column experiments'
-    own established magnitudes.
+    max_abs 0.110, 1.11% exceed 1% rel -- all tighter than the old
+    `keep_mitgcm_bugs=False`-default measurement (max_abs 0.332/0.959,
+    0.42%/1.31% >1% rel) this file previously reported. Re-measured directly
+    (not inferred): flipping `keep_mitgcm_bugs` alone reduces `visc_az`
+    max_abs by ~3.5x and `diff_kz_s`/`diff_kz_t` max_abs by ~8.7x on this
+    exact capture (`devel-loop/loop_state/1dmix057-wscale-capture-threeway.txt`)
+    -- the bounds below are tightened accordingly, not widened. This is this
+    project's only `useCDscheme`+`useGMRedi`+climatological-restoring KPP
+    capture; the forcing-validation gate correctly falls back to MITgcm's own
+    captured `ustar`/`bo`/`bosol` for the actual mixing computation regardless
+    of the known, diagnostic-only `bo` mismatch (1DMIX-022's root cause 2,
+    climate-restoring flux not replicated in the raw-flux pipeline).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff, rel = _mixing_diff_rel(mitgcm_ds[field].values, python_ds[field].values,
@@ -693,20 +834,64 @@ def test_global_oce_latlon_mixing(result_global_oce_latlon, ocean_mask_global_oc
 
 
 def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_latlon):
-    """Measured fresh this round (via `_mixing_diff_rel`'s own
-    `active = mitgcm_ghat > 1e-6` filter): median_abs 8.64, max_abs 115.97
-    (n=394) -- same hbl-misdiagnosis-tail mechanism as the other three
-    experiments' own `ghat` tests. `KPP_GHAT` is `#undef`'d in this
-    experiment's own `KPP_OPTIONS.h` (the nonlocal-transport term is not
-    applied to the diffusive flux), but the raw `ghat` diagnostic array is
-    still computed and captured unconditionally by `KPPMIX`/`kpp_calc.F` --
-    confirmed non-degenerate by direct inspection (real nonzero values, not
-    uniformly zero) before this bound was set.
+    """**Fixed 1DMIX-058.** Before the fix, this bound (median<15.0,
+    max_abs<150.0) was wide enough to pass through a TOTAL mismatch: every
+    one of the 394 active cells disagreed (median_abs 8.64, max_abs 115.97 --
+    max_abs merely equalled the largest active MITgcm `ghat` value itself,
+    because the Python side was uniformly 0.0). Root cause: `KPP_GHAT` is
+    `#undef`'d in this experiment's own `KPP_OPTIONS.h` (`use_ghat=0`), and
+    `compute_bl_mixing` (kpp_scheme_specific.py) used to zero the `ghat`
+    *computation* itself whenever `use_ghat` was `False`, instead of only
+    gating its later *application* to the tracer flux -- the only thing
+    real MITgcm's `KPP_GHAT` actually gates (`blmix`, kpp_routines.F,
+    computes `ghat` unconditionally; confirmed by direct read, no `KPP_GHAT`
+    reference anywhere in that routine). This is this project's only
+    registered capture with `use_ghat=0`, which is why the other three
+    experiments' own `ghat` tests were never affected by this defect.
+
+    Measured fresh after the fix (same `active = mitgcm_ghat > 1e-6` filter,
+    n unchanged at 394 since that mask is MITgcm-side and this fix does not
+    touch it): median_abs dropped ~5760x to 1.4999e-3, max_abs is unchanged at
+    115.9702535835539 -- but this is NOT the "hbl-misdiagnosis tail" the other
+    three experiments' `ghat` tests describe (that attribution was checked and
+    disproved for this capture, not assumed). Richard's independent debugging
+    of the worst active cell (t=0, i=31, j=17, k=0) found Python's diagnosed
+    `hbl` matches MITgcm's captured `hbl` exactly (25.0 == 25.0) -- no `hbl`
+    misdiagnosis at that cell at all. The 394 active cells instead split into
+    two distinct groups: 391 cells with a small genuine residual (median
+    1.48e-3), and exactly 3 cells where Python's `ghat` is exactly `0.0` --
+    those 3 cells alone carry the entire 57.98-115.97 magnitude range and are
+    the entire `max_abs`. At the worst of the 3, the identified driver is a
+    stable/unstable regime disagreement -- the two models land on opposite
+    sides of the `stable` (sign-of-`bfsfc`) branch -- at `bfsfc = +4.42e-9`,
+    a value effectively indistinguishable from zero in either model. This is
+    reported as the measured driver at that cell, not further root-caused
+    here: only 2.54% of active cells now exceed 1% relative error (was
+    ~100%). Bounds tightened from this measurement, not widened (median
+    1.4999e-3 -> bound 0.01, ~6.7x headroom, matching
+    `test_11k_ocean_ice_column_ghat`'s comparable median/bound ratio; max_abs
+    115.9702535835539 -> bound 140.0, ~21% headroom, matching this file's
+    other three `ghat` tests' 22%-36% headroom style).
+
+    **Resolved (1DMIX-060)**: the other three experiments' own `ghat` tests
+    (`test_11k_ocean_ice_column_ghat`, `test_lab_sea_6mo_ghat`,
+    `test_seaice_obcs_ghat`, around lines 329/450/555) have each now been
+    independently measured rather than inherited. Two of the three
+    (`11k_1D`, `lab_sea_6mo`) measure out as genuinely driven by `hbl`
+    disagreement -- confirming, not disproving, the attribution there,
+    though refined to show it operates partly through a discrete
+    edge-of-boundary-layer flip (a tiny `hbl` difference straddling a
+    grid-cell boundary) rather than only through gross misdiagnosis.
+    `seaice_obcs` measures out differently again: its dominant residual is
+    neither a large `hbl` misdiagnosis nor this capture's own bfsfc-branch
+    flip, and its exact numerical trigger is left unestablished rather
+    than asserted. None of the three still borrows this docstring's own
+    mechanism verbatim.
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff, _rel = _mixing_diff_rel(mitgcm_ds['ghat'].values, python_ds['ghat'].values,
                                    ocean_mask_global_oce_latlon, skip_surface=False)
     median = float(np.median(diff))
     max_abs = float(np.max(diff))
-    assert median < 15.0, f"global_oce_latlon ghat: median abs diff {median:.4g} regressed"
-    assert max_abs < 150.0, f"global_oce_latlon ghat: max abs diff {max_abs:.4g} regressed"
+    assert median < 0.01, f"global_oce_latlon ghat: median abs diff {median:.4g} regressed"
+    assert max_abs < 140.0, f"global_oce_latlon ghat: max abs diff {max_abs:.4g} regressed"

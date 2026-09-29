@@ -25,7 +25,19 @@ class MixingOutput:
         diff_kz_s: Salinity diffusivity [m²/s], shape (nz,)
 
     Optional fields:
-        ghat: Nonlocal transport coefficient [s/m²], shape (nz,) - KPP only
+        ghat: Nonlocal transport coefficient [s/m²], shape (nz,) - KPP only.
+            Always the raw, unconditionally-computed diagnostic (matching
+            MITgcm's own blmix, which computes it regardless of KPP_GHAT;
+            see kpp_scheme_specific.py::compute_bl_mixing, 1DMIX-058) -- NOT
+            pre-gated by `use_ghat`. Whether it is actually applied to a
+            tracer flux is controlled separately by `apply_ghat` below.
+        apply_ghat: Whether the vertical-diffusion solver should apply `ghat`
+            to the tracer flux (mirrors MITgcm's KPP_GHAT, which gates
+            kpp_transport_t.F/kpp_transport_s.F -- the flux APPLICATION, not
+            the BLMIX computation). KPP sets this from
+            `KPPParameters.use_ghat`; irrelevant for GGL90 (ghat is always
+            None there). Consumed by
+            `UnifiedColumnDriver._apply_vertical_diffusion` (1DMIX-058).
         updated_prognostic: Dict of updated prognostic variables - GGL90 returns {'tke': array}
 
     Diagnostics:
@@ -35,6 +47,7 @@ class MixingOutput:
     diff_kz_t: np.ndarray
     diff_kz_s: np.ndarray
     ghat: Optional[np.ndarray] = None
+    apply_ghat: bool = True
     updated_prognostic: Dict[str, np.ndarray] = field(default_factory=dict)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
@@ -177,6 +190,11 @@ class KPPAdapter(MixingSchemeAdapter):
             diff_kz_t=kpp_output.diff_kz_t,
             diff_kz_s=kpp_output.diff_kz_s,
             ghat=kpp_output.ghat,
+            # KPP_GHAT gates flux application, not the ghat computation
+            # itself (1DMIX-058) -- kpp_output.ghat above is always the raw
+            # unconditional BLMIX value; use_ghat decides whether the
+            # driver's implicit solver actually uses it.
+            apply_ghat=self.kpp_driver.params.use_ghat,
             updated_prognostic={},
             diagnostics=diagnostics
         )

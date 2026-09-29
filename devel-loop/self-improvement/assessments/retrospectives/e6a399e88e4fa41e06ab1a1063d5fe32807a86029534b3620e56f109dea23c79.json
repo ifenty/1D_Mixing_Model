@@ -1,0 +1,153 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-052",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T03:09:32.165347+00:00",
+    "timestamp": "2026-09-28T03:46:24Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/45beb605b291aed45b0c2510c40471f9a231c7f0bf275a1df0bc6b4d0733266e.json",
+      "sha256": "45beb605b291aed45b0c2510c40471f9a231c7f0bf275a1df0bc6b4d0733266e"
+    },
+    "measured": {
+      "span_minutes": 35,
+      "dispatches": {
+        "bob": 1
+      },
+      "rounds": {
+        "bob": 1
+      },
+      "cost_usd": {
+        "bob": 0.0
+      },
+      "unknown_cost_event_ids": [
+        "1eeea99a2d7c415fa1fcd78def37b01f"
+      ],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "dispatch_timeout_truncation",
+        "summary": "The same wall bound fired again, in the complementary mode: last iteration it killed a turn whose work was already durable and lost only the report, whereas here it killed a turn that had written nothing, because Arch assigned a one-pass rewrite of a 781-line document so all output was scheduled for a single terminal Write. Zero artifacts survived.",
+        "evidence": "Event 1eeea99a2d7c415fa1fcd78def37b01f: duration_seconds 1800.044, returncode 143, error timeout, 13 tool calls, 452,399 cache-read tokens. git status clean and both target files byte-identical to HEAD after the turn. The turn's own report states the shape directly: 'now drafting the complete replacement document in one pass'. Second occurrence of this category in two consecutive retrospectives.",
+        "minutes_lost": 30
+      },
+      {
+        "category": "budget_allocation_sizing",
+        "summary": "Arch let --budget-kind default to the workflow kind, allocating the documentation class's 30 minutes to a ~1,040-line prose rewrite, and separately believed --timeout 2700 would reserve partial-handoff headroom beyond a 30-minute budget. Both were wrong, and together they left the issue scope exhausted and unable to accept another dispatch.",
+        "evidence": "Scope issue:1DMIX-052 after one turn: wall 30/30 EXHAUSTED while calls stood at 13/120 and spend at $5/$15 -- wall clock was the only exhausted dimension. team_budget.reserve computes deadline as min(deadlines) across the issue scope and the requested turn, so the turn died at 1800.04 s rather than the requested 2700 s, and its receipt's deadline/soft_deadline gap of 360 s is the scope's value, not the turn's. team_budget.DEFAULTS shows documentation at 30 minutes, tied with scientific_small for the smallest time allocation of any class.",
+        "minutes_lost": 5
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-DISPATCH-TIMEOUT-001",
+        "reason": "Already open and owns exactly this mechanism; this iteration adds the complementary failure mode (nothing durable) to the mode it was filed for (durable work, lost report), which strengthens rather than changes its case."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-BUDGET-SIZING-001",
+        "reason": "Filed this iteration with the measured scope figures. The corrective discipline is Arch-side and lands immediately in the next preparation; the record exists so the discipline is auditable rather than remembered."
+      }
+    ],
+    "carry_forward": [
+      "Shape any long-output assignment so each completed unit is written to disk before the next begins; a single terminal Write turns any bound into total loss.",
+      "An issue scope's effective turn deadline is the minimum of the scope's remaining wall time and the requested --timeout, so --timeout cannot buy time the scope does not have.",
+      "Treat a timed-out dispatch as work-of-unknown-completeness: inspect the tree before re-dispatching, and resume with followup rather than restarting."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.5522060394287109,
+        "elapsed_seconds": 0.5522060394287109,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 1800.0352399349213,
+        "elapsed_seconds": 1800.0352399349213,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.061625003814697266,
+        "elapsed_seconds": 0.061625003814697266,
+        "events": 1
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 0.0,
+        "rounds": 1,
+        "seconds": 1800.0410749912262,
+        "tool_calls": 13,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 80634,
+          "cache_read_input_tokens": 452399,
+          "input_tokens": 15,
+          "output_tokens": 44
+        }
+      }
+    },
+    "child_elapsed_seconds": 1800.0410749912262,
+    "components": [
+      {
+        "event_id": "1eeea99a2d7c415fa1fcd78def37b01f",
+        "kind": "turn",
+        "parent_event_id": "1eeea99a2d7c415fa1fcd78def37b01f",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/c59cc43b-5ef9-47cc-9e6e-a87bbff45b04/turns/1eeea99a2d7c415fa1fcd78def37b01f/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T03:44:38.850848+00:00",
+    "issue_id": "1DMIX-052",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 306.64442586898804,
+    "phase_events": [
+      {
+        "event_id": "c6f677dad0d44d9e9e020fe0ace91a32",
+        "finished_at": "2026-09-28T03:11:46.041623+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06149554101284593,
+        "started_at": "2026-09-28T03:11:45.979998+00:00"
+      },
+      {
+        "event_id": "17ffc3feff10452ab12a8030d72df03d",
+        "finished_at": "2026-09-28T03:41:33.801126+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 1800.0389977500017,
+        "started_at": "2026-09-28T03:11:33.765886+00:00"
+      },
+      {
+        "event_id": "2444830ffba940dfab45942f0aa3586a",
+        "finished_at": "2026-09-28T03:44:38.851344+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.5525807499943767,
+        "started_at": "2026-09-28T03:44:38.298642+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 2106.6855008602142,
+    "start": "2026-09-28T03:09:32.165347+00:00",
+    "unknown_cost_event_ids": [
+      "1eeea99a2d7c415fa1fcd78def37b01f"
+    ]
+  }
+}

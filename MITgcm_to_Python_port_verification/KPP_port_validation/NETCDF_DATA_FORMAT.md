@@ -261,7 +261,7 @@ Scalar shape function:
 | Parameter | Type | Description | Typical Value |
 |-----------|------|-------------|---------------|
 | `KPP_ghatUseTotalDiffus` | bool | Use total diffusivity (not just KPP) for ghat | True/False |
-| `KPPuseDoubleDiff` | bool | Include double diffusion contributions | True/False |
+| `KPPuseDoubleDiff` | bool | Include double diffusion contributions -- **NOT IMPLEMENTED** in the Python port; `KPPParameters(use_doublediff=True)` raises `NotImplementedError` on replay (1DMIX-059) | True/False |
 | `LimitHblStable` | bool | Limit hbl depth under stable conditions | True/False |
 | `KPPwriteState` | bool | Write KPP state to file (diagnostic only) | True/False |
 | `KPPuseSWfrac3D` | bool | Use 3D spatially-varying shortwave water type | True/False |
@@ -272,7 +272,7 @@ Extracted from `KPP_OPTIONS.h` in the build directory:
 
 | Parameter | Description | CPP Define |
 |-----------|-------------|------------|
-| `use_ghat` | Include nonlocal transport term | `#define KPP_GHAT` |
+| `use_ghat` | Apply nonlocal transport term to tracer flux (gates `kpp_transport_t.F`/`kpp_transport_s.F`; MITgcm's `blmix` computes `ghat` unconditionally regardless, 1DMIX-058) | `#define KPP_GHAT` |
 | `smooth_shsq` | Smooth shear horizontally | `#define KPP_SMOOTH_SHSQ` |
 | `smooth_dvsq` | Smooth dVsq horizontally | `#define KPP_SMOOTH_DVSQ` |
 | `smooth_dbloc` | Smooth dbloc horizontally | `#define KPP_SMOOTH_DBLOC` |

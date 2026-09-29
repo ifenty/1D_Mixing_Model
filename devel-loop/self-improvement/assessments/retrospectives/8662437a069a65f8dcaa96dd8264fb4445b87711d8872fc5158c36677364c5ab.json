@@ -1,0 +1,316 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-057",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T06:17:05.413332+00:00",
+    "timestamp": "2026-09-28T07:47:21Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/0fb3934c01c4154223cc18ad22b14bd20d07eb2196d2ffbb49b3c53524dd09d3.json",
+      "sha256": "0fb3934c01c4154223cc18ad22b14bd20d07eb2196d2ffbb49b3c53524dd09d3"
+    },
+    "measured": {
+      "span_minutes": 90,
+      "dispatches": {
+        "richard": 2,
+        "bob": 3
+      },
+      "rounds": {
+        "richard": 2,
+        "bob": 3
+      },
+      "cost_usd": {
+        "richard": 12.229876749999999,
+        "bob": 15.680130749999996
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "documentation_staleness_sweep",
+        "summary": "Flipping a production default invalidated statements in five separate documents, and Arch scoped the brief around only the two it had thought of. The remaining three surfaced one at a time across two reviewer rounds, each costing a correction round, until the correction allowance ran out with one annotation still unconfirmed.",
+        "evidence": "Round 0 covered kpp_parameters.py, kpp_routines.py and model_contract.md. Richard's round-0 must_fix added possible_kpp_bugs_in_mitgcm.md and critical_lessons_fortran_to_python_porting.md; his round-1 must_fix added three further unannotated spots inside the first of those (lines 240, the kpp_parameters excerpt, and the Validation Impact bullet). Bob reached the scope's corrections limit of 2 and the soft deadline passed, so Arch made the last three annotations directly and the iteration closed partial with the confirmation outstanding.",
+        "minutes_lost": 12
+      },
+      {
+        "category": "suite_insensitive_to_field_change",
+        "summary": "Both full-suite runs returned an identical 113 passed / 3 skipped under either setting of the flag, so the registered tests could not detect a change that moves hbl agreement on a real capture from 33.9 m to 3.09 m. Pass/fail was uninformative and only the field-level A/B decided the issue.",
+        "evidence": "devel-loop/loop_state/1dmix057-baseline-full-suite.txt and 1dmix057-flipped-full-suite.txt both end in 113 passed, 3 skipped. The field-level comparison in 1dmix057-wscale-capture-threeway.txt shows global_oce_latlon hbl max_abs 3.390e+01 to 3.092e+00 and cells above 1 percent 146/11575 to 10/11575 across the same two configurations. The same measurement also exposed a ghat disagreement of 394/394 active cells that the existing passing test likewise cannot detect, now filed as 1DMIX-058.",
+        "minutes_lost": 0
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-DOC-SWEEP-001",
+        "reason": "Needs a repeatable pre-brief sweep procedure rather than Arch recalling which documents mention a symbol; filed with the measured five-document spread so the procedure is justified by evidence rather than by this one bad experience."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-BUDGET-SIZING-001",
+        "reason": "Recorded under the existing allocation-and-measurement owner because the actionable lesson is a sizing and instrument-choice one: a behaviour-changing default needs a field-level A/B budgeted from the start, not a suite run that cannot resolve the change."
+      }
+    ],
+    "carry_forward": [
+      "Before briefing a change to a named symbol or default, grep the whole repository for it and list every document that will need updating; a document discovered by a reviewer costs a correction round, and the allowance is two.",
+      "A green suite does not establish that a behaviour change is harmless when its tolerances are wider than the change: measure the affected fields directly and treat pass/fail as a floor, not as the evidence."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.6172938346862793,
+        "elapsed_seconds": 0.6172938346862793,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 3357.4162981510162,
+        "elapsed_seconds": 3357.4162981510162,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 0.41780567169189453,
+        "elapsed_seconds": 0.41780567169189453,
+        "events": 5
+      },
+      "review": {
+        "effort_seconds": 1521.3592841625214,
+        "elapsed_seconds": 1521.3592841625214,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 171.1480360031128,
+        "elapsed_seconds": 171.1480360031128,
+        "events": 4
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 3,
+        "reported_usd": 15.680130749999996,
+        "rounds": 3,
+        "seconds": 3357.5017771720886,
+        "tool_calls": 103,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 1122093,
+          "cache_read_input_tokens": 12265289,
+          "input_tokens": 161,
+          "output_tokens": 101344
+        }
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 12.229876749999999,
+        "rounds": 2,
+        "seconds": 1521.447606086731,
+        "tool_calls": 114,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 549595,
+          "cache_read_input_tokens": 13741756,
+          "input_tokens": 156,
+          "output_tokens": 76930
+        }
+      }
+    },
+    "child_elapsed_seconds": 4878.94938325882,
+    "components": [
+      {
+        "event_id": "112f0911ebb84b9d8403737591a992fc",
+        "kind": "turn",
+        "parent_event_id": "112f0911ebb84b9d8403737591a992fc",
+        "reported_usd": 3.156315,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/62a47051-04f2-4ddc-932b-352b75c75ea4/turns/112f0911ebb84b9d8403737591a992fc/record.json"
+      },
+      {
+        "event_id": "1ce1aee7c69f438a8a782fd704cc8850",
+        "kind": "turn",
+        "parent_event_id": "1ce1aee7c69f438a8a782fd704cc8850",
+        "reported_usd": 9.07356175,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/62a47051-04f2-4ddc-932b-352b75c75ea4/turns/1ce1aee7c69f438a8a782fd704cc8850/record.json"
+      },
+      {
+        "event_id": "4d15e6f6863540a48b255da1afdbf0cc",
+        "kind": "turn",
+        "parent_event_id": "4d15e6f6863540a48b255da1afdbf0cc",
+        "reported_usd": 8.174314999999998,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b75fea19-a216-43b9-99b7-42c6cb0a29e9/turns/4d15e6f6863540a48b255da1afdbf0cc/record.json"
+      },
+      {
+        "event_id": "51251113b27446bb966404c2f8f9b65b",
+        "kind": "turn",
+        "parent_event_id": "51251113b27446bb966404c2f8f9b65b",
+        "reported_usd": 5.027366,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b75fea19-a216-43b9-99b7-42c6cb0a29e9/turns/51251113b27446bb966404c2f8f9b65b/record.json"
+      },
+      {
+        "event_id": "b032e72c823e4a2a9596c2186afa0b59",
+        "kind": "turn",
+        "parent_event_id": "b032e72c823e4a2a9596c2186afa0b59",
+        "reported_usd": 2.47844975,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b75fea19-a216-43b9-99b7-42c6cb0a29e9/turns/b032e72c823e4a2a9596c2186afa0b59/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T07:47:10.975808+00:00",
+    "issue_id": "1DMIX-057",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 526.6130926609039,
+    "phase_events": [
+      {
+        "event_id": "8cf29edbca904da28727fccf8148cd01",
+        "finished_at": "2026-09-28T06:18:40.438409+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08490454099955969,
+        "started_at": "2026-09-28T06:18:40.353367+00:00"
+      },
+      {
+        "event_id": "f66e7bed2fef446a81181abbec2fa4cf",
+        "finished_at": "2026-09-28T07:00:31.962559+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 2547.175709208008,
+        "started_at": "2026-09-28T06:18:04.745020+00:00"
+      },
+      {
+        "event_id": "2244fc6131fd469f80282b33d4e32ce1",
+        "finished_at": "2026-09-28T07:12:04.701944+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.965929708007025,
+        "started_at": "2026-09-28T07:11:09.736630+00:00"
+      },
+      {
+        "event_id": "96d2c5c92ba241b390d16d4f846fd527",
+        "finished_at": "2026-09-28T07:12:35.489586+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07639154201024212,
+        "started_at": "2026-09-28T07:12:35.413027+00:00"
+      },
+      {
+        "event_id": "0f0428c59ffa45348706a667a95b6ea3",
+        "finished_at": "2026-09-28T07:13:48.257704+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 736.8241382080014,
+        "started_at": "2026-09-28T07:01:31.453285+00:00"
+      },
+      {
+        "event_id": "81d74a5abf2f4fa49d127fc6062aadc0",
+        "finished_at": "2026-09-28T07:14:10.831507+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 8.916071749990806,
+        "started_at": "2026-09-28T07:14:01.915283+00:00"
+      },
+      {
+        "event_id": "6c05598c514642399113ffd1f69e4ded",
+        "finished_at": "2026-09-28T07:15:05.117838+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08415612499811687,
+        "started_at": "2026-09-28T07:15:05.033504+00:00"
+      },
+      {
+        "event_id": "9df8ca69296143ca90267919906e862d",
+        "finished_at": "2026-09-28T07:16:30.816599+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08442991701303981,
+        "started_at": "2026-09-28T07:16:30.732042+00:00"
+      },
+      {
+        "event_id": "83bf4e3b06f94cdeb9428a754b5e0ad7",
+        "finished_at": "2026-09-28T07:33:15.747794+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 53.78894341699197,
+        "started_at": "2026-09-28T07:32:21.958817+00:00"
+      },
+      {
+        "event_id": "deb076ebc2e44c00a16103dc0b2189ba",
+        "finished_at": "2026-09-28T07:37:49.065076+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "review",
+        "reason": null,
+        "seconds": 1307.1546680419997,
+        "started_at": "2026-09-28T07:16:01.916680+00:00"
+      },
+      {
+        "event_id": "2a00f09b76994bfb8c0f238d13b1210d",
+        "finished_at": "2026-09-28T07:40:06.213516+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 73.39450691698585,
+        "started_at": "2026-09-28T07:38:52.819176+00:00"
+      },
+      {
+        "event_id": "7074a6b5d5e743f2bd637669a85b8176",
+        "finished_at": "2026-09-28T07:42:51.056383+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08716091598034836,
+        "started_at": "2026-09-28T07:42:50.969069+00:00"
+      },
+      {
+        "event_id": "b7aef406a2954c02861da5b2ec6c3bff",
+        "finished_at": "2026-09-28T07:43:50.323999+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 53.47714220799389,
+        "started_at": "2026-09-28T07:42:56.846478+00:00"
+      },
+      {
+        "event_id": "69dcecc4fd0d4eabb09c386383c170f7",
+        "finished_at": "2026-09-28T07:44:42.261949+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "review",
+        "reason": null,
+        "seconds": 214.20693362498423,
+        "started_at": "2026-09-28T07:41:08.051061+00:00"
+      },
+      {
+        "event_id": "ae445a0fd4594ff88cb2e35b280ba415",
+        "finished_at": "2026-09-28T07:47:10.976391+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.6176449170161504,
+        "started_at": "2026-09-28T07:47:10.358514+00:00"
+      }
+    ],
+    "reported_usd": 27.910007499999995,
+    "schema_version": 2,
+    "span_seconds": 5405.5624759197235,
+    "start": "2026-09-28T06:17:05.413332+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

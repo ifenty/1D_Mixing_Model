@@ -39,6 +39,7 @@ def diagnose_bl_depth(
     config: KPPParameters,
     boplume: float = 0.0,
     sp_depth: float = 0.0,
+    hbl_override: float = None,
 ) -> Tuple[float, float, float, float, int, np.ndarray]:
     """
     Diagnose boundary layer depth using bulk Richardson criterion.
@@ -79,6 +80,19 @@ def diagnose_bl_depth(
         Salt plume penetration (e-folding) depth, SPDepth [m]
         (pkg/salt_plume/salt_plume_calc_depth.F). Only used when
         config.use_salt_plume is True.
+    hbl_override : float, optional
+        Investigation-only override (1DMIX-056): when not None, skip this
+        routine's own Rib-crossing search, Ekman/Monin-Obukhov stability
+        limit and minimum-hbl floor entirely, and use this value as the
+        FINAL hbl directly (e.g. a reference implementation's own hbl at the
+        same timestep, substituted to isolate whether hbl alone explains a
+        downstream mixing-coefficient disagreement). `kbl`/`casea`/the final
+        `bfsfc`/`stable` are still recomputed AT this hbl exactly as they
+        would be for a diagnosed value, so the shape-function inputs stay
+        internally consistent. Default `None` is an exact behavioral no-op
+        -- every existing caller is unaffected and the default code path
+        remains bit-identical (see `KPPDriver.compute_mixing`'s own
+        `hbl_override` passthrough and `tests/test_kpp_hbl_override.py`).
 
     Returns
     -------
@@ -232,35 +246,46 @@ def diagnose_bl_depth(
         # matching the Fortran initialization.
         hbl = -zgrid[-1]
 
-    # Surface buoyancy forcing at the interpolated hbl, used only to LIMIT hbl
-    # by the Ekman / Monin-Obukhov depths below. MITgcm recomputes bfsfc a
-    # second time after the limit (see below); we mirror that ordering.
-    if config.shortwave_heating and config.select_penetrating_sw >= 1:
-        frac_absorbed = 1.0 - swfrac(np.array([hbl]), config.jerlov_water_type)[0]
-        bfsfc = bo + bosol * frac_absorbed
-    else:
-        bfsfc = bo + bosol
-    # Salt-plume haline buoyancy forcing (1DMIX-034 part 2). MITgcm
-    # bldepth (kpp_routines.F:730-744) evaluates SALT_PLUME_FRAC here with
-    # fact=minusone and the positive trial hbl -- the same (depth, fact)
-    # convention as the swfrac call above (fact=minusone there too).
-    if config.use_salt_plume:
-        bfsfc = bfsfc + boplume * plume_frac(np.array([hbl]), -1.0, sp_depth)[0]
-    stable = 0.5 + np.sign(bfsfc) * 0.5
-    bfsfc = np.sign(bfsfc) * max(config.phepsi, abs(bfsfc))
+    if hbl_override is None:
+        # Surface buoyancy forcing at the interpolated hbl, used only to LIMIT hbl
+        # by the Ekman / Monin-Obukhov depths below. MITgcm recomputes bfsfc a
+        # second time after the limit (see below); we mirror that ordering.
+        if config.shortwave_heating and config.select_penetrating_sw >= 1:
+            frac_absorbed = 1.0 - swfrac(np.array([hbl]), config.jerlov_water_type)[0]
+            bfsfc = bo + bosol * frac_absorbed
+        else:
+            bfsfc = bo + bosol
+        # Salt-plume haline buoyancy forcing (1DMIX-034 part 2). MITgcm
+        # bldepth (kpp_routines.F:730-744) evaluates SALT_PLUME_FRAC here with
+        # fact=minusone and the positive trial hbl -- the same (depth, fact)
+        # convention as the swfrac call above (fact=minusone there too).
+        if config.use_salt_plume:
+            bfsfc = bfsfc + boplume * plume_frac(np.array([hbl]), -1.0, sp_depth)[0]
+        stable = 0.5 + np.sign(bfsfc) * 0.5
+        bfsfc = np.sign(bfsfc) * max(config.phepsi, abs(bfsfc))
 
-    # Limit hbl by Ekman and Monin-Obukhov depths in stable conditions
-    if config.limit_hbl_stable and bfsfc > 0.0:
-        hekman = config.cekman * ustar / max(abs(coriol), config.phepsi)
-        hmonob = config.cmonob * ustar**3 / config.vonk / bfsfc
-        hlimit = stable * min(hekman, hmonob) + (stable - 1.0) * (-zgrid[-1])
-        hbl = min(hbl, hlimit)
+        # Limit hbl by Ekman and Monin-Obukhov depths in stable conditions
+        if config.limit_hbl_stable and bfsfc > 0.0:
+            hekman = config.cekman * ustar / max(abs(coriol), config.phepsi)
+            hmonob = config.cmonob * ustar**3 / config.vonk / bfsfc
+            hlimit = stable * min(hekman, hmonob) + (stable - 1.0) * (-zgrid[-1])
+            hbl = min(hbl, hlimit)
 
-    # Apply minimum hbl
-    if config.min_kpp_hbl is not None:
-        hbl = max(hbl, config.min_kpp_hbl)
+        # Apply minimum hbl
+        if config.min_kpp_hbl is not None:
+            hbl = max(hbl, config.min_kpp_hbl)
+        else:
+            hbl = max(hbl, -zgrid[0])
     else:
-        hbl = max(hbl, -zgrid[0])
+        # 1DMIX-056 investigation override: use the supplied hbl directly as
+        # the FINAL value, bypassing the Rib-derived pre-limit bfsfc calc and
+        # the Ekman/Monin-Obukhov/minimum-hbl limiting above (the substituted
+        # value -- e.g. the real Fortran KPPMIX's own hbl at this timestep --
+        # already reflects whatever limiting its own source applied; re-
+        # applying this port's limiting on top of it would not be a clean
+        # substitution). kbl/casea/the final bfsfc/stable below are still
+        # recomputed AT this hbl exactly as for a diagnosed value.
+        hbl = hbl_override
 
     # Find new kbl for the (possibly limited) final hbl.
     kbl = nz
@@ -357,7 +382,10 @@ def compute_bl_mixing(
     blmc_t : np.ndarray, shape (nz,)
         BL temperature diffusivity profile [m^2/s]
     ghat : np.ndarray, shape (nz,)
-        Nonlocal transport coefficient [s/m^2]
+        Nonlocal transport coefficient [s/m^2]. Computed unconditionally,
+        matching MITgcm's blmix (kpp_routines.F) -- `config.use_ghat`
+        (KPP_GHAT) does NOT gate this value; it gates only whether the
+        caller later applies it to a tracer flux (1DMIX-058).
     dkm1 : tuple of float
         BL diffusivities (visc, salt, temp) at the kbl-1 grid level, evaluated
         exactly as MITgcm blmix (kpp_routines.F:1653-1687). These are consumed
@@ -524,15 +552,24 @@ def compute_bl_mixing(
         blmc_s[k] = hbl * ws[0] * sig * (1.0 + sig * Gs)
         blmc_t[k] = hbl * ws[0] * sig * (1.0 + sig * Gt)
 
-        # Nonlocal transport
-        if config.use_ghat:
-            tempVar = ws[0] * hbl
-            if config.smooth_regularisation:
-                ghat[k] = (1.0 - stable) * config.cg / (config.phepsi + tempVar)
-            else:
-                ghat[k] = (1.0 - stable) * config.cg / max(config.phepsi, tempVar)
+        # Nonlocal transport coefficient. MITgcm's blmix (kpp_routines.F:
+        # 1636-1646) computes this UNCONDITIONALLY -- KPP_GHAT does not
+        # appear anywhere in kpp_routines.F/blmix. `config.use_ghat` (KPP_GHAT)
+        # instead gates only whether this coefficient is later APPLIED to the
+        # tracer diffusive flux (kpp_transport_t.F/kpp_transport_s.F); see
+        # MixingOutput.apply_ghat / UnifiedColumnDriver._apply_vertical_diffusion
+        # (main/mixing_adapter.py, main/unified_driver.py) for that gate.
+        # Fixed 1DMIX-058: this function previously zeroed ghat itself when
+        # use_ghat was False, conflating "do not apply the nonlocal term to
+        # the flux" with "do not compute the coefficient" -- confirmed wrong
+        # against a real MITgcm capture (global_oce_latlon_720) whose own
+        # KPP_GHAT is #undef'd (use_ghat=0) yet whose captured ghat output is
+        # real and non-degenerate (376,577 nonzero values, max 205.7).
+        tempVar = ws[0] * hbl
+        if config.smooth_regularisation:
+            ghat[k] = (1.0 - stable) * config.cg / (config.phepsi + tempVar)
         else:
-            ghat[k] = 0.0
+            ghat[k] = (1.0 - stable) * config.cg / max(config.phepsi, tempVar)
 
     # Diffusivities at the kbl-1 grid level (dkm1), MITgcm blmix:1653-1687.
     # BUG FIX (Python porting error): the previous port computed dkm1 with a

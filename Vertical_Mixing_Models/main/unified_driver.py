@@ -146,6 +146,14 @@ class UnifiedColumnDriver:
             kinematic_fluxes: Surface fluxes (heat, salt, momentum)
             dt: Time step [s]
         """
+        # KPP_GHAT (MixingOutput.apply_ghat, from KPPParameters.use_ghat) gates
+        # whether the nonlocal term is added to the tracer flux here, mirroring
+        # MITgcm's kpp_transport_t.F/kpp_transport_s.F application sites -- NOT
+        # whether ghat itself was computed (that is unconditional in BLMIX; see
+        # kpp_scheme_specific.py::compute_bl_mixing). 1DMIX-058: this gate used
+        # to live (incorrectly) at the computation site instead of here.
+        ghat_to_apply = mix_out.ghat if mix_out.apply_ghat else None
+
         state.theta = solve_diffusion_implicit(
             c_old=state.theta,
             k_interface=mix_out.diff_kz_t,
@@ -153,7 +161,7 @@ class UnifiedColumnDriver:
             thickness=grid.cell_thickness,
             dt=dt,
             surface_flux=kinematic_fluxes['heat_flux'],
-            ghat=mix_out.ghat
+            ghat=ghat_to_apply
         )
 
         state.salt = solve_diffusion_implicit(
@@ -163,7 +171,7 @@ class UnifiedColumnDriver:
             thickness=grid.cell_thickness,
             dt=dt,
             surface_flux=kinematic_fluxes['salt_flux'],
-            ghat=mix_out.ghat
+            ghat=ghat_to_apply
         )
 
         state.u_vel = solve_diffusion_implicit(

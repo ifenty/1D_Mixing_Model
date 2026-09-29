@@ -23,11 +23,20 @@ smooth_regularisation: false  # Use smooth regularization (var+eps vs max(var,ep
 # Shear mixing
 scale_shearmixing: false    # Scale shear mixing by Polzin (1996) formula
 
-# Nonlocal transport
-use_ghat: true             # Include nonlocal transport term
+# Nonlocal transport. KPP_GHAT (kpp_transport_t.F/kpp_transport_s.F): gates
+# whether the nonlocal transport term is APPLIED to the tracer diffusive
+# flux, not whether the ghat coefficient itself is computed -- MITgcm's
+# blmix (kpp_routines.F) always computes it. See KPPParameters.use_ghat
+# and MixingOutput.apply_ghat (1DMIX-058).
+use_ghat: true             # Apply nonlocal transport term to tracer fluxes
 
 # Interior mixing
 exclude_shear_mix: false   # Exclude interior shear mixing
+# EXCLUDE_KPP_DOUBLEDIFF (compile-time exclusion). MITgcm's own default is
+# #undef (double-diffusion code compiled IN); this port never implements
+# that code regardless of this flag's value, so False (matching #undef) is
+# trivially correct here. See use_doublediff below -- NOT IMPLEMENTED, must
+# stay false -- for the flag that actually matters (1DMIX-059).
 exclude_doublediff: false  # Exclude double diffusion
 
 # Vertical smoothing
@@ -84,6 +93,11 @@ dsfmax: 0.01               # Max salt fingering diffusivity [m^2/s]
 cstar: 10.0                # Proportionality coefficient for nonlocal transport
 
 # Flags
+# KPPuseDoubleDiff (runtime switch) -- NOT IMPLEMENTED, must stay false.
+# No double-diffusion (salt-fingering/diffusive-convection) code path exists
+# anywhere in this port's ri_iwmix; KPPParameters.__post_init__ raises
+# NotImplementedError if this is True rather than silently ignoring the
+# request (1DMIX-059).
 use_doublediff: false      # Use double diffusion
 limit_hbl_stable: true     # Limit hbl by Ekman/Monin-Obukhov in stable conditions
 ghat_use_total_diffus: false  # Use total diffusivity for ghat computation

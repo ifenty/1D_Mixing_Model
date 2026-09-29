@@ -251,10 +251,16 @@ Where:
 ### Problem: ghat is always zero
 
 **Check**:
-1. Is `q_net + q_sw` positive (net heating)?
+1. Is `q_net + q_sw` positive (net heating)? `ghat` is only nonzero under
+   unstable (net cooling/freshening) surface forcing.
    - **Fix**: Increase cooling or reduce shortwave
-2. Is `use_ghat = True` in config?
-   - **Fix**: Check configuration file
+
+Note: `use_ghat=False` does NOT zero the `ghat` diagnostic itself (fixed
+1DMIX-058; MITgcm's own blmix always computes it, KPP_GHAT undefined or not).
+It only stops the nonlocal term from being added to the temperature/salt
+flux during time-stepping (`MixingOutput.apply_ghat`, consumed by
+`UnifiedColumnDriver._apply_vertical_diffusion`). If `ghat` prints as zero,
+check surface forcing stability (item 1), not `use_ghat`.
 
 **Example fix**:
 ```python

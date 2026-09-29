@@ -1,0 +1,254 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/0ccdb15b0b012bfba80f8295057d84cf2eea59b878edaa922fa24ee335469772.json",
+      "sha256": "0ccdb15b0b012bfba80f8295057d84cf2eea59b878edaa922fa24ee335469772"
+    },
+    "carry_forward": [
+      "A hand-built witness guards the function it calls, not the pipeline that calls it. Three consecutive iterations on one invariant each closed the route its author imagined and left the next open, because every guard constructed its own MixingOutput and called the driver method directly. When a guard is hand-built, ask explicitly what its construction cannot observe, not just which routes it covers.",
+      "Assert exact equality, not a tolerance, when the correct behaviour is that a quantity does not enter a path at all. ghat does not reach momentum, so bit-identical output is the physical truth and any tolerance would be an unjustified weakening that a sub-threshold leak would then slip under.",
+      "Pair a bit-identity assertion with a positive control in the same test. The momentum half of this guard asserts nothing changes; without the tracer half asserting something does, a configuration where the varied input affected nothing would pass vacuously while appearing to guard everything."
+    ],
+    "closes_timestamp": "2026-09-29T00:45:49.517093+00:00",
+    "id": "1DMIX-063",
+    "iteration": 1,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator_coverage": "missing",
+      "cost_usd": {
+        "bob": 2.3002017500000003,
+        "richard": 2.0242127499999993
+      },
+      "dispatches": {
+        "bob": 1,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 1,
+        "richard": 1
+      },
+      "span_minutes": 40,
+      "unknown_cost_event_ids": []
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "handbuilt_witness_guards_callee_not_pipeline",
+        "evidence": "Generation one, 1DMIX-058's review: a momentum-leak mutant passes all 16 plausibly-relevant tests. Generation two, 1DMIX-061's review: the new call-level witness guards the ghat= keyword route only, and two other implementations of the same bug pass all 68 tests. Generation three, this iteration's review: the new quantity-level guard is route-independent inside the driver body -- all three previously demonstrated routes fail it, verified independently by Arch for the visc_az-folding case -- but contaminating MixingOutput.visc_az inside KPPAdapter.compute_mixing, upstream of that body, moves visc_az from 0.0 to 5.837e-3 under nonzero ghat and escapes both witnesses and the entire 69-test focused suite, which reports 69 passed and 3 skipped unchanged from clean bytes. Filed as 1DMIX-064. Measured cost of this iteration: 40 minutes, one round each, bob $2.3002017500000003 and richard $2.0242127499999993, no correction rounds, no unknown costs.",
+        "minutes_lost": 0,
+        "summary": "Recorded because it is the third consecutive demonstration of one structural fact and the schema has no channel for a finding that is neither a process failure nor a success. Every guard this thread has added is hand-built: it constructs a MixingOutput and calls _apply_vertical_diffusion directly. Each such guard closed the route its author imagined and left the next one open, and each next one was found only by asking a reviewer for a route the author had not imagined. The general form, worth stating because it will recur outside this invariant, is that a hand-built witness guards the function it calls rather than the pipeline that calls it. No time was lost this iteration; the cost is that the thread has now taken three iterations to reach a boundary that was structural from the start."
+      }
+    ],
+    "schema_version": 2,
+    "solutions": [
+      {
+        "action": "filed",
+        "issue": "TEAM-ORIENTATION-RESEAL-001",
+        "problem": 0,
+        "reason": "Recorded under the brief-generation owner, which already carries the positive counterpart of asking a reviewer what the prior work did not cover. This is that practice's third consecutive payoff on one invariant, and it sharpens the guidance in a way that issue should carry: the productive question is not merely what the prior review missed, but what the prior guard's *construction* cannot observe. Naming the construction rather than the coverage is what produced the adapter-boundary finding, since both witnesses were structurally blind to the same boundary and no enumeration of leak routes inside the driver body would have surfaced it."
+      }
+    ],
+    "timestamp": "2026-09-29T01:25:30Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 33.16281509399414,
+        "elapsed_seconds": 33.16281509399414,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 383.5467550754547,
+        "elapsed_seconds": 383.5467550754547,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.468548059463501,
+        "elapsed_seconds": 0.468548059463501,
+        "events": 5
+      },
+      "review": {
+        "effort_seconds": 484.7597670555115,
+        "elapsed_seconds": 484.7597670555115,
+        "events": 1
+      },
+      "verification": {
+        "effort_seconds": 631.2948851585388,
+        "elapsed_seconds": 631.2948851585388,
+        "events": 4
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 2.3002017500000003,
+        "rounds": 1,
+        "seconds": 383.7022440433502,
+        "tool_calls": 35,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 97167,
+          "cache_read_input_tokens": 1981476,
+          "input_tokens": 59,
+          "output_tokens": 28075
+        }
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 2.0242127499999993,
+        "rounds": 1,
+        "seconds": 490.3693790435791,
+        "tool_calls": 29,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 90013,
+          "cache_read_input_tokens": 1432163,
+          "input_tokens": 45,
+          "output_tokens": 29813
+        }
+      }
+    },
+    "child_elapsed_seconds": 874.0716230869293,
+    "components": [
+      {
+        "event_id": "98207d2055ad45c09adc118df3bc0d89",
+        "kind": "turn",
+        "parent_event_id": "98207d2055ad45c09adc118df3bc0d89",
+        "reported_usd": 2.0242127499999993,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/3d70ac1b-cf32-4337-a28d-fc60883eb7e6/turns/98207d2055ad45c09adc118df3bc0d89/record.json"
+      },
+      {
+        "event_id": "fdbaeb174d164e6cbeb2312fb1910f87",
+        "kind": "turn",
+        "parent_event_id": "fdbaeb174d164e6cbeb2312fb1910f87",
+        "reported_usd": 2.3002017500000003,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/4d0cdd76-b9f6-4567-9529-acf0d6cd0b8f/turns/fdbaeb174d164e6cbeb2312fb1910f87/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-29T01:25:24.719109+00:00",
+    "issue_id": "1DMIX-063",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 1501.1303930282593,
+    "phase_events": [
+      {
+        "event_id": "ec2c3f8e24f64b72b2d8c222180b1a4f",
+        "finished_at": "2026-09-29T00:47:02.750877+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10707449999972596,
+        "started_at": "2026-09-29T00:47:02.643615+00:00"
+      },
+      {
+        "event_id": "43b109880c004d288f25d6cf9e8d1bed",
+        "finished_at": "2026-09-29T00:51:58.924889+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 57.3273847499986,
+        "started_at": "2026-09-29T00:51:01.597540+00:00"
+      },
+      {
+        "event_id": "b5194e13b5fc4c69a27bbd071ec8007c",
+        "finished_at": "2026-09-29T00:52:15.506610+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08533283400174696,
+        "started_at": "2026-09-29T00:52:15.421112+00:00"
+      },
+      {
+        "event_id": "bcf919708cc34802bd794f3880806de0",
+        "finished_at": "2026-09-29T00:53:13.722322+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 383.54793583399805,
+        "started_at": "2026-09-29T00:46:50.175567+00:00"
+      },
+      {
+        "event_id": "86cfc22c97d24bd5a8eafcdef6815497",
+        "finished_at": "2026-09-29T00:59:16.319129+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07996529199954239,
+        "started_at": "2026-09-29T00:59:16.238911+00:00"
+      },
+      {
+        "event_id": "e5948824d0a240239bf646b1337fbca7",
+        "finished_at": "2026-09-29T00:59:40.734805+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.508873958002368,
+        "started_at": "2026-09-29T00:59:31.225667+00:00"
+      },
+      {
+        "event_id": "a9280b38d67b43c48015b1aaad358035",
+        "finished_at": "2026-09-29T01:00:36.835709+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07718095800009905,
+        "started_at": "2026-09-29T01:00:36.758375+00:00"
+      },
+      {
+        "event_id": "b857e4b12e0745198afa7184c910eee0",
+        "finished_at": "2026-09-29T01:06:17.361570+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.725340665998374,
+        "started_at": "2026-09-29T01:05:20.636168+00:00"
+      },
+      {
+        "event_id": "844f98f5eaf64aca842455e6934a8d7d",
+        "finished_at": "2026-09-29T01:07:06.418852+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11808575000031851,
+        "started_at": "2026-09-29T01:07:06.300616+00:00"
+      },
+      {
+        "event_id": "1608e223b5ef470b9a81ae6eb86057b2",
+        "finished_at": "2026-09-29T01:08:28.746716+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "review",
+        "reason": null,
+        "seconds": 484.7604262080022,
+        "started_at": "2026-09-29T01:00:23.986949+00:00"
+      },
+      {
+        "event_id": "8ee3ce4c18824c859a3bc986b183cd47",
+        "finished_at": "2026-09-29T01:21:59.183422+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 507.71752083400133,
+        "started_at": "2026-09-29T01:13:31.450426+00:00"
+      },
+      {
+        "event_id": "7df4eb9547684ba2a9873b192721667e",
+        "finished_at": "2026-09-29T01:25:24.721603+00:00",
+        "issue_id": "1DMIX-063",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 33.164989416000026,
+        "started_at": "2026-09-29T01:24:51.556294+00:00"
+      }
+    ],
+    "reported_usd": 4.3244145,
+    "schema_version": 2,
+    "span_seconds": 2375.2020161151886,
+    "start": "2026-09-29T00:45:49.517093+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

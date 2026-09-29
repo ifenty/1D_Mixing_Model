@@ -1,0 +1,201 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-057",
+    "iteration": 2,
+    "closes_timestamp": "2026-09-28T13:29:19.878285+00:00",
+    "timestamp": "2026-09-28T13:47:55Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/1ac28f5594533a89815d99b20c071b9d87c901bcebffbe20077afa1ad36c3b65.json",
+      "sha256": "1ac28f5594533a89815d99b20c071b9d87c901bcebffbe20077afa1ad36c3b65"
+    },
+    "measured": {
+      "span_minutes": 18,
+      "dispatches": {
+        "bob": 2
+      },
+      "rounds": {
+        "bob": 2
+      },
+      "cost_usd": {
+        "bob": 1.4986350000000002
+      },
+      "unknown_cost_event_ids": [
+        "32995b9be39b4881a63b1722df80edb0"
+      ],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "framework_change_broke_dispatch",
+        "summary": "The ESX 1.2.0 change Arch had just upstreamed broke dispatch on any issue whose nominal wall time had already elapsed. Removing the allocation refusal left reserve() still returning the scope's own past deadline, so run_turn killed the first turn of this iteration at launch. The framework suite had passed because no test dispatched a real turn against an expired scope.",
+        "evidence": "Event 32995b9be39b4881a63b1722df80edb0: status failed, error timeout, duration_seconds 0.181, returncode -15, message_chars 0, report digest e3b0c442 (zero bytes). The new source_changed_during_turn field read False, which is how Arch knew immediately that nothing was lost. Fixed upstream as ESX 1.2.1 with two regression tests covering both directions, the project upgraded, and the identical dispatch then completed in 661 seconds. Provider cost for the failed launch is unknown and listed in unknown_cost_event_ids.",
+        "minutes_lost": 12
+      },
+      {
+        "category": "pinned_baseline_makes_late_closure_disproportionate",
+        "summary": "Closing an issue left open across other closures requires dispositioning every change those closures made, because doc_contract.baseline pins an issue's baseline write-once by design. This issue's iteration-2 candidate diff spans 72 targets, mostly other issues' work and the framework upgrade, so a documentation report under this issue would misattribute them. Arch stopped rather than produce it.",
+        "evidence": "doc_contract.draft against 1DMIX-057's original baseline returns 72 dispositions covering 1DMIX-055, 1DMIX-058, 1DMIX-059 and 1DMIX-060's changed symbols plus tools/esx/team_budget.py, brief.py, agent_runtime.py and team_driver.py from the ESX upgrade. baseline() documents the pin as deliberate: a write-once pin prevents a fresh working-tree capture from hiding cumulative edits. draft(previous_ref=...) cannot chain because the other sealed reports used their own baselines. This is the documentation-side cost of the mechanism already recorded as LL-003.",
+        "minutes_lost": 6
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-TURN-CAP-001",
+        "reason": "The owner of the cap-versus-monitoring work this defect came from. Worth recording under it that the 1.2.0 change needed a same-day 1.2.1 follow-up, and specifically that the gap was a missing test dispatching against an expired scope rather than a wrong design."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-BASELINE-PIN-001",
+        "reason": "New process issue: the write-once baseline pin is correct for preventing hidden cumulative edits but makes late closure of a long-open issue disproportionate, and there is no sanctioned route between those two positions. Needs a decision rather than a workaround."
+      }
+    ],
+    "carry_forward": [
+      "Close an issue in the iteration that produced it: a pinned baseline means every later closure elsewhere enlarges its candidate diff, so a one-step remainder can become a 72-target documentation task months later.",
+      "After changing framework code, dispatch one real turn against the least favourable state before trusting a green suite; the 1.2.0 defect was invisible to 13 passing modules and immediate on the first real dispatch."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.7173430919647217,
+        "elapsed_seconds": 0.7173430919647217,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 660.8154520988464,
+        "elapsed_seconds": 660.8154520988464,
+        "events": 2
+      },
+      "orientation": {
+        "effort_seconds": 0.30144786834716797,
+        "elapsed_seconds": 0.30144786834716797,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 66.0573718547821,
+        "elapsed_seconds": 66.0573718547821,
+        "events": 2
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 1.4986350000000002,
+        "rounds": 2,
+        "seconds": 661.1353030204773,
+        "tool_calls": 23,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 149496,
+          "cache_read_input_tokens": 666870,
+          "input_tokens": 25,
+          "output_tokens": 9229
+        }
+      }
+    },
+    "child_elapsed_seconds": 661.1353030204773,
+    "components": [
+      {
+        "event_id": "a149555b03e64c358cb1c9b17c90e993",
+        "kind": "turn",
+        "parent_event_id": "a149555b03e64c358cb1c9b17c90e993",
+        "reported_usd": 1.4986350000000002,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/3d3b2823-579c-411e-8d37-204c4b8739b1/turns/a149555b03e64c358cb1c9b17c90e993/record.json"
+      },
+      {
+        "event_id": "32995b9be39b4881a63b1722df80edb0",
+        "kind": "turn",
+        "parent_event_id": "32995b9be39b4881a63b1722df80edb0",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/949f830d-d326-4254-bbb2-00aedeec09ce/turns/32995b9be39b4881a63b1722df80edb0/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T13:47:47.248212+00:00",
+    "issue_id": "1DMIX-057",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 446.23462414741516,
+    "phase_events": [
+      {
+        "event_id": "faa20a4622a548629e7c8a3a5d618b4c",
+        "finished_at": "2026-09-28T13:29:59.264724+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 0.02037424998707138,
+        "started_at": "2026-09-28T13:29:59.244370+00:00"
+      },
+      {
+        "event_id": "4c76e317400d48978a35e7e56bf6edf1",
+        "finished_at": "2026-09-28T13:35:11.464545+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.16422220898675732,
+        "started_at": "2026-09-28T13:35:11.300167+00:00"
+      },
+      {
+        "event_id": "d9706e7eae6c4e89a0aaa58b54126de2",
+        "finished_at": "2026-09-28T13:44:48.685834+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.83670358301606,
+        "started_at": "2026-09-28T13:43:51.847776+00:00"
+      },
+      {
+        "event_id": "d9f2bfb7636741d6a672c805410ac862",
+        "finished_at": "2026-09-28T13:44:59.942760+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.1369267079862766,
+        "started_at": "2026-09-28T13:44:59.805690+00:00"
+      },
+      {
+        "event_id": "5c2937dc880c40b79f78dfef678e8615",
+        "finished_at": "2026-09-28T13:45:51.380937+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 660.7947556250147,
+        "started_at": "2026-09-28T13:34:50.585839+00:00"
+      },
+      {
+        "event_id": "728609bbcd1d47a6a2ead0a3e6c14cc9",
+        "finished_at": "2026-09-28T13:46:12.306876+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.21910420799395,
+        "started_at": "2026-09-28T13:46:03.087562+00:00"
+      },
+      {
+        "event_id": "e4bc68b50fe6449eaff3724e3fa9588c",
+        "finished_at": "2026-09-28T13:47:47.248902+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.7179119999927934,
+        "started_at": "2026-09-28T13:47:46.530869+00:00"
+      }
+    ],
+    "reported_usd": 1.4986350000000002,
+    "schema_version": 2,
+    "span_seconds": 1107.3699271678925,
+    "start": "2026-09-28T13:29:19.878285+00:00",
+    "unknown_cost_event_ids": [
+      "32995b9be39b4881a63b1722df80edb0"
+    ]
+  }
+}

@@ -16,3 +16,16 @@
 *.nc
 *.o
 a.out
+
+# Direction-B (standalone-Fortran-driver) permanentized scenario data, 1DMIX-053.
+# Same treatment as the *.nc MITgcm captures above: these are *.txt/*.npz (not
+# covered by the *.nc rule), so listed explicitly by directory. 108 MB across 36
+# files is the wrong size for git; kept durable on disk and content-hashed into
+# verification receipts via esx/project.json:external_inputs instead of being
+# git-tracked. Scoped to these 4 directories only — other *.txt/*.npz under this
+# tree (e.g. mitgcm_verification_mods/kpp_standalone_driver/test_data/) remain
+# git-tracked and are not affected by this rule.
+MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_python_standalone/
+MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_python_standalone/
+MITgcm_to_Python_port_verification/GGL90_port_validation/inputs_from_python_standalone/
+MITgcm_to_Python_port_verification/GGL90_port_validation/outputs_from_python_standalone/

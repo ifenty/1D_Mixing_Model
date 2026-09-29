@@ -1011,12 +1011,26 @@ def _get_param_description(param: str) -> str:
         'salt_plume_volume': 'SALT_PLUME_VOLUME compile-time variant (accumulate boplume over levels, not implemented)',
         # Boolean flags - runtime
         'KPP_ghatUseTotalDiffus': 'Use total diffusivity (not just KPP) for ghat computation',
-        'KPPuseDoubleDiff': 'Include double diffusion contributions',
+        # 1DMIX-059: captured here so a future capture that enables this is
+        # detected, not replayed blind -- the Python port has NO
+        # double-diffusion code path (KPP_DOUBLEDIFF is unported), and
+        # run_kpp_from_netcdf_input.py's KPPuseDoubleDiff->use_doublediff
+        # map feeds this value straight into KPPParameters, whose
+        # __post_init__ now raises NotImplementedError if it is nonzero
+        # rather than silently running the capture through unimplemented
+        # physics.
+        'KPPuseDoubleDiff': 'Include double diffusion contributions '
+                            '(NOT IMPLEMENTED in the Python port -- '
+                            'KPPParameters raises NotImplementedError if '
+                            'True, 1DMIX-059)',
         'LimitHblStable': 'Limit hbl depth under stable conditions',
         'KPPwriteState': 'Write KPP state to file (diagnostic only)',
         'KPPuseSWfrac3D': 'Use 3D spatially-varying shortwave water type',
         # Boolean flags - CPP compile-time options
-        'use_ghat': 'Include nonlocal transport term (KPP_GHAT)',
+        # KPP_GHAT gates applying ghat to the tracer flux, not computing it --
+        # MITgcm's blmix computes ghat unconditionally regardless of this flag
+        # (1DMIX-058).
+        'use_ghat': 'Apply nonlocal transport term to tracer flux (KPP_GHAT)',
         'smooth_shsq': 'Smooth shear horizontally (KPP_SMOOTH_SHSQ)',
         'smooth_dvsq': 'Smooth dVsq horizontally (KPP_SMOOTH_DVSQ)',
         'smooth_dbloc': 'Smooth dbloc horizontally (KPP_SMOOTH_DBLOC)',

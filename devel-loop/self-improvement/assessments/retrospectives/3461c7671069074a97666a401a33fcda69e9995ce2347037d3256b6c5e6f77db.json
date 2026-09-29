@@ -1,0 +1,266 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/6a2fb5d06fbd78d84ebe2a3b7f47d24ab2e644fc1670ccec011af5f773696c15.json",
+      "sha256": "6a2fb5d06fbd78d84ebe2a3b7f47d24ab2e644fc1670ccec011af5f773696c15"
+    },
+    "carry_forward": [
+      "When re-reviewing an issue whose science a prior review already validated, brief the reviewer on what that review did not cover, not on what it concluded. Naming one uncovered invariant produced a real filed issue; asking for confirmation would have produced a confirmation.",
+      "Before assembling a closeout for an issue that previously closed partial, locate its prior closeout in loop_state/closed/ and enumerate its failed turns first. Each one needs an agent_continuity.replacements disposition with reason and evidence_refs, and the whole draft needs prepare-done --prior. Discovering this by rejection costs about ten minutes.",
+      "A treat-as-fact figure in a sealed report is only as current as the bytes it was measured on. Two other issues' work landed between this measurement and its review; asking the reviewer to re-derive it rather than read it is what established it had not moved."
+    ],
+    "closes_timestamp": "2026-09-28T15:57:06.878439+00:00",
+    "id": "1DMIX-058",
+    "iteration": 2,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator_coverage": "missing",
+      "cost_usd": {
+        "bob": 0.6894055,
+        "richard": 4.3250915
+      },
+      "dispatches": {
+        "bob": 1,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 1,
+        "richard": 1
+      },
+      "span_minutes": 40,
+      "unknown_cost_event_ids": []
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "reiteration_closeout_route_undiscoverable",
+        "evidence": "In order: 'scope_decisions[0] needs a valid classification' (separate_new is not in the set); 'bc2a550d: current issue review completion is missing from subagents.richard'; 'e9e7cebf: attempt predates this iteration; retain it through --prior'; 'bob: failed or incomplete turn remains unresolved'; 'verification reference is required'. The two iteration-1 failures being accounted for were a stale orientation receipt on the implementer's third correction round -- Arch's own error, from telling him to skip a reseal on a file that was itself an orientation target -- and a reviewer approval lacking a successful executed check. The route past the second rejection that looks fastest is to mark the failed reviewer waived, which would erase the record of a review that did not happen; that path is closed only because waived entries are filtered out of referenced, not by any message saying why it is wrong.",
+        "minutes_lost": 10,
+        "summary": "Five sequential gate rejections on bookkeeping alone, on an iteration whose substantive work was already done and whose reviewer verdict was APPROVE. An issue that closed partial leaves failed turns in the dispatch log, and its next closeout must satisfy five requirements that nothing announces in advance: --prior to retain pre-iteration attempts, an explicit replacements disposition per failed identity, three separately-named verification references, and a scope_decisions classification drawn from a set with no member for work the review itself discovered."
+      },
+      {
+        "category": "distinct_reviewer_questions_found_new_ground",
+        "evidence": "The brief's first question named the gap explicitly -- 'the five mutants did not cover this' -- and Richard built a momentum-leak mutant that passes all 16 tests plausibly able to catch it, filed as 1DMIX-061. He re-derived rather than inherited the rest: rebuilt all five prior mutants against the current 3-test witness and mapped which test catches which; re-ran the real global_oce_latlon_720 replay rather than the pytest wrapper, reproducing median_abs=0.001499852465312479 and max_abs=115.9702535835539 exactly; and hashed shared_column_solver.py against the pinned baseline blob rather than HEAD, which proves nothing here because the working tree carries unrelated modifications. One Bob turn at $0.69 and one Richard turn at $4.33, no correction rounds.",
+        "minutes_lost": 0,
+        "summary": "Recorded because the schema has no success channel: asking the reviewer what the prior review did not cover, rather than asking him to confirm what it did, is what made a $4.33 review of already-validated science worth its cost. It returned a newly filed issue and an exact independent reproduction of the headline figure."
+      }
+    ],
+    "schema_version": 2,
+    "solutions": [
+      {
+        "action": "filed",
+        "issue": "TEAM-REITERATION-CLOSEOUT-001",
+        "problem": 0,
+        "reason": "New issue; nothing in the existing ledger covers it. TEAM-ORIENTATION-RESEAL-001 owns the reseal failure that caused iteration 1 to close partial, but not the cost of closing the iteration that follows. The fix is cheap and keeps every integrity property: prepare-done already reads the dispatch log and knows the issue id, so it can find the prior closeout and emit a replacements skeleton with reason and evidence_refs empty, which still fails validation until filled."
+      },
+      {
+        "action": "filed",
+        "issue": "TEAM-ORIENTATION-RESEAL-001",
+        "problem": 1,
+        "reason": "Recorded under the brief-generation owner as the positive counterpart to its failures, extending the 1DMIX-059 entry. There the lesson was to name inherited work and say not to skim it; here it is sharper, because there was no inherited work at all -- the brief instead named what the *prior review* had not covered, on an issue whose science was already validated, and that is what produced new ground rather than a rubber stamp."
+      }
+    ],
+    "timestamp": "2026-09-28T16:37:27Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 39.24121308326721,
+        "elapsed_seconds": 39.24121308326721,
+        "events": 2
+      },
+      "implementation": {
+        "effort_seconds": 170.84929895401,
+        "elapsed_seconds": 170.84929895401,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.36591315269470215,
+        "elapsed_seconds": 0.36591315269470215,
+        "events": 4
+      },
+      "review": {
+        "effort_seconds": 943.6703948974609,
+        "elapsed_seconds": 943.6703948974609,
+        "events": 1
+      },
+      "verification": {
+        "effort_seconds": 594.5360927581787,
+        "elapsed_seconds": 594.5360927581787,
+        "events": 4
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 0.6894055,
+        "rounds": 1,
+        "seconds": 171.0035059452057,
+        "tool_calls": 14,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 61554,
+          "cache_read_input_tokens": 333686,
+          "input_tokens": 15,
+          "output_tokens": 5511
+        }
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 4.3250915,
+        "rounds": 1,
+        "seconds": 950.5383911132812,
+        "tool_calls": 49,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 141126,
+          "cache_read_input_tokens": 4519988,
+          "input_tokens": 77,
+          "output_tokens": 47307
+        }
+      }
+    },
+    "child_elapsed_seconds": 1121.541897058487,
+    "components": [
+      {
+        "event_id": "c9e04c187e7b48799aad5f785c712b46",
+        "kind": "turn",
+        "parent_event_id": "c9e04c187e7b48799aad5f785c712b46",
+        "reported_usd": 4.3250915,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/a2bf0eef-9f90-4bdb-92a9-13dccff4c565/turns/c9e04c187e7b48799aad5f785c712b46/record.json"
+      },
+      {
+        "event_id": "78fad0aa81534b158635ac5625787ccb",
+        "kind": "turn",
+        "parent_event_id": "78fad0aa81534b158635ac5625787ccb",
+        "reported_usd": 0.6894055,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/c4f715f4-e50c-4c99-88b9-a092bb6626bc/turns/78fad0aa81534b158635ac5625787ccb/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T16:37:03.963954+00:00",
+    "issue_id": "1DMIX-058",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 1275.543617963791,
+    "phase_events": [
+      {
+        "event_id": "aa1561ea57a544c6892e72317d50d2af",
+        "finished_at": "2026-09-28T15:58:02.684455+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.774483375018463,
+        "started_at": "2026-09-28T15:57:52.909816+00:00"
+      },
+      {
+        "event_id": "697b21a5a33a4830bf34b9c406593123",
+        "finished_at": "2026-09-28T16:00:28.098014+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09284266701433808,
+        "started_at": "2026-09-28T16:00:28.004986+00:00"
+      },
+      {
+        "event_id": "2f09f44d82ba43b78cefa6dc202287c5",
+        "finished_at": "2026-09-28T16:02:29.067738+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.37914083301439,
+        "started_at": "2026-09-28T16:01:33.688462+00:00"
+      },
+      {
+        "event_id": "c92e0a6db34b4da7b3629b76df3384e2",
+        "finished_at": "2026-09-28T16:02:39.454422+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08544883300783113,
+        "started_at": "2026-09-28T16:02:39.368830+00:00"
+      },
+      {
+        "event_id": "4cc0966ec8e8439ab83911c7429d6b2c",
+        "finished_at": "2026-09-28T16:03:06.196886+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 170.849282375013,
+        "started_at": "2026-09-28T16:00:15.347587+00:00"
+      },
+      {
+        "event_id": "25831fec5f3643d9a1dfdfbaae5660c2",
+        "finished_at": "2026-09-28T16:06:30.309981+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08971895801369101,
+        "started_at": "2026-09-28T16:06:30.220109+00:00"
+      },
+      {
+        "event_id": "2eb74b2b22924b94985db3abe03a2f27",
+        "finished_at": "2026-09-28T16:16:53.651879+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 57.37001762498403,
+        "started_at": "2026-09-28T16:15:56.281737+00:00"
+      },
+      {
+        "event_id": "281c201241354e76a673366457ee4836",
+        "finished_at": "2026-09-28T16:18:20.259111+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0972920409985818,
+        "started_at": "2026-09-28T16:18:20.161690+00:00"
+      },
+      {
+        "event_id": "4eac51c7985749e597af0e651d148d68",
+        "finished_at": "2026-09-28T16:21:58.924358+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "review",
+        "reason": null,
+        "seconds": 943.6762782919977,
+        "started_at": "2026-09-28T16:06:15.253963+00:00"
+      },
+      {
+        "event_id": "faba6e08a4004380ac7aaae387a244d5",
+        "finished_at": "2026-09-28T16:35:34.667302+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 472.01109591600834,
+        "started_at": "2026-09-28T16:27:42.655266+00:00"
+      },
+      {
+        "event_id": "e9a268a0c94445b4baaeaf9ba48286aa",
+        "finished_at": "2026-09-28T16:35:58.148610+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 6.019809290999547,
+        "started_at": "2026-09-28T16:35:52.128638+00:00"
+      },
+      {
+        "event_id": "7b079f8595984acaa991d5b1d4cf45ca",
+        "finished_at": "2026-09-28T16:37:03.965544+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 33.2225619169767,
+        "started_at": "2026-09-28T16:36:30.742713+00:00"
+      }
+    ],
+    "reported_usd": 5.014497,
+    "schema_version": 2,
+    "span_seconds": 2397.085515022278,
+    "start": "2026-09-28T15:57:06.878439+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

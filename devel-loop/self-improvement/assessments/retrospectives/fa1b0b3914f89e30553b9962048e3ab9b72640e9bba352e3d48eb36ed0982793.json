@@ -1,0 +1,171 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-054",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T11:01:48.971328+00:00",
+    "timestamp": "2026-09-28T11:33:28Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/66ebca3c2c551e60cd904ae9ad74f42722ac9ab689df4b3fb4f0f98212078fed.json",
+      "sha256": "66ebca3c2c551e60cd904ae9ad74f42722ac9ab689df4b3fb4f0f98212078fed"
+    },
+    "measured": {
+      "span_minutes": 32,
+      "dispatches": {
+        "bob": 1
+      },
+      "rounds": {
+        "bob": 1
+      },
+      "cost_usd": {
+        "bob": 12.735075499999999
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "turn_cap_breach",
+        "summary": "A 74-cent provider overshoot on a 12-dollar per-turn cap set breached on the scope, which refuses every further launch and which extend explicitly will not extend. The issue became permanently undispatchable with roughly half its wall clock, 400 of 500 calls and 48 of 60 dollars unspent.",
+        "evidence": "Reservation 01e3fa34e787 on scope issue:1DMIX-054: reserved_usd 12.00, reported_usd 12.735075499999999, provider_overshoot true, and the scope carries breached: true. The scientific_change class sets turn_usd to 12 while long Bob turns this session measured $11.17, $16.95, $17.12 and $18.91, so four of five exceeded the cap and a breach on a long turn was closer to inevitable than exceptional. team_budget.extend refuses a breached scope by design, stating a breach requires reconciliation rather than a budget extension.",
+        "minutes_lost": 30
+      },
+      {
+        "category": "bounded_first_step_paid_off",
+        "summary": "Recorded as a problem entry only because the schema has no success channel, but this is the iteration's most useful outcome and the reason a hard block still left real value: scoping to a bounded first step meant the single available turn spent itself on the determination that removes a quarter of the issue rather than on a capture that would have been discarded.",
+        "evidence": "The turn settled the cs32x15 KPP question from pkg/kpp directly -- no coordFac or pressure-coordinate awareness anywhere -- establishing that both real MITgcm and the port would run the identical metres-shaped formula on Pa-valued rF/drF, agreeing for the wrong reason. It recommends dropping that target, reducing the issue from four captures to three, and both remaining mod directories were built with instrumentation verified canonical by zero-diff symlink check. Had the brief asked for captures first, the breach would have landed with nothing settled.",
+        "minutes_lost": 0
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-TURN-CAP-001",
+        "reason": "Filed this iteration with the measured cost distribution. The fix needs a determination about whether the cap is even compared against the right quantity given that reserve clamps reservations to remaining scope spend, which is analysis that does not belong inside a scientific iteration."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-BUDGET-SIZING-001",
+        "reason": "Recorded under the allocation-and-instrument owner as the positive counterpart to its three failure occurrences: a bounded first step is what made an unrecoverable block survivable, and that belongs in the same record as the sizing lessons."
+      }
+    ],
+    "carry_forward": [
+      "When an issue's cost is unmeasured, brief the bounded first step to spend itself on the determination that could remove work, not on producing the artifact; a turn that dies having settled scope is worth more than one that dies mid-artifact.",
+      "A provider spend breach is harsher than wall exhaustion because extend refuses a breached scope outright; treat the per-turn cap as a hard constraint on turn length, not as a soft target."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.7178730964660645,
+        "elapsed_seconds": 0.7178730964660645,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 1717.1627900600433,
+        "elapsed_seconds": 1717.1627900600433,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.22992706298828125,
+        "elapsed_seconds": 0.22992706298828125,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 55.91154503822327,
+        "elapsed_seconds": 55.91154503822327,
+        "events": 1
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 12.735075499999999,
+        "rounds": 1,
+        "seconds": 1717.1705949306488,
+        "tool_calls": 128,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      }
+    },
+    "child_elapsed_seconds": 1717.1705949306488,
+    "components": [
+      {
+        "event_id": "01e3fa34e78747db872780fcb6c3e469",
+        "kind": "turn",
+        "parent_event_id": "01e3fa34e78747db872780fcb6c3e469",
+        "reported_usd": 12.735075499999999,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/c10699a8-07ce-408e-a70b-0299c0b8d997/turns/01e3fa34e78747db872780fcb6c3e469/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T11:33:20.751285+00:00",
+    "issue_id": "1DMIX-054",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 174.60936212539673,
+    "phase_events": [
+      {
+        "event_id": "6829d598ca214b779aad61b15f52684b",
+        "finished_at": "2026-09-28T11:03:17.591193+00:00",
+        "issue_id": "1DMIX-054",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11095129197929054,
+        "started_at": "2026-09-28T11:03:17.480098+00:00"
+      },
+      {
+        "event_id": "e2a679012ef34a029c343212d90ea854",
+        "finished_at": "2026-09-28T11:31:17.560477+00:00",
+        "issue_id": "1DMIX-054",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.911318416998256,
+        "started_at": "2026-09-28T11:30:21.648932+00:00"
+      },
+      {
+        "event_id": "710dc23ac35c44c3a44862a900218904",
+        "finished_at": "2026-09-28T11:31:18.047584+00:00",
+        "issue_id": "1DMIX-054",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11865558399586007,
+        "started_at": "2026-09-28T11:31:17.928752+00:00"
+      },
+      {
+        "event_id": "ef32ca9c3f2943f8a389f06523647574",
+        "finished_at": "2026-09-28T11:31:18.379599+00:00",
+        "issue_id": "1DMIX-054",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 1717.1567934170016,
+        "started_at": "2026-09-28T11:02:41.216809+00:00"
+      },
+      {
+        "event_id": "d900ab681aee4e1e81cfabbbab8ab765",
+        "finished_at": "2026-09-28T11:33:20.751766+00:00",
+        "issue_id": "1DMIX-054",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.7178160409966949,
+        "started_at": "2026-09-28T11:33:20.033412+00:00"
+      }
+    ],
+    "reported_usd": 12.735075499999999,
+    "schema_version": 2,
+    "span_seconds": 1891.7799570560455,
+    "start": "2026-09-28T11:01:48.971328+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

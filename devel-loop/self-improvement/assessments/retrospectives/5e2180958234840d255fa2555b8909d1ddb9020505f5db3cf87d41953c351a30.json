@@ -1,0 +1,371 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-055",
+    "iteration": 3,
+    "closes_timestamp": "2026-09-28T14:18:09.904156+00:00",
+    "timestamp": "2026-09-28T15:13:42Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/4bdf940a4040699a2d1b0737d31c4d60bd79c457048ca810d945c97db62b9517.json",
+      "sha256": "4bdf940a4040699a2d1b0737d31c4d60bd79c457048ca810d945c97db62b9517"
+    },
+    "measured": {
+      "span_minutes": 55,
+      "dispatches": {
+        "richard": 2,
+        "bob": 2
+      },
+      "rounds": {
+        "richard": 2,
+        "bob": 2
+      },
+      "cost_usd": {
+        "richard": 9.792226249999999,
+        "bob": 2.5860815
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "relocated_claim_lost_its_source",
+        "summary": "The split relocated a sentence from the GGL90 section into the KPP report's shared-infrastructure section without checking that its cited capture was KPP-side. It claimed a result was confirmed on the vermix capture, and vermix has zero KPP files anywhere in the repository. The relocation carried forward the exact cross-scheme entanglement the issue existed to resolve, and two prior verification passes did not catch it.",
+        "evidence": "Richard confirmed by repo-wide search that every vermix artifact is GGL90-only, and git history shows the sentence pre-existed under '## GGL90' in the combined document. The implementer's own verification turn checked structural properties -- line counts, citation counts, absence of cross-file references -- all of which passed, because the defect was in whether the content was true rather than in whether the split was performed. Corrected to a 1D_ocean_ice_column confirmation whose figures Richard verified match closed_issues.md:949 verbatim.",
+        "minutes_lost": 20
+      },
+      {
+        "category": "numbers_carried_without_resourcing",
+        "summary": "Two other figures survived the rewrite without being re-sourced: a sample-size range stated as 2,400 to 5,750 when the measured values give 24 to 2,400, and lab_sea 6-month figures presented as current that trace to a build predating this experiment's tau-averaging and truncation fixes.",
+        "evidence": "Richard re-derived n_total independently by script in both rounds: {24,48,50,1150,1200,2400}. The lab_sea figures trace to closed_issues.md's 1DMIX-019 addendum; the brief had explicitly said newer measurements win over stale prose and that unsourceable numbers should be reported rather than carried, so the instruction existed and was not applied to these two.",
+        "minutes_lost": 8
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-ESTIMATE-EVIDENCE-001",
+        "reason": "Same owner as the other occurrences of asserting without measuring, in its most consequential form yet: a claim that was true of one scheme was relocated to a document about the other without re-checking its source, and structural verification cannot detect that class."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-ESTIMATE-EVIDENCE-001",
+        "reason": "Same root behaviour and same owner: figures carried across a rewrite without re-sourcing. Recorded together because a single fix -- requiring every retained number to name its source during a rewrite -- addresses both."
+      }
+    ],
+    "carry_forward": [
+      "When a rewrite relocates content between documents, re-source every factual claim at its new home: a statement true in its original context can become unsourceable simply by moving, and structural checks on line counts, citation counts and cross-references will all still pass.",
+      "Give a cold reviewer the sources rather than the claims, and ask them to check each figure against the source it names. Three real content defects here were found that way, after two verification passes that checked only whether the restructuring had been performed."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 11.377238988876343,
+        "elapsed_seconds": 11.377238988876343,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 586.3419330120087,
+        "elapsed_seconds": 586.3419330120087,
+        "events": 2
+      },
+      "orientation": {
+        "effort_seconds": 0.8114876747131348,
+        "elapsed_seconds": 0.8114876747131348,
+        "events": 9
+      },
+      "review": {
+        "effort_seconds": 1800.0599930286407,
+        "elapsed_seconds": 1800.0599930286407,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 261.9075028896332,
+        "elapsed_seconds": 261.9075028896332,
+        "events": 8
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 2.5860815,
+        "rounds": 2,
+        "seconds": 586.6241509914398,
+        "tool_calls": 49,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 88236,
+          "cache_read_input_tokens": 2513373,
+          "input_tokens": 64,
+          "output_tokens": 31104
+        }
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 9.792226249999999,
+        "rounds": 2,
+        "seconds": 1805.9021277427673,
+        "tool_calls": 82,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 593645,
+          "cache_read_input_tokens": 8244315,
+          "input_tokens": 98,
+          "output_tokens": 76799
+        }
+      }
+    },
+    "child_elapsed_seconds": 2392.526278734207,
+    "components": [
+      {
+        "event_id": "710068783a1941e0afb52801ef3060d0",
+        "kind": "turn",
+        "parent_event_id": "710068783a1941e0afb52801ef3060d0",
+        "reported_usd": 6.056955499999999,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b8dee8e9-5d32-4da0-9d7c-4de27d4493b4/turns/710068783a1941e0afb52801ef3060d0/record.json"
+      },
+      {
+        "event_id": "8fc40063483040e99dc7ff81f05f36d2",
+        "kind": "turn",
+        "parent_event_id": "8fc40063483040e99dc7ff81f05f36d2",
+        "reported_usd": 3.73527075,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b8dee8e9-5d32-4da0-9d7c-4de27d4493b4/turns/8fc40063483040e99dc7ff81f05f36d2/record.json"
+      },
+      {
+        "event_id": "96768a4fd2e94075a50ddf8652e81b0c",
+        "kind": "turn",
+        "parent_event_id": "96768a4fd2e94075a50ddf8652e81b0c",
+        "reported_usd": 1.9608617500000003,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/c32dc25f-b76e-4116-95d2-0a3f01000515/turns/96768a4fd2e94075a50ddf8652e81b0c/record.json"
+      },
+      {
+        "event_id": "a16dab0ffbf94c5ab6943683544f71ac",
+        "kind": "turn",
+        "parent_event_id": "a16dab0ffbf94c5ab6943683544f71ac",
+        "reported_usd": 0.62521975,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/c32dc25f-b76e-4116-95d2-0a3f01000515/turns/a16dab0ffbf94c5ab6943683544f71ac/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T15:13:32.711550+00:00",
+    "issue_id": "1DMIX-055",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 930.2811152935028,
+    "phase_events": [
+      {
+        "event_id": "927fed8267194f2087ecdea5245755ae",
+        "finished_at": "2026-09-28T14:18:41.166139+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.638469540979713,
+        "started_at": "2026-09-28T14:18:31.527430+00:00"
+      },
+      {
+        "event_id": "4f7535fc180d45568cd5c518a1299733",
+        "finished_at": "2026-09-28T14:18:58.682667+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06702083299751393,
+        "started_at": "2026-09-28T14:18:58.615451+00:00"
+      },
+      {
+        "event_id": "91a0f82ae1bb488980269bd9c59d0619",
+        "finished_at": "2026-09-28T14:20:40.361559+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.26582183298887685,
+        "started_at": "2026-09-28T14:20:40.095604+00:00"
+      },
+      {
+        "event_id": "2c350b9f2f6c4591b2ed74eaadbcd534",
+        "finished_at": "2026-09-28T14:26:08.372477+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.33802525000647,
+        "started_at": "2026-09-28T14:25:13.034292+00:00"
+      },
+      {
+        "event_id": "63ba978afbde4efa831916a69eeb0b7a",
+        "finished_at": "2026-09-28T14:26:18.161347+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06705300000612624,
+        "started_at": "2026-09-28T14:26:18.094139+00:00"
+      },
+      {
+        "event_id": "b4b574d4069a41b8a8cc388bd5f40cb4",
+        "finished_at": "2026-09-28T14:28:04.847800+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 460.0528031249996,
+        "started_at": "2026-09-28T14:20:24.794993+00:00"
+      },
+      {
+        "event_id": "2c752e2c15e54d829ca0ee037f644684",
+        "finished_at": "2026-09-28T14:28:24.483811+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.372552458022255,
+        "started_at": "2026-09-28T14:28:15.111040+00:00"
+      },
+      {
+        "event_id": "9baad1b4ff4243aa8865067125739dfa",
+        "finished_at": "2026-09-28T14:29:36.845847+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06535583297954872,
+        "started_at": "2026-09-28T14:29:36.780346+00:00"
+      },
+      {
+        "event_id": "88730c5786b54e62be1e25b3b1d734e3",
+        "finished_at": "2026-09-28T14:52:10.692459+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.98914616700495,
+        "started_at": "2026-09-28T14:51:14.703286+00:00"
+      },
+      {
+        "event_id": "4724873940424870a09e6c04fe0aebd5",
+        "finished_at": "2026-09-28T14:52:44.131390+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07171770898276009,
+        "started_at": "2026-09-28T14:52:44.059540+00:00"
+      },
+      {
+        "event_id": "4aadad7e85d5472990c091b383c9f58a",
+        "finished_at": "2026-09-28T14:55:25.338501+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "review",
+        "reason": null,
+        "seconds": 1561.5117191250029,
+        "started_at": "2026-09-28T14:29:23.835313+00:00"
+      },
+      {
+        "event_id": "18ec3cc3d70243399250a0b03ff961ec",
+        "finished_at": "2026-09-28T15:04:59.416222+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.77939245800371,
+        "started_at": "2026-09-28T15:04:02.636785+00:00"
+      },
+      {
+        "event_id": "76b8de7568094aa29d0ebfd779b72248",
+        "finished_at": "2026-09-28T15:05:13.067749+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07597974999225698,
+        "started_at": "2026-09-28T15:05:12.991604+00:00"
+      },
+      {
+        "event_id": "5745c6d5f05945f5971e2af10c0f417e",
+        "finished_at": "2026-09-28T15:05:48.338454+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 126.28742266699555,
+        "started_at": "2026-09-28T15:03:42.049328+00:00"
+      },
+      {
+        "event_id": "eb26344f721843cca5dec6bc3790a9af",
+        "finished_at": "2026-09-28T15:06:16.704552+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.544046124996385,
+        "started_at": "2026-09-28T15:06:07.160186+00:00"
+      },
+      {
+        "event_id": "065fe40b251a498da191a7a47ecefe38",
+        "finished_at": "2026-09-28T15:06:23.202362+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06321995897451416,
+        "started_at": "2026-09-28T15:06:23.138969+00:00"
+      },
+      {
+        "event_id": "d8451c809f6d446a8bc9e926c6a7e22f",
+        "finished_at": "2026-09-28T15:07:36.419661+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06663866699091159,
+        "started_at": "2026-09-28T15:07:36.352832+00:00"
+      },
+      {
+        "event_id": "accdfe2a761a42ca825a88ecf6debe64",
+        "finished_at": "2026-09-28T15:09:49.735367+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.31802583299577,
+        "started_at": "2026-09-28T15:08:53.417271+00:00"
+      },
+      {
+        "event_id": "59d8af99255440d98b766fa1ca402265",
+        "finished_at": "2026-09-28T15:10:04.869717+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.06722891598474234,
+        "started_at": "2026-09-28T15:10:04.802326+00:00"
+      },
+      {
+        "event_id": "c2423bf5d0634b87a2e7731a5d774cc8",
+        "finished_at": "2026-09-28T15:11:18.571552+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "review",
+        "reason": null,
+        "seconds": 238.5570791659993,
+        "started_at": "2026-09-28T15:07:20.014747+00:00"
+      },
+      {
+        "event_id": "c8f26f66514445ee835be68a9bb7fc44",
+        "finished_at": "2026-09-28T15:13:10.014755+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 8.926604749984108,
+        "started_at": "2026-09-28T15:13:01.087989+00:00"
+      },
+      {
+        "event_id": "afceb216ff604d67a1d469b3905b4f8b",
+        "finished_at": "2026-09-28T15:13:32.712970+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 11.378469499992207,
+        "started_at": "2026-09-28T15:13:21.334311+00:00"
+      }
+    ],
+    "reported_usd": 12.378307749999998,
+    "schema_version": 2,
+    "span_seconds": 3322.80739402771,
+    "start": "2026-09-28T14:18:09.904156+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

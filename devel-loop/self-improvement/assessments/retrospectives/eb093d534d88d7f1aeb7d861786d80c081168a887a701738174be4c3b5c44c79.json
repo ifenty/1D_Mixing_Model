@@ -1,0 +1,335 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-058",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T07:51:15.839049+00:00",
+    "timestamp": "2026-09-28T09:03:36Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/26650e8939547b6c54003600c1184fbd68b00cda13cc7003c3db814f128a1663.json",
+      "sha256": "26650e8939547b6c54003600c1184fbd68b00cda13cc7003c3db814f128a1663"
+    },
+    "measured": {
+      "span_minutes": 72,
+      "dispatches": {
+        "bob": 3,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 3,
+        "richard": 1
+      },
+      "cost_usd": {
+        "bob": 17.117130250000002,
+        "richard": 8.753155500000002
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "stale_orientation_after_self_edit",
+        "summary": "Arch instructed Bob to skip the orientation reseal on the round-2 docstring correction, believing his orientation targets were untouched. One of them was the very test function he was editing, so the turn was recorded incomplete, his correction allowance was spent, and the iteration closed partial for a bookkeeping reason rather than a scientific one.",
+        "evidence": "The round-2 follow-up devel-loop/loop_state/followup-bob-1dmix058-r2.md states 'skip the full navigate since your orientation targets are otherwise untouched', while the issue's orientation named MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py::test_global_oce_latlon_ghat -- the exact docstring edited. Event b62cd557a60c4a27912d7b5ebe254927: status incomplete, error 'stale bob orientation'. review-packet then refused with IMPLEMENTATION_UNRESOLVED, and team_budget refuses a third correction against the scope's limit of 2, so neither the reseal nor Richard's confirmation could happen.",
+        "minutes_lost": 15
+      },
+      {
+        "category": "tolerance_admits_total_failure",
+        "summary": "The global_oce_latlon ghat test passed while the port produced exactly zero for a field MITgcm computed at magnitudes up to 205.7, because its bound was wide enough to admit a complete failure of the quantity it names. The defect survived undetected until a field-level A/B measurement taken for a different issue exposed it.",
+        "evidence": "Richard measured that the pre-fix bounds of 15.0/150.0 would have passed the total mismatch with about 10000x and 34x margin respectively; the re-derived bounds are 0.01/140.0. The same weakness is untested in three sibling ghat tests in the same file, now filed as 1DMIX-060. This is the second measurement in two iterations where a green suite was uninformative about a real field-level disagreement, after 1DMIX-057's identical 113 passed / 3 skipped under both settings of a behaviour-changing default.",
+        "minutes_lost": 0
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-ORIENTATION-RESEAL-001",
+        "reason": "Already open and owns exactly this mechanism. This occurrence is worse than the one it was filed for, because Arch actively instructed the skip rather than merely omitting the instruction, which strengthens the case for the automatic variant that issue already proposes."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-BUDGET-SIZING-001",
+        "reason": "Recorded under the existing measurement-and-instrument owner, since the lesson is the same one its second occurrence raised: choose an instrument that can resolve the change being made, and treat suite pass/fail as a floor rather than as evidence."
+      }
+    ],
+    "carry_forward": [
+      "A test bound that would pass a total failure of the quantity it names is not a test; when a comparison is added or touched, check what magnitude of disagreement its bound actually admits.",
+      "Before telling an implementer to skip an orientation reseal, re-read the issue's own orientation target list; a target named by symbol is easy to miss when the edit is described as touching only a docstring."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.6730690002441406,
+        "elapsed_seconds": 0.6730690002441406,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 2156.7493059635162,
+        "elapsed_seconds": 2156.7493059635162,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 0.6485378742218018,
+        "elapsed_seconds": 0.6485378742218018,
+        "events": 7
+      },
+      "review": {
+        "effort_seconds": 1627.0182571411133,
+        "elapsed_seconds": 1627.0182571411133,
+        "events": 1
+      },
+      "verification": {
+        "effort_seconds": 193.72584295272827,
+        "elapsed_seconds": 193.72584295272827,
+        "events": 6
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 3,
+        "reported_usd": 17.117130250000002,
+        "rounds": 3,
+        "seconds": 2156.907101392746,
+        "tool_calls": 128,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 968683,
+          "cache_read_input_tokens": 17166383,
+          "input_tokens": 209,
+          "output_tokens": 99145
+        }
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 8.753155500000002,
+        "rounds": 1,
+        "seconds": 1627.0492520332336,
+        "tool_calls": 91,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 266980,
+          "cache_read_input_tokens": 10312631,
+          "input_tokens": 143,
+          "output_tokens": 77100
+        }
+      }
+    },
+    "child_elapsed_seconds": 3783.9563534259796,
+    "components": [
+      {
+        "event_id": "689f76a827834a8a957508a56559d094",
+        "kind": "turn",
+        "parent_event_id": "689f76a827834a8a957508a56559d094",
+        "reported_usd": 11.598966250000002,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/79737674-4493-4721-af10-551b3e69ddd8/turns/689f76a827834a8a957508a56559d094/record.json"
+      },
+      {
+        "event_id": "b62cd557a60c4a27912d7b5ebe254927",
+        "kind": "turn",
+        "parent_event_id": "b62cd557a60c4a27912d7b5ebe254927",
+        "reported_usd": 2.2705342500000003,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/79737674-4493-4721-af10-551b3e69ddd8/turns/b62cd557a60c4a27912d7b5ebe254927/record.json"
+      },
+      {
+        "event_id": "edd48e1382e5492cb5458fd7bd6f7519",
+        "kind": "turn",
+        "parent_event_id": "edd48e1382e5492cb5458fd7bd6f7519",
+        "reported_usd": 3.24762975,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/79737674-4493-4721-af10-551b3e69ddd8/turns/edd48e1382e5492cb5458fd7bd6f7519/record.json"
+      },
+      {
+        "event_id": "e9e7cebf90834c0e9e0c11b4cd91ce94",
+        "kind": "turn",
+        "parent_event_id": "e9e7cebf90834c0e9e0c11b4cd91ce94",
+        "reported_usd": 8.753155500000002,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/bc2a550d-694a-43ae-a813-687ef664f425/turns/e9e7cebf90834c0e9e0c11b4cd91ce94/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T09:03:30.800065+00:00",
+    "issue_id": "1DMIX-058",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 551.0046625137329,
+    "phase_events": [
+      {
+        "event_id": "a5e04659614c41a7a89828d5bd48ba7e",
+        "finished_at": "2026-09-28T07:52:23.163557+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09720016701612622,
+        "started_at": "2026-09-28T07:52:23.066216+00:00"
+      },
+      {
+        "event_id": "4a7c2f4d49644725abfb653cbd947294",
+        "finished_at": "2026-09-28T08:22:29.951048+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10086804200545885,
+        "started_at": "2026-09-28T08:22:29.850011+00:00"
+      },
+      {
+        "event_id": "ce4293d236d242a694a6bf07d22380c5",
+        "finished_at": "2026-09-28T08:23:32.425809+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.56512079099775,
+        "started_at": "2026-09-28T08:22:37.860342+00:00"
+      },
+      {
+        "event_id": "7d0cbc92404f43b0ac6ba4a502c7b000",
+        "finished_at": "2026-09-28T08:24:26.358698+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 1936.4608232910105,
+        "started_at": "2026-09-28T07:52:09.870771+00:00"
+      },
+      {
+        "event_id": "3cfadff9d86540228f02227e03693d36",
+        "finished_at": "2026-09-28T08:25:01.962542+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.041322042001411,
+        "started_at": "2026-09-28T08:24:52.921045+00:00"
+      },
+      {
+        "event_id": "f5c8688af013421a905203253c53b4c8",
+        "finished_at": "2026-09-28T08:26:31.218108+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09214779199101031,
+        "started_at": "2026-09-28T08:26:31.125806+00:00"
+      },
+      {
+        "event_id": "b21c8b081b1d49d3ba286c07894e0ff6",
+        "finished_at": "2026-09-28T08:27:14.888720+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09952841600170359,
+        "started_at": "2026-09-28T08:27:14.789059+00:00"
+      },
+      {
+        "event_id": "cbe4eba557024d2d8854058b6cfb7397",
+        "finished_at": "2026-09-28T08:28:15.245498+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.92790541701834,
+        "started_at": "2026-09-28T08:27:20.317257+00:00"
+      },
+      {
+        "event_id": "c67d8fe734c24279aab71006ca522be3",
+        "finished_at": "2026-09-28T08:28:44.081153+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 161.0673056670057,
+        "started_at": "2026-09-28T08:26:03.013243+00:00"
+      },
+      {
+        "event_id": "3d9ef06308fe46a9a10949668e1b3816",
+        "finished_at": "2026-09-28T08:29:06.560390+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.073476833000313,
+        "started_at": "2026-09-28T08:28:57.486706+00:00"
+      },
+      {
+        "event_id": "58243fe6a5c64d6c9fe55329fd016835",
+        "finished_at": "2026-09-28T08:29:55.919891+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07771912499447353,
+        "started_at": "2026-09-28T08:29:55.841993+00:00"
+      },
+      {
+        "event_id": "435a01ff7ec446278929ab5cb68cdf85",
+        "finished_at": "2026-09-28T08:31:05.159628+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08590541701414622,
+        "started_at": "2026-09-28T08:31:05.073582+00:00"
+      },
+      {
+        "event_id": "5825c4a894d444df80ddb179860f0e75",
+        "finished_at": "2026-09-28T08:49:17.225218+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 57.04327429199475,
+        "started_at": "2026-09-28T08:48:20.181587+00:00"
+      },
+      {
+        "event_id": "bbea70ee82b445f78f085da23659c91d",
+        "finished_at": "2026-09-28T08:58:01.061109+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "review",
+        "reason": null,
+        "seconds": 1627.0045831250027,
+        "started_at": "2026-09-28T08:30:54.042852+00:00"
+      },
+      {
+        "event_id": "4d5c80aaf3644253b503a9f17f9cfa3d",
+        "finished_at": "2026-09-28T09:00:01.511502+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 59.193266709015006,
+        "started_at": "2026-09-28T08:59:02.318033+00:00"
+      },
+      {
+        "event_id": "5e60c71c26e34bc7aed611ffa99bf9ed",
+        "finished_at": "2026-09-28T09:00:56.472773+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.073143582994817,
+        "started_at": "2026-09-28T09:00:47.399450+00:00"
+      },
+      {
+        "event_id": "c4e65db725274077bfe5d5e0fd747253",
+        "finished_at": "2026-09-28T09:01:20.433891+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09405816701473668,
+        "started_at": "2026-09-28T09:01:20.339638+00:00"
+      },
+      {
+        "event_id": "a0bfee7bf41b413dbec3289c07dc4b5a",
+        "finished_at": "2026-09-28T09:03:30.800517+00:00",
+        "issue_id": "1DMIX-058",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.6733296250167768,
+        "started_at": "2026-09-28T09:03:30.126996+00:00"
+      }
+    ],
+    "reported_usd": 25.870285750000004,
+    "schema_version": 2,
+    "span_seconds": 4334.9610159397125,
+    "start": "2026-09-28T07:51:15.839049+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

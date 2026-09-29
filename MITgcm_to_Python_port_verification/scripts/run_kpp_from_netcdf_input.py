@@ -144,6 +144,11 @@ def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tupl
         'deltau': 'deltau',  # Not used by Python, computed internally
         # Boolean flags - runtime
         'KPP_ghatUseTotalDiffus': 'ghat_use_total_diffus',
+        # 1DMIX-059: KPPuseDoubleDiff maps straight into
+        # KPPParameters.use_doublediff, whose __post_init__ now raises
+        # NotImplementedError if the captured value is nonzero -- this port
+        # has no double-diffusion code path, so a future capture that
+        # enables it is caught here rather than replayed blind.
         'KPPuseDoubleDiff': 'use_doublediff',
         'LimitHblStable': 'limit_hbl_stable',
         'KPPwriteState': 'kpp_write_state',

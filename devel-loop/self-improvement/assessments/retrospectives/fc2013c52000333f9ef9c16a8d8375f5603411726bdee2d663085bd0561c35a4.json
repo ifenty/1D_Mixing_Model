@@ -1,0 +1,450 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/0f32a0c16ed2385f616c302dea7805c2b347d32b81bf0fbbfa96532fceb480db.json",
+      "sha256": "0f32a0c16ed2385f616c302dea7805c2b347d32b81bf0fbbfa96532fceb480db"
+    },
+    "carry_forward": [
+      "A retraction is an edit plus a sweep. When correcting a claim asserted as verified, grep the whole document for every phrasing of it before returning: the body fix cost one extra implementer and one extra reviewer round here because the same claim survived in a Revision History bullet, which is the copy a skimmer reads.",
+      "In a confirming reviewer round, name the current sealed documentation hash in the brief and tell the reviewer to read it rather than assume it matches the one already in his context. Each implementer correction re-seals the plan, so by the confirming round his first-read seal is stale; this cost a footer-only round twice in one loop.",
+      "Ask the reviewer to audit the implementer's sweep rather than his fix. The fix is one line and checkable at a glance; the sweep is the claim that nothing else is stale, and it is where the third instance would hide."
+    ],
+    "closes_timestamp": "2026-09-28T23:27:48.301947+00:00",
+    "id": "1DMIX-062",
+    "iteration": 1,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator_coverage": "missing",
+      "cost_usd": {
+        "bob": 8.239619750000001,
+        "richard": 5.488354999999999
+      },
+      "dispatches": {
+        "bob": 3,
+        "richard": 4
+      },
+      "rounds": {
+        "bob": 3,
+        "richard": 4
+      },
+      "span_minutes": 76,
+      "unknown_cost_event_ids": []
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "retraction_survives_in_summaries",
+        "evidence": "Reviewer round 0 must_fix: line 211's 'This is a direct date comparison from git log, not an inference' overstates what git shows, since git tracking of the report file begins 2026-09-18 via a pure create-mode add, one day after the 2026-09-17 fix, and therefore cannot corroborate the 2026-08-20 header date. Implementer round 1 corrected lines 207-226. Reviewer round 1 must_fix: line 566 'Published-figure provenance check: this report's own text predates the fix by 28 days (measured)' still asserted exactly what had just been retracted. Implementer round 2 rewrote it and swept the file for measured, 28 days, predates, git log and direct comparison, reporting the full hit list; the reviewer then audited the sweep rather than the fix and confirmed it complete. Cost: one extra implementer round at 242s and one extra reviewer round at 207s that a sweep in round 1 would have avoided.",
+        "minutes_lost": 12,
+        "summary": "A claim retracted in a document's body survived in its Revision History bullet, and it took a second reviewer round to find it. The implementer corrected the body passage that had wrongly asserted git corroboration, but the summary bullet asserting the same thing was not swept, so for one round the document both asserted and denied the same claim, with the summary being the copy a skimmer reads. Retracting a claim is not one edit; it is an edit plus a sweep, and nothing in the workflow prompts the sweep."
+      },
+      {
+        "category": "reviewer_footer_cites_superseded_seal",
+        "evidence": "Reviewer round 2 returned APPROVE with documentation_review.report citing 4cac34ee352a1fd1c318f749f882623f6b803c0aa5dd727157a6150b46d5b0ac, the round-0 seal, while the current sealed plan was e56f80cabd068a6d6e0adfdbeb4d08eb633283e5ddb3a9698e2c40835653f8a6 and was carried in the packet he was given. final_verification.py check refused with 'documentation_review.report must be the exact sealed report reference, not a copy or a different report'. Round 3, a footer-only correction naming the current hash explicitly and asking him to read it rather than assume equivalence, resolved it in 142s with the verdict unchanged. The same sequence occurred on 1DMIX-052 at its round 2, resolved the same way at its round 3.",
+        "minutes_lost": 4,
+        "summary": "The reviewer's approving footer cited the round-0 sealed documentation report rather than the current one, so final verification refused the closeout and a footer-only correction round was needed. This is the second occurrence in this loop, after the identical failure on 1DMIX-052, and the cause is structural: each implementer correction forces a re-seal, so by the confirming round the seal the reviewer first read is two generations stale, and nothing in the packet makes the current one salient against the one already in his context."
+      }
+    ],
+    "schema_version": 2,
+    "solutions": [
+      {
+        "action": "filed",
+        "issue": "TEAM-DOC-SWEEP-001",
+        "problem": 0,
+        "reason": "Belongs to the existing open doc-sweep issue, which owns the pattern of a changed statement invalidating claims elsewhere that nobody enumerated. This instance extends it in a direction that issue does not yet cover: the invalidating change was not a code default but a retraction inside the same document, and the stale copy was its own summary section. It also supplies that issue's third independent demonstration that this report is outside doc_contract's inventory entirely, so its disposition plan carried zero targets while a tracked-looking report was edited twice. A sweep prompt on retraction, and inventory coverage for these reports, are the same fix."
+      },
+      {
+        "action": "filed",
+        "issue": "TEAM-VERIFY-RERUN-001",
+        "problem": 1,
+        "reason": "Recorded against the closeout-evidence issue, whose retargeted scope is that the closeout record's requirements are revealed one rejection at a time. The reviewer-footer-versus-current-seal mismatch is the same defect seen from the reviewer's side: the seal is regenerated by each correction, the reviewer's footer must match the newest one, and nothing surfaces that until final verification refuses. Twice in one loop, both resolved by a footer-only round that named the current hash. Surfacing the current sealed report to the reviewer as a required footer input, or validating the citation at packet-build time rather than at final verification, would close both faces."
+      }
+    ],
+    "timestamp": "2026-09-29T00:43:54Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 45.229327917099,
+        "elapsed_seconds": 45.229327917099,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 1288.967500925064,
+        "elapsed_seconds": 1288.967500925064,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 1.6576619148254395,
+        "elapsed_seconds": 1.6576619148254395,
+        "events": 12
+      },
+      "review": {
+        "effort_seconds": 929.3670289516449,
+        "elapsed_seconds": 929.3670289516449,
+        "events": 4
+      },
+      "verification": {
+        "effort_seconds": 1238.0954849720001,
+        "elapsed_seconds": 1238.0954849720001,
+        "events": 8
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 3,
+        "reported_usd": 8.239619750000001,
+        "rounds": 3,
+        "seconds": 1289.630793094635,
+        "tool_calls": 110,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 412035,
+          "cache_read_input_tokens": 8101112,
+          "input_tokens": 179,
+          "output_tokens": 64518
+        }
+      },
+      "richard": {
+        "dispatches": 4,
+        "reported_usd": 5.488354999999999,
+        "rounds": 4,
+        "seconds": 946.0342798233032,
+        "tool_calls": 46,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 418370,
+          "cache_read_input_tokens": 3682935,
+          "input_tokens": 90,
+          "output_tokens": 41265
+        }
+      }
+    },
+    "child_elapsed_seconds": 2235.6650729179382,
+    "components": [
+      {
+        "event_id": "340ab4df83ea4aa3b8cda77f30d6665a",
+        "kind": "turn",
+        "parent_event_id": "340ab4df83ea4aa3b8cda77f30d6665a",
+        "reported_usd": 2.18311725,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/759067c8-8328-45ee-896b-f4064205c16d/turns/340ab4df83ea4aa3b8cda77f30d6665a/record.json"
+      },
+      {
+        "event_id": "53a4d72b76ae453c9e940f62ac9a7677",
+        "kind": "turn",
+        "parent_event_id": "53a4d72b76ae453c9e940f62ac9a7677",
+        "reported_usd": 4.263085500000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/759067c8-8328-45ee-896b-f4064205c16d/turns/53a4d72b76ae453c9e940f62ac9a7677/record.json"
+      },
+      {
+        "event_id": "c8aed6d1b9684636837943a7cef277a9",
+        "kind": "turn",
+        "parent_event_id": "c8aed6d1b9684636837943a7cef277a9",
+        "reported_usd": 1.7934170000000003,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/759067c8-8328-45ee-896b-f4064205c16d/turns/c8aed6d1b9684636837943a7cef277a9/record.json"
+      },
+      {
+        "event_id": "1bcf1efd76e647068ad0d4b63e6d147d",
+        "kind": "turn",
+        "parent_event_id": "1bcf1efd76e647068ad0d4b63e6d147d",
+        "reported_usd": 1.6945467499999998,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/df7ed076-6769-4a40-ae27-454ce92bd306/turns/1bcf1efd76e647068ad0d4b63e6d147d/record.json"
+      },
+      {
+        "event_id": "81505a383c2c4dddbb74f21788efbdc9",
+        "kind": "turn",
+        "parent_event_id": "81505a383c2c4dddbb74f21788efbdc9",
+        "reported_usd": 1.46097625,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/df7ed076-6769-4a40-ae27-454ce92bd306/turns/81505a383c2c4dddbb74f21788efbdc9/record.json"
+      },
+      {
+        "event_id": "d9d6ce89906a46f9a190bfb6169ff72c",
+        "kind": "turn",
+        "parent_event_id": "d9d6ce89906a46f9a190bfb6169ff72c",
+        "reported_usd": 1.07981225,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/df7ed076-6769-4a40-ae27-454ce92bd306/turns/d9d6ce89906a46f9a190bfb6169ff72c/record.json"
+      },
+      {
+        "event_id": "e15a3802cd2a4ae2a66e2dc57c2bc662",
+        "kind": "turn",
+        "parent_event_id": "e15a3802cd2a4ae2a66e2dc57c2bc662",
+        "reported_usd": 1.25301975,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/df7ed076-6769-4a40-ae27-454ce92bd306/turns/e15a3802cd2a4ae2a66e2dc57c2bc662/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-29T00:43:48.166564+00:00",
+    "issue_id": "1DMIX-062",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 2324.199543952942,
+    "phase_events": [
+      {
+        "event_id": "a159f91efed847679f2577a350885ea4",
+        "finished_at": "2026-09-28T23:28:54.673898+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11410229199827882,
+        "started_at": "2026-09-28T23:28:54.559598+00:00"
+      },
+      {
+        "event_id": "d704c7080abd4b7988ab1ece4a3aa3c9",
+        "finished_at": "2026-09-28T23:41:16.301654+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 79.97638958400057,
+        "started_at": "2026-09-28T23:39:56.324834+00:00"
+      },
+      {
+        "event_id": "64f90644549e48579f2aaf08560117f1",
+        "finished_at": "2026-09-28T23:41:32.129597+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.15569204099665512,
+        "started_at": "2026-09-28T23:41:31.973707+00:00"
+      },
+      {
+        "event_id": "1e6ebf895aad4021a28b802a5d4e1d15",
+        "finished_at": "2026-09-28T23:42:44.177739+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 841.741118291,
+        "started_at": "2026-09-28T23:28:42.434299+00:00"
+      },
+      {
+        "event_id": "203fd0e737564899910c5f832a5cd127",
+        "finished_at": "2026-09-28T23:47:16.859248+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.12385312500191503,
+        "started_at": "2026-09-28T23:47:16.735175+00:00"
+      },
+      {
+        "event_id": "e218ddf7351d4b00b53f76f9ec0ac2d4",
+        "finished_at": "2026-09-28T23:48:30.090515+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.12185474999932921,
+        "started_at": "2026-09-28T23:48:29.968481+00:00"
+      },
+      {
+        "event_id": "08449b45f5e54f959aa9c91afd77fbdb",
+        "finished_at": "2026-09-28T23:53:00.365851+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 79.7002226250006,
+        "started_at": "2026-09-28T23:51:40.665351+00:00"
+      },
+      {
+        "event_id": "6b5f0e73f1b7446d899d3b94e7abaa31",
+        "finished_at": "2026-09-28T23:53:53.908176+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.16259508299845038,
+        "started_at": "2026-09-28T23:53:53.745382+00:00"
+      },
+      {
+        "event_id": "b460dbba7b27462898f9ac026a18737e",
+        "finished_at": "2026-09-28T23:54:48.967402+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "review",
+        "reason": null,
+        "seconds": 395.6822945000022,
+        "started_at": "2026-09-28T23:48:13.284801+00:00"
+      },
+      {
+        "event_id": "1f4d7ecdc8e248dcaaefd17ec41d1652",
+        "finished_at": "2026-09-29T00:02:28.745195+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 80.21807441700003,
+        "started_at": "2026-09-29T00:01:08.526760+00:00"
+      },
+      {
+        "event_id": "907c26b4b0aa4d739dce174767cf8095",
+        "finished_at": "2026-09-29T00:02:41.705224+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.1774832500013872,
+        "started_at": "2026-09-29T00:02:41.527539+00:00"
+      },
+      {
+        "event_id": "0d3f1d31d3874d76b82c15c9795acbd0",
+        "finished_at": "2026-09-29T00:03:13.810314+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 205.07536437499948,
+        "started_at": "2026-09-28T23:59:48.734718+00:00"
+      },
+      {
+        "event_id": "948ee31656d640ab8f632679b1e43464",
+        "finished_at": "2026-09-29T00:05:30.314258+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11980675000086194,
+        "started_at": "2026-09-29T00:05:30.194140+00:00"
+      },
+      {
+        "event_id": "5f3a90b65b3b443e9de7da733b932798",
+        "finished_at": "2026-09-29T00:08:57.990810+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 82.92247483300162,
+        "started_at": "2026-09-29T00:07:35.069038+00:00"
+      },
+      {
+        "event_id": "84523442f7e54eddb7a0612ee295ddf9",
+        "finished_at": "2026-09-29T00:09:08.206038+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.17161145800127997,
+        "started_at": "2026-09-29T00:09:08.034226+00:00"
+      },
+      {
+        "event_id": "066bafa2761f4a86bee4b86000059890",
+        "finished_at": "2026-09-29T00:09:51.705322+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "review",
+        "reason": null,
+        "seconds": 207.190345084,
+        "started_at": "2026-09-29T00:06:24.534470+00:00"
+      },
+      {
+        "event_id": "7d316b38dfb34b2e8daea84f5365c1bf",
+        "finished_at": "2026-09-29T00:15:05.650248+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 98.55937962499956,
+        "started_at": "2026-09-29T00:13:27.091544+00:00"
+      },
+      {
+        "event_id": "52aaa4900ec54bd2b7800975d9c5cb24",
+        "finished_at": "2026-09-29T00:15:16.531151+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.15738150000106543,
+        "started_at": "2026-09-29T00:15:16.373588+00:00"
+      },
+      {
+        "event_id": "5f9543e977784afd8a179b26b2f8c7a2",
+        "finished_at": "2026-09-29T00:15:52.977513+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 242.15072599999985,
+        "started_at": "2026-09-29T00:11:50.829048+00:00"
+      },
+      {
+        "event_id": "17296bacc95d4fac9c63a81891ca5d5f",
+        "finished_at": "2026-09-29T00:17:35.644384+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11704770899814321,
+        "started_at": "2026-09-29T00:17:35.527055+00:00"
+      },
+      {
+        "event_id": "87cc9aedf3a14ce4a12e34362bf45326",
+        "finished_at": "2026-09-29T00:20:53.084919+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 78.98097983299886,
+        "started_at": "2026-09-29T00:19:34.104473+00:00"
+      },
+      {
+        "event_id": "878661b85ea54bdbb78cb649a23c252d",
+        "finished_at": "2026-09-29T00:21:06.697902+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11626416600120137,
+        "started_at": "2026-09-29T00:21:06.581462+00:00"
+      },
+      {
+        "event_id": "cf60917ff5e14909b019b6f3a219dfb1",
+        "finished_at": "2026-09-29T00:21:35.674576+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "review",
+        "reason": null,
+        "seconds": 193.0088793750001,
+        "started_at": "2026-09-29T00:18:22.667500+00:00"
+      },
+      {
+        "event_id": "0f5b624687064102ae280609031e2b4e",
+        "finished_at": "2026-09-29T00:25:49.535242+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 77.96736462499757,
+        "started_at": "2026-09-29T00:24:31.568404+00:00"
+      },
+      {
+        "event_id": "284471f40a734cd9880fe4d8ed7c2556",
+        "finished_at": "2026-09-29T00:26:00.375696+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11743658399791457,
+        "started_at": "2026-09-29T00:26:00.258072+00:00"
+      },
+      {
+        "event_id": "c9ade75e3c0b4114b711556053a2f3f4",
+        "finished_at": "2026-09-29T00:26:26.458526+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "review",
+        "reason": null,
+        "seconds": 133.5077835839984,
+        "started_at": "2026-09-29T00:24:12.952026+00:00"
+      },
+      {
+        "event_id": "f61dbc960a2c4de986f28a3eb875860f",
+        "finished_at": "2026-09-29T00:41:08.940892+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 659.7513044589978,
+        "started_at": "2026-09-29T00:30:09.168922+00:00"
+      },
+      {
+        "event_id": "f609e290aabc419b97adaa840fb2a73d",
+        "finished_at": "2026-09-29T00:43:48.168587+00:00",
+        "issue_id": "1DMIX-062",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 45.231237291998696,
+        "started_at": "2026-09-29T00:43:02.937236+00:00"
+      }
+    ],
+    "reported_usd": 13.72797475,
+    "schema_version": 2,
+    "span_seconds": 4559.86461687088,
+    "start": "2026-09-28T23:27:48.301947+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

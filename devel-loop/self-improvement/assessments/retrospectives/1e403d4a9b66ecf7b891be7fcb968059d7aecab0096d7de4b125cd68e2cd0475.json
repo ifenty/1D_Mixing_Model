@@ -1,0 +1,410 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/6aa2423889d70a8099e90fe8bcfd29d3796807065d7dee3d8473481a4530883a.json",
+      "sha256": "6aa2423889d70a8099e90fe8bcfd29d3796807065d7dee3d8473481a4530883a"
+    },
+    "carry_forward": [
+      "Restate the incremental-write rule inside the brief, not just in Arch's own context. The gate printed it at loop start and it still cost a 59-tool-call turn, because the agent reading the brief never saw it. Naming it in the assignment is the difference between a standing rule and an applied one.",
+      "Size a dispatch --timeout from the work the brief actually asks for, and count the waiting: four capture replays plus a fresh suite is twenty-plus minutes of measurement before a single word of report, and the agent will also burn its own clock on sleep-and-poll loops against its background jobs.",
+      "A voided final-verification receipt does not necessarily cost another suite run. Re-running final_verification.py after a signature-changing edit to the closeout record returned REUSED EVIDENCE in about a minute, rebinding the existing intact execution to the new review_signature. Try the re-run before planning around an eleven-minute suite."
+    ],
+    "closes_timestamp": "2026-09-28T20:31:28.728418+00:00",
+    "id": "1DMIX-052",
+    "iteration": 2,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator_coverage": "missing",
+      "cost_usd": {
+        "bob": 2.1241262499999998,
+        "richard": 8.775421750000001
+      },
+      "dispatches": {
+        "bob": 2,
+        "richard": 4
+      },
+      "rounds": {
+        "bob": 2,
+        "richard": 4
+      },
+      "span_minutes": 119,
+      "unknown_cost_event_ids": [
+        "dc9e160572bf44c39511dccc0e363b05"
+      ]
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "dispatch_timeout_discards_complete_work",
+        "evidence": "Record dc9e160572bf44c39511dccc0e363b05: status failed, error timeout, duration_seconds exactly 1700 matching the --timeout Arch passed, report.md 0 bytes, stdout.jsonl 860 KB across 53 tool_processes, single assistant text block reading 'Now let's compute the candidate signature and reseal orientation as required'. Its cost is unrecoverable and appears in this retrospective's own measured.unknown_cost_event_ids, so its reservation is retained rather than settled. Surviving on disk: /tmp/richard_global_oce_check.out, /tmp/richard_ggl90_check.out, /tmp/richard_vermix_check.out and /tmp/richard_verify_focused.out (EXECUTED PASS, evidence e3bf5da9091e6401f3b38cf3964f970dc4d76841b4c79b60f7daa6c412a8886f) \u2014 four independent capture re-derivations plus a fresh focused suite. The write-first followup on the same identity then produced a 10,160-byte report with verdict APPROVE_WITH_FIXES in 324 seconds without redoing any replay.",
+        "minutes_lost": 35,
+        "summary": "The reviewer's round-0 turn was killed by Arch's own --timeout after 59 tool calls, roughly 30 seconds from finishing, leaving a 0-byte report and no attributable work. Every expensive thing he had done was already complete. Two Arch errors compounded: the cap was sized by guess rather than from the work the brief asked for, and the standing incremental-write rule was not restated in the brief even though the gate had printed it at loop start. Recovery cost one extra reviewer round rather than four redone capture replays only because he happened to redirect each replay to its own /tmp file, which was luck, not instruction."
+      },
+      {
+        "category": "late_edit_voids_passing_receipt",
+        "evidence": "final_verification.py run produced receipt 83aae370d7fae60e85343b0ae453787b8b007d45a8bf7a3cffab6c59380f318e, status PASS, from a real 656.90s execution (120 passed, 3 skipped). --check-done then required agent_continuity.bob/richard identity lists; adding them changed review_signature, which covers agent_continuity among its twelve fields, and the gate reported 'final verification receipt is stale'. The re-run produced receipt 83fc3e8d91aeef53ac54911341b04828f553df1f5dd9201d7fd23fb4ea0034d1 with status REUSED EVIDENCE, citing the identical scientific execution 64ffe39907efe8eb4023047477f90f83e7271be6a96126adf6c7e358a93492e6 rather than a new one. Arch had told the owner this would cost a second full suite run and that statement was wrong; it is corrected here and in session.",
+        "minutes_lost": 6,
+        "summary": "Arch hit, live, the exact defect filed hours earlier in this same session: a passing final-verification receipt voided by a later edit to the closeout record. The sequence is forced by the tooling rather than careless, because --check-done only reveals the next required field after the previous one is satisfied, so the record cannot be known to be final before the receipt is produced. The genuinely new finding is the cost: the second run returned REUSED EVIDENCE in about a minute rather than re-executing the 656-second suite, because the prior execution's issue, owner, dependencies and log were all still intact. That narrows the issue as filed, which had assumed a voided receipt implies another full run."
+      }
+    ],
+    "schema_version": 2,
+    "solutions": [
+      {
+        "action": "filed",
+        "issue": "TEAM-DISPATCH-TIMEOUT-001",
+        "problem": 0,
+        "reason": "Existing open process issue, and this is its second measured instance rather than a new problem: it already owns exactly the pattern of a wall-clock dispatch timeout discarding a turn whose durable work is complete. This instance adds two things worth attaching to it. First, the surviving evidence was in /tmp by the agent's own choice of redirection, so the recovery path that made this cheap is not one the framework guarantees. Second, the coordinator-side contribution is real and unrecorded there: the cap was chosen by guess, and the standing incremental-write rule was available and unstated in the brief, so the fix has a brief-generation half as well as a runtime half."
+      },
+      {
+        "action": "filed",
+        "issue": "TEAM-VERIFY-RERUN-001",
+        "problem": 1,
+        "reason": "Filed against the issue opened earlier in this same session for this exact defect, because the instance materially narrows it. That issue's proposed fix assumed the expensive consequence of a voided receipt is another full suite run; this instance shows the reuse path already absorbs that cost when the underlying execution is intact, returning REUSED EVIDENCE in about a minute. The remaining real defect is therefore narrower and cheaper to fix than filed: not the re-run cost, but that the closeout record cannot be known complete before the receipt is taken, since --check-done reveals its requirements one rejection at a time. The acceptance criteria there should be retargeted at surfacing the full set of required closeout fields up front."
+      }
+    ],
+    "timestamp": "2026-09-28T22:30:45Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 97.60465168952942,
+        "elapsed_seconds": 97.60465168952942,
+        "events": 4
+      },
+      "implementation": {
+        "effort_seconds": 491.71975088119507,
+        "elapsed_seconds": 491.71975088119507,
+        "events": 2
+      },
+      "orientation": {
+        "effort_seconds": 1.2510957717895508,
+        "elapsed_seconds": 1.2510957717895508,
+        "events": 9
+      },
+      "review": {
+        "effort_seconds": 2383.6793868541718,
+        "elapsed_seconds": 2383.6793868541718,
+        "events": 4
+      },
+      "verification": {
+        "effort_seconds": 993.1588089466095,
+        "elapsed_seconds": 993.1588089466095,
+        "events": 5
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 2.1241262499999998,
+        "rounds": 2,
+        "seconds": 492.19084000587463,
+        "tool_calls": 39,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 125565,
+          "cache_read_input_tokens": 1418030,
+          "input_tokens": 56,
+          "output_tokens": 25202
+        }
+      },
+      "richard": {
+        "dispatches": 4,
+        "reported_usd": 8.775421750000001,
+        "rounds": 4,
+        "seconds": 2406.719451904297,
+        "tool_calls": 90,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 918668,
+          "cache_read_input_tokens": 13485401,
+          "input_tokens": 160,
+          "output_tokens": 41583
+        }
+      }
+    },
+    "child_elapsed_seconds": 2898.9102919101715,
+    "components": [
+      {
+        "event_id": "2f0aeeba48124c7990e98efbdf4746b5",
+        "kind": "turn",
+        "parent_event_id": "2f0aeeba48124c7990e98efbdf4746b5",
+        "reported_usd": 0.9643152500000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/a44b7a5f-a166-4592-a05a-ea2a31e6a2b1/turns/2f0aeeba48124c7990e98efbdf4746b5/record.json"
+      },
+      {
+        "event_id": "b7ebf348025b411d9578b872a6f099b8",
+        "kind": "turn",
+        "parent_event_id": "b7ebf348025b411d9578b872a6f099b8",
+        "reported_usd": 1.159811,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/a44b7a5f-a166-4592-a05a-ea2a31e6a2b1/turns/b7ebf348025b411d9578b872a6f099b8/record.json"
+      },
+      {
+        "event_id": "0d6cb39783c2435c8e09083292b443c9",
+        "kind": "turn",
+        "parent_event_id": "0d6cb39783c2435c8e09083292b443c9",
+        "reported_usd": 3.512446,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/fb039a41-a23e-4d27-90df-a35551e11ed5/turns/0d6cb39783c2435c8e09083292b443c9/record.json"
+      },
+      {
+        "event_id": "1f09faa931f44119a2c31b6882f195f9",
+        "kind": "turn",
+        "parent_event_id": "1f09faa931f44119a2c31b6882f195f9",
+        "reported_usd": 2.4146675,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/fb039a41-a23e-4d27-90df-a35551e11ed5/turns/1f09faa931f44119a2c31b6882f195f9/record.json"
+      },
+      {
+        "event_id": "3c3b96d12e534726b4509e3a38e4355b",
+        "kind": "turn",
+        "parent_event_id": "3c3b96d12e534726b4509e3a38e4355b",
+        "reported_usd": 2.84830825,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/fb039a41-a23e-4d27-90df-a35551e11ed5/turns/3c3b96d12e534726b4509e3a38e4355b/record.json"
+      },
+      {
+        "event_id": "dc9e160572bf44c39511dccc0e363b05",
+        "kind": "turn",
+        "parent_event_id": "dc9e160572bf44c39511dccc0e363b05",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/fb039a41-a23e-4d27-90df-a35551e11ed5/turns/dc9e160572bf44c39511dccc0e363b05/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T22:30:38.658171+00:00",
+    "issue_id": "1DMIX-052",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 4251.019460916519,
+    "phase_events": [
+      {
+        "event_id": "cffa35297595418ab7d5199338729788",
+        "finished_at": "2026-09-28T20:48:29.137333+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.13373533300000418,
+        "started_at": "2026-09-28T20:48:29.003391+00:00"
+      },
+      {
+        "event_id": "40460aeb46cd4031a7b87bc01b965bf6",
+        "finished_at": "2026-09-28T20:51:52.219647+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 77.76303520900001,
+        "started_at": "2026-09-28T20:50:34.456429+00:00"
+      },
+      {
+        "event_id": "a63e04fc39f54bcc88320cfb606d99ca",
+        "finished_at": "2026-09-28T20:52:03.283236+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.13539070799924957,
+        "started_at": "2026-09-28T20:52:03.147660+00:00"
+      },
+      {
+        "event_id": "94690953b37a4cfd996923625252027e",
+        "finished_at": "2026-09-28T20:52:54.947816+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 278.6345825829994,
+        "started_at": "2026-09-28T20:48:16.313233+00:00"
+      },
+      {
+        "event_id": "45ccaa3a136d4291a8546ed1faef075c",
+        "finished_at": "2026-09-28T20:59:33.099576+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.14072779099842592,
+        "started_at": "2026-09-28T20:59:32.958680+00:00"
+      },
+      {
+        "event_id": "ad1d9ffcae7348fd9703604c72d9374e",
+        "finished_at": "2026-09-28T21:26:10.729822+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 83.65472291700098,
+        "started_at": "2026-09-28T21:24:47.074848+00:00"
+      },
+      {
+        "event_id": "7193224e2bef4610a0647ece437fed37",
+        "finished_at": "2026-09-28T21:27:25.946999+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.1473083749988291,
+        "started_at": "2026-09-28T21:27:25.799551+00:00"
+      },
+      {
+        "event_id": "506e7a6bf7594c7db953d0b3fea377ff",
+        "finished_at": "2026-09-28T21:27:35.748659+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "review",
+        "reason": null,
+        "seconds": 1700.0325618340012,
+        "started_at": "2026-09-28T20:59:15.363548+00:00"
+      },
+      {
+        "event_id": "0dfbe8ae33084d99b0bde09a7ca62c18",
+        "finished_at": "2026-09-28T21:35:27.844797+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.13620029099911335,
+        "started_at": "2026-09-28T21:35:27.708393+00:00"
+      },
+      {
+        "event_id": "fbf396da77804c5e8fd855a0fd885114",
+        "finished_at": "2026-09-28T21:36:35.153825+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "review",
+        "reason": null,
+        "seconds": 324.14104245900126,
+        "started_at": "2026-09-28T21:31:11.015009+00:00"
+      },
+      {
+        "event_id": "14342b67882747e6983a65b1161298c8",
+        "finished_at": "2026-09-28T21:37:56.113807+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.13523804099895642,
+        "started_at": "2026-09-28T21:37:55.978347+00:00"
+      },
+      {
+        "event_id": "2d459c85f3be4941af291ef0934303a3",
+        "finished_at": "2026-09-28T21:40:09.730016+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 80.2324744159996,
+        "started_at": "2026-09-28T21:38:49.497893+00:00"
+      },
+      {
+        "event_id": "94a4ad39342745cc9039a25241237bf7",
+        "finished_at": "2026-09-28T21:40:20.320286+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.14659229099925142,
+        "started_at": "2026-09-28T21:40:20.173502+00:00"
+      },
+      {
+        "event_id": "c57157f683524562b0707dec7232b853",
+        "finished_at": "2026-09-28T21:41:14.782637+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 213.0866430419992,
+        "started_at": "2026-09-28T21:37:41.697469+00:00"
+      },
+      {
+        "event_id": "b3afd03c4b87443f9fd1a517fd721a6d",
+        "finished_at": "2026-09-28T21:43:34.446421+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.13724562499919557,
+        "started_at": "2026-09-28T21:43:34.308869+00:00"
+      },
+      {
+        "event_id": "ca3a9ca9fb054e3895c0cc9c45e60135",
+        "finished_at": "2026-09-28T21:47:04.473358+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 79.38482941700022,
+        "started_at": "2026-09-28T21:45:45.088883+00:00"
+      },
+      {
+        "event_id": "2b8d839ec42043b0a4b985a38cc35deb",
+        "finished_at": "2026-09-28T21:48:18.083554+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.1368036250005389,
+        "started_at": "2026-09-28T21:48:17.946520+00:00"
+      },
+      {
+        "event_id": "6d17020c00894c9d918844d569e49bf1",
+        "finished_at": "2026-09-28T21:48:59.292550+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "review",
+        "reason": null,
+        "seconds": 259.9819240420002,
+        "started_at": "2026-09-28T21:44:39.312410+00:00"
+      },
+      {
+        "event_id": "056455910a784a19be32eadbbec60600",
+        "finished_at": "2026-09-28T21:56:51.090986+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 1.3599523329994554,
+        "started_at": "2026-09-28T21:56:49.730784+00:00"
+      },
+      {
+        "event_id": "731c2ac95069439b8953cefe07531cef",
+        "finished_at": "2026-09-28T22:03:49.258245+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "review",
+        "reason": null,
+        "seconds": 99.17597904200011,
+        "started_at": "2026-09-28T22:02:10.082925+00:00"
+      },
+      {
+        "event_id": "a67fac9e24e44cfeb1552a0c90968178",
+        "finished_at": "2026-09-28T22:19:09.791901+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 672.1063046250001,
+        "started_at": "2026-09-28T22:07:57.667882+00:00"
+      },
+      {
+        "event_id": "d0e1c363729c42c1a5c80e0c1699c3d0",
+        "finished_at": "2026-09-28T22:22:29.348511+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 1.3217525420004677,
+        "started_at": "2026-09-28T22:22:28.026536+00:00"
+      },
+      {
+        "event_id": "26958e04bff74d7da89f5a83eede87a9",
+        "finished_at": "2026-09-28T22:23:25.481763+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 40.446587291999094,
+        "started_at": "2026-09-28T22:22:45.034969+00:00"
+      },
+      {
+        "event_id": "02c2dfaf0065404c9d29eb361a725522",
+        "finished_at": "2026-09-28T22:30:38.660496+00:00",
+        "issue_id": "1DMIX-052",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 54.477806584000064,
+        "started_at": "2026-09-28T22:29:44.182490+00:00"
+      }
+    ],
+    "reported_usd": 10.899548000000001,
+    "schema_version": 2,
+    "span_seconds": 7149.929752826691,
+    "start": "2026-09-28T20:31:28.728418+00:00",
+    "unknown_cost_event_ids": [
+      "dc9e160572bf44c39511dccc0e363b05"
+    ]
+  }
+}

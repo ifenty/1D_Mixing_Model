@@ -1,0 +1,192 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-059",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T09:05:36.961055+00:00",
+    "timestamp": "2026-09-28T09:38:23Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/84aaee088aa467b2f88b9addb4522f4741a3c73a4e63c3a6eca570ba4b1aacea.json",
+      "sha256": "84aaee088aa467b2f88b9addb4522f4741a3c73a4e63c3a6eca570ba4b1aacea"
+    },
+    "measured": {
+      "span_minutes": 33,
+      "dispatches": {
+        "bob": 2
+      },
+      "rounds": {
+        "bob": 2
+      },
+      "cost_usd": {
+        "bob": 2.01358925
+      },
+      "unknown_cost_event_ids": [
+        "8b29a305f0fe49ad857f21f6343b447f"
+      ],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "budget_allocation_sizing",
+        "summary": "Arch chose --budget-kind harness_change, 45 minutes and one correction, for work whose kind is scientific_change and therefore needs an independent reviewer and a final scientific qualification. The arithmetic was never survivable and the reviewer was never dispatchable. Third consecutive partial, and the third caused by Arch bookkeeping rather than by the science.",
+        "evidence": "Scope issue:1DMIX-059 limits minutes 45, corrections 1. Actual consumption: Bob's implementation turn 1080 s wall, the full suite 459 s, Bob's reseal turn 215 s -- 29 minutes before any reviewer turn, leaving 5.3 minutes to the soft gate at which allow_tool refuses further calls. The three preceding iterations each chose scientific_change (120 minutes, 2 corrections) and 1DMIX-053/056 completed within it. Cost was never the constraint: $7.01 of $20 and 75 of 180 calls were used.",
+        "minutes_lost": 20
+      },
+      {
+        "category": "dispatch_timeout_truncation",
+        "summary": "Bob's implementation turn hit the wall bound and lost only its report; the guard, the witness and every documentation edit were already durable. The standing rule worked exactly as promoted: the tree was inspected, the work was found intact, and a followup resealed it rather than restarting.",
+        "evidence": "Event 8b29a305f0fe49ad857f21f6343b447f: status failed, error timeout, 1080 s, empty report. git diff at that moment already showed the guard at kpp_parameters.py:284, test_kpp_doublediff_guard.py at 4,581 bytes, and +182/+97 lines in model_contract.md/code_map.md. The reseal turn cost 215 s and redid no implementation. This event's provider cost is unknown and is listed in unknown_cost_event_ids, so the $2.01 figure understates the iteration.",
+        "minutes_lost": 4
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-BUDGET-SIZING-001",
+        "reason": "Third occurrence under the owner already filed for it. The pattern is now specific enough to state as a rule rather than a caution, so it goes to carry_forward this iteration and should be promoted if it recurs."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-DISPATCH-TIMEOUT-001",
+        "reason": "Recorded as a recurrence with a materially better outcome than its earlier ones: the mitigation this issue's deferral rested on demonstrably worked, and only the report needed rebuilding. That strengthens the case for keeping the framework change deferred."
+      }
+    ],
+    "carry_forward": [
+      "Never allocate an issue whose kind is scientific_change below the scientific_change class: its wall budget must cover the implementation turns, a full suite run, an independent reviewer and a final scientific qualification, and 45 minutes cannot.",
+      "When an implementer's turn is lost to the wall bound, have the followup seal and verify rather than re-run the expensive measurement; Arch can run the full suite itself in parallel with sealing to keep it off the reviewer's critical path."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.830042839050293,
+        "elapsed_seconds": 0.830042839050293,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 1295.1190531253815,
+        "elapsed_seconds": 1295.1190531253815,
+        "events": 2
+      },
+      "orientation": {
+        "effort_seconds": 0.24263596534729004,
+        "elapsed_seconds": 0.24263596534729004,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 57.86804699897766,
+        "elapsed_seconds": 57.86804699897766,
+        "events": 1
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 2.01358925,
+        "rounds": 2,
+        "seconds": 1295.1864938735962,
+        "tool_calls": 75,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 407884,
+          "cache_read_input_tokens": 5744999,
+          "input_tokens": 112,
+          "output_tokens": 11510
+        }
+      }
+    },
+    "child_elapsed_seconds": 1295.1864938735962,
+    "components": [
+      {
+        "event_id": "77395e3168454808ab5ab964e1eb2083",
+        "kind": "turn",
+        "parent_event_id": "77395e3168454808ab5ab964e1eb2083",
+        "reported_usd": 2.01358925,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/acc84b24-2877-4f3e-bb5e-9a2765c9e031/turns/77395e3168454808ab5ab964e1eb2083/record.json"
+      },
+      {
+        "event_id": "8b29a305f0fe49ad857f21f6343b447f",
+        "kind": "turn",
+        "parent_event_id": "8b29a305f0fe49ad857f21f6343b447f",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/acc84b24-2877-4f3e-bb5e-9a2765c9e031/turns/8b29a305f0fe49ad857f21f6343b447f/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T09:38:17.956925+00:00",
+    "issue_id": "1DMIX-059",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 665.809376001358,
+    "phase_events": [
+      {
+        "event_id": "29d49c044d7c49e8af8e43e982ee126d",
+        "finished_at": "2026-09-28T09:06:51.150505+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09444562499993481,
+        "started_at": "2026-09-28T09:06:51.055886+00:00"
+      },
+      {
+        "event_id": "60c9732c14f240e2971233f1ea7b0274",
+        "finished_at": "2026-09-28T09:24:38.236809+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 1080.0409748750099,
+        "started_at": "2026-09-28T09:06:38.200877+00:00"
+      },
+      {
+        "event_id": "c2b451b5ae1a4b678889ecb7c4b180ce",
+        "finished_at": "2026-09-28T09:27:56.088943+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 57.867794167017564,
+        "started_at": "2026-09-28T09:26:58.220896+00:00"
+      },
+      {
+        "event_id": "5a5e7e0508b94847b8f4dca9326de293",
+        "finished_at": "2026-09-28T09:28:06.617076+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.14788662499631755,
+        "started_at": "2026-09-28T09:28:06.469059+00:00"
+      },
+      {
+        "event_id": "d66baaa3fb40409e97b371fbfb94f559",
+        "finished_at": "2026-09-28T09:29:18.580652+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 215.08278383300058,
+        "started_at": "2026-09-28T09:25:43.497531+00:00"
+      },
+      {
+        "event_id": "9ad6978b79604881947979bfd5c1c574",
+        "finished_at": "2026-09-28T09:38:17.957511+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.8304257080017123,
+        "started_at": "2026-09-28T09:38:17.126882+00:00"
+      }
+    ],
+    "reported_usd": 2.01358925,
+    "schema_version": 2,
+    "span_seconds": 1960.9958698749542,
+    "start": "2026-09-28T09:05:36.961055+00:00",
+    "unknown_cost_event_ids": [
+      "8b29a305f0fe49ad857f21f6343b447f"
+    ]
+  }
+}

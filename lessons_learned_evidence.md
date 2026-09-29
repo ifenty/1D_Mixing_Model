@@ -150,3 +150,135 @@ pass: reseal/patch the review packet, update `issue-done.json`'s
 `workflow`/`workflow_amendment`/`maintenance.documentation`, and rewrite the
 `closed_issues.md` entry (if already written) — before dispatching the
 reviewer, not after receiving a must_fix for the gap.
+
+## LESSON: The issue budget scope bounds the whole iteration, not one turn [LL-005]
+
+**Date Identified**: 2026-09-28T04:55:00Z
+**Confidence**: strongly supported
+
+### Lesson and applicability
+An issue's `team_budget` scope wall clock starts at its first dispatch and covers
+every later dispatch, review round, final verification and Arch turn that
+reserves. `--timeout` cannot extend past it. Applies to every `--prepare`.
+
+### Observation
+1DMIX-052 was prepared as `kind: documentation` with `--budget-kind` left to
+default, allocating 30 minutes for a rewrite of roughly 1,040 lines of prose
+across two files. A single Bob turn consumed the whole allocation and produced no
+file change at all. Arch had dispatched with `--timeout 2700` believing a
+45-minute turn bound against a 30-minute budget would reserve partial-handoff
+headroom; the turn died at 1800.04 s.
+
+### Mechanism
+`team_budget.reserve` builds the turn deadline as `min(deadlines)` over the issue
+scope's own deadline and the requested `turn_seconds`. A `--timeout` larger than
+the scope's remaining wall time buys nothing. The scope's clock starts at the
+first `reserve()` call and is absolute, so it covers every subsequent dispatch,
+every review round, the final scientific suite and any Arch turn that reserves.
+
+`team_budget.DEFAULTS` measured:
+
+```
+scientific_small    30 min   $15   120 calls   1 correction
+documentation       30 min   $15   120 calls   1 correction
+harness_change      45 min   $20   180 calls   1 correction
+investigation       45 min   $20   180 calls   2 corrections
+scientific_change  120 min   $60   500 calls   2 corrections
+```
+
+### Consequence observed
+After exhaustion, scope `issue:1DMIX-052` showed wall 30/30 while calls stood at
+13/120 and spend at $5/$15 — time was the only exhausted dimension. `reserve`
+then refuses any further dispatch on that issue with `wall budget exhausted`, and
+`team_budget.extend` requires an authorization file with `authorized_by: "Owner"`
+that the code states a role may not invent. One sizing mistake converted routine
+autonomous work into work blocked pending owner action.
+
+### Contrast case
+1DMIX-053 was prepared immediately afterwards with `--budget-kind
+scientific_change` justified in the selection reason by measured work size. It
+consumed 65 of 120 minutes, 139 of 500 calls and $14.70 of $60 across four
+dispatches including an independent review and the final scientific suite, and
+completed. The allocation class, not the workflow kind, was what differed.
+
+### Limits and counterexamples
+Choosing a larger allocation class does not weaken acceptance: `--budget-kind`
+and `kind` are independent, and `loop_gate.py --help` documents
+`scientific_small` as retaining full scientific review. No case was observed
+where a larger allocation changed which gates applied.
+
+### Recommended action
+State the measured work size in the `--priority` selection reason and pick the
+allocation class from it. Before each dispatch, read remaining scope wall time
+with `team_budget.py inspect --issue ID` and set `--timeout` below it, leaving
+room for the reviews and final verification that must fit inside the same scope.
+
+---
+
+## LESSON: Status fields fail optimistically; re-derive from the artifact they summarize [LL-006]
+
+**Date Identified**: 2026-09-28T20:30:00Z
+**Confidence**: strongly supported
+
+### Lesson and applicability
+A summary field — a receipt `status`, a ledger `Date Resolved`, a docstring's stated
+mechanism, a report's quoted excerpt — is weaker evidence than the log, bytes or
+source it summarizes, and when it drifts it drifts in the flattering direction.
+Applies before acting on any such marker, and especially before spending anything
+expensive (a re-run, a re-dispatch, re-opening an issue) on the strength of one.
+
+### Evidence
+Three independent instances, same window, all with structural checks passing.
+
+1. **A receipt said `FAILED` where nothing failed.** `final-verification/c776b4b8….json`
+   recorded `status: FAILED` at 2026-09-28T17:35:55Z with the error string
+   `verification failed or source changed`. Its log
+   `verification/run-9958b8af12e54753899315786d2b1b75.log` contains **zero** lines
+   matching `FAILED|ERROR`, carries no pytest summary line, and stops mid-line at
+   `test_global_ocean_cs32x15_pressure_coordinate_gap[visc_az-90.0-1000.0]` at `[ 70%]`
+   of 123 collected tests — an interrupted process, not a failure. The identical suite
+   completed `120 passed, 3 skipped` in 486.59s immediately before it and 655.58s after.
+   Acting on the status alone would have meant re-opening a validated scientific
+   candidate; the log settled it in one grep.
+
+2. **The permanent ledger claimed a resolution nothing had qualified.** 1DMIX-057's
+   `closed_issues.md` entry carried `Date Resolved: 2026-09-28T17:10:00Z` while the
+   accepted closeout recorded `closed_at: 2026-09-28T20:20:28Z` — 3h10m apart. This is
+   structural, not sloppiness: `loop_gate.py:158` requires the entry to be in
+   `closed_issues.md` *before* `--check-done` will accept the closeout, so the record is
+   always published ahead of its validation. Inside that window, a status question from
+   the owner was answered from the ledger and reported 1DMIX-057 as closed.
+
+3. **Tests asserted an unmeasured mechanism.** Recorded under 1DMIX-059: three `ghat`
+   tests attributed their residual MITgcm disagreement to "the same hbl-misdiagnosis
+   tail". None of the three attributions had ever been measured — each was inherited
+   from a neighbouring test — and the claim had already been checked and disproved three
+   times (1DMIX-056, 1DMIX-057, 1DMIX-058). A wrong mechanism recorded as fact in a test
+   docstring had by then cost three separate iterations a correction round.
+
+A fourth, same family, is filed as 1DMIX-062: a bug report's quoted port excerpt no
+longer matches the source it cites, and the divergence suggests the documented bug was
+silently fixed.
+
+### Mechanism
+The summary and the thing summarized are written at different times by different steps,
+and only the summary is cheap to read. Nothing recomputes it. Worse, the integrity
+machinery checks *structure* — that a field exists, that a count matches, that a
+reference resolves — which is exactly the class of check that a stale-but-well-formed
+summary passes. So drift accumulates silently and is only ever found by someone who
+re-derives rather than reads.
+
+### Limits and counterexamples
+Not every status is suspect: a receipt whose `review_signature` matches the record it
+is stored in, and whose log carries a pytest summary line, is sound evidence — that
+combination is what established the 20:15:41Z PASS. The lesson is about the cost
+asymmetry, not about distrust: re-deriving is seconds, and the wrong conclusion is a
+re-run, a re-dispatch, or a false report to the owner.
+
+### Recommended action
+Before acting on a status marker, spend the one cheap check that re-derives it:
+`grep -c 'FAILED\|ERROR'` on a verification log plus a check for its summary line;
+`final_verification.py check --review … --owner …` and compare its printed
+`review_signature` against the receipt's before trusting a prior PASS; for a
+resolved-looking ledger entry, confirm an accepted `closed_at` exists in `loop_state`;
+for a cited excerpt or stated mechanism, read the line it names.

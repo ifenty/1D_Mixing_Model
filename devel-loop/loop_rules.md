@@ -11,6 +11,8 @@ a rule, remove its active bullet and name that gate under Retired.
 ## Rules
 
 - Give independent reviewers distinct correctness questions; preserve scientific acceptance even for small textual changes.
+- Treat a timed-out dispatch as work-of-unknown-completeness: inspect the tree before re-dispatching, and resume with followup rather than restarting.
+- Shape any long-output assignment so each completed unit is written to disk before the next begins; a single terminal Write turns any bound into total loss.
 
 ## Retired
 

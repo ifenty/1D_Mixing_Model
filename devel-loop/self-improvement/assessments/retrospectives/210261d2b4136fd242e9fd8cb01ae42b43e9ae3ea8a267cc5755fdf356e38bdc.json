@@ -1,0 +1,223 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-055",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T11:35:38.040679+00:00",
+    "timestamp": "2026-09-28T12:09:21Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/48cf4623d32cef3d3a45a6ef26c8e026c7ceedb98a5cf9658420dedebdc0d86b.json",
+      "sha256": "48cf4623d32cef3d3a45a6ef26c8e026c7ceedb98a5cf9658420dedebdc0d86b"
+    },
+    "measured": {
+      "span_minutes": 34,
+      "dispatches": {
+        "bob": 3
+      },
+      "rounds": {
+        "bob": 3
+      },
+      "cost_usd": {
+        "bob": 17.3902705
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "stale_orientation_after_self_edit",
+        "summary": "The final implementation turn ran its orientation reseal before its last edit rather than after, leaving the receipt stale. With both correction rounds spent, the review packet is refused and a completed rewrite that passes every acceptance check cannot be reviewed. Third occurrence of this exact mechanism, and the third partial it has caused.",
+        "evidence": "The turn is recorded incomplete with error beginning 'stale bob orientation', yet its outputs are all present and correct: README.md 260 to 96 lines, VALIDATION_RESULTS.md 781 to a 16-line pointer, both new per-scheme reports at 602 and 452 lines, every file returning 0 for grep -c '1DMIX-', no cross-file scheme references anywhere, audit.py PASS. workflow_records.py review-packet refuses a packet whose latest implementation attempt is unresolved, and reserve refuses correction_round 3 against a limit of 2 regardless of which identity is dispatched.",
+        "minutes_lost": 15
+      },
+      {
+        "category": "short_turn_strategy_avoided_breach",
+        "summary": "Recorded here because the schema has no success channel: splitting the rewrite into three short focused turns instead of one long turn kept every turn well under the 12-dollar per-turn cap that breached 1DMIX-054, and produced durable files at each step. This is the direct mitigation for the previous iteration's unrecoverable failure and it worked.",
+        "evidence": "Three turns at $4.39, $5.00 and $7.99, total $17.39 against a $60 scope with no breach, compared with 1DMIX-054's single turn at $12.735 which breached a $12 cap and made that scope permanently undispatchable. Each turn also landed complete files rather than leaving work in an unwritten buffer, so no output was lost when the third turn was recorded incomplete.",
+        "minutes_lost": 0
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-ORIENTATION-RESEAL-001",
+        "reason": "Third occurrence under the owner already filed for it, and the strongest evidence yet for the automatic variant that issue proposes: instructing the reseal explicitly in the brief has now failed to prevent it, so relying on the implementer to sequence it last is not sufficient."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-TURN-CAP-001",
+        "reason": "Recorded under the turn-cap owner as the working mitigation while the cap itself is unfixed: short focused turns stay under it reliably, which is worth stating in that issue as the interim practice."
+      }
+    ],
+    "carry_forward": [
+      "Split a large documentation rewrite into one short dispatch per output document rather than one long turn: three turns at four to eight dollars each stayed clear of the twelve-dollar per-turn cap that made a previous issue permanently undispatchable, and each landed a complete file.",
+      "Verify an implementer's reseal actually came after its final edit before assuming a turn is complete; instructing it in the brief has now failed to prevent a stale receipt three times, so check the recorded status rather than the instruction."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.777446985244751,
+        "elapsed_seconds": 0.777446985244751,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 1748.2319009304047,
+        "elapsed_seconds": 1748.2319009304047,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 0.15005207061767578,
+        "elapsed_seconds": 0.15005207061767578,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 164.8381848335266,
+        "elapsed_seconds": 164.8381848335266,
+        "events": 3
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 3,
+        "reported_usd": 17.3902705,
+        "rounds": 3,
+        "seconds": 1748.2714660167694,
+        "tool_calls": 115,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 660314,
+          "cache_read_input_tokens": 20639056,
+          "input_tokens": 211,
+          "output_tokens": 117709
+        }
+      }
+    },
+    "child_elapsed_seconds": 1748.2714660167694,
+    "components": [
+      {
+        "event_id": "b0ef9ee561e84134b36e4e19dd128d80",
+        "kind": "turn",
+        "parent_event_id": "b0ef9ee561e84134b36e4e19dd128d80",
+        "reported_usd": 4.999756750000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/05514eab-dacc-4062-8e76-fcd99b5d82dd/turns/b0ef9ee561e84134b36e4e19dd128d80/record.json"
+      },
+      {
+        "event_id": "cb9a541745d0486ea62434e204633553",
+        "kind": "turn",
+        "parent_event_id": "cb9a541745d0486ea62434e204633553",
+        "reported_usd": 4.385731,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/05514eab-dacc-4062-8e76-fcd99b5d82dd/turns/cb9a541745d0486ea62434e204633553/record.json"
+      },
+      {
+        "event_id": "dfeb01fc09b64662a9a8c748dbcdf118",
+        "kind": "turn",
+        "parent_event_id": "dfeb01fc09b64662a9a8c748dbcdf118",
+        "reported_usd": 8.004782749999999,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/05514eab-dacc-4062-8e76-fcd99b5d82dd/turns/dfeb01fc09b64662a9a8c748dbcdf118/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T12:09:13.009825+00:00",
+    "issue_id": "1DMIX-055",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 266.6976799964905,
+    "phase_events": [
+      {
+        "event_id": "33766cd4e5b24f018dbcff938e191892",
+        "finished_at": "2026-09-28T11:36:48.754862+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07835674998932518,
+        "started_at": "2026-09-28T11:36:48.676370+00:00"
+      },
+      {
+        "event_id": "90bd3d9c95dc4e3484639cb38e0bb7e2",
+        "finished_at": "2026-09-28T11:47:10.048141+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.29468733299291,
+        "started_at": "2026-09-28T11:46:15.753253+00:00"
+      },
+      {
+        "event_id": "69f80912462d464899909383748783e2",
+        "finished_at": "2026-09-28T11:47:59.584778+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 685.8101991250005,
+        "started_at": "2026-09-28T11:36:33.773774+00:00"
+      },
+      {
+        "event_id": "3e59cebcaf934e87a02798fbeeffbc89",
+        "finished_at": "2026-09-28T11:55:48.482339+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 53.97750312500284,
+        "started_at": "2026-09-28T11:54:54.504636+00:00"
+      },
+      {
+        "event_id": "4ec7d89cf13d4f5f9ac7649ee3fd5496",
+        "finished_at": "2026-09-28T11:56:25.686112+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 458.63171191699803,
+        "started_at": "2026-09-28T11:48:47.053620+00:00"
+      },
+      {
+        "event_id": "d3a72a8195ac4daabfb442b6b1cddd3c",
+        "finished_at": "2026-09-28T11:58:46.440976+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07141783300903626,
+        "started_at": "2026-09-28T11:58:46.369416+00:00"
+      },
+      {
+        "event_id": "6a08474142744507b5b077d3b0f811f4",
+        "finished_at": "2026-09-28T12:06:46.278583+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.5663133750204,
+        "started_at": "2026-09-28T12:05:49.712989+00:00"
+      },
+      {
+        "event_id": "f944b4d2205b4e5a8c2fee04a8397c75",
+        "finished_at": "2026-09-28T12:07:20.023609+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 603.8013864160166,
+        "started_at": "2026-09-28T11:57:16.235204+00:00"
+      },
+      {
+        "event_id": "2ed56b436b0c40eab0aaf26903540ad8",
+        "finished_at": "2026-09-28T12:09:13.010433+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.7778140419977717,
+        "started_at": "2026-09-28T12:09:12.232378+00:00"
+      }
+    ],
+    "reported_usd": 17.3902705,
+    "schema_version": 2,
+    "span_seconds": 2014.96914601326,
+    "start": "2026-09-28T11:35:38.040679+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

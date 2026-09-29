@@ -17,7 +17,7 @@ listed.
 
 | File | Status | Why |
 |---|---|---|
-| `inputs_from_mitgcm/mitgcm_ggl90_inputs_vermix_20_1dmix024.nc` | **current** | The capture `tests/test_ggl90_mitgcm_validation.py` (`DATA_VERMIX`) actually loads; newest (2026-09-19), matches `VALIDATION_RESULTS.md`'s own `vermix` row. |
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_vermix_20_1dmix024.nc` | **current** | The capture `tests/test_ggl90_mitgcm_validation.py` (`DATA_VERMIX`) actually loads; newest (2026-09-19), matches `MITgcm_to_Python_port_verification/GGL90_port_validation/GGL90_VALIDATION_RESULTS.md`'s own `vermix` section. |
 | `outputs_from_mitgcm/mitgcm_ggl90_outputs_vermix_20_1dmix024.nc` | **current** | Paired MITgcm output for the above (`OUTPUTS_VERMIX` in the same test). |
 | `outputs_from_python/python_ggl90_outputs_vermix_20_1dmix024.nc` | **current** | Regenerated freshest (2026-09-27, post-1DMIX-048 fix) against the current port; this is the file the freshness-checked PDF report (`reports/ggl90_validation_vermix_20.pdf`) was built from. |
 | `inputs_from_mitgcm/mitgcm_ggl90_inputs_vermix_20.nc` | superseded, retained | Original 2026-09-16 capture, predates the 1DMIX-015 `dt`-bug fix. No active script/test references it by name (confirmed by grep). |
@@ -30,7 +30,9 @@ listed.
 
 None of the "superseded, retained" files above are referenced by any script or
 test under `MITgcm_to_Python_port_verification/{scripts,tests}` (grep-confirmed,
-1DMIX-046) or by `VALIDATION_RESULTS.md`. They are kept only because deleting a
+1DMIX-046) or by
+`MITgcm_to_Python_port_verification/GGL90_port_validation/GGL90_VALIDATION_RESULTS.md`.
+They are kept only because deleting a
 capture that later turns out to matter is harder to undo cleanly than keeping a
 small `.nc` file; delete them in a future issue if disk space becomes a real
 constraint (git-ignored, so removal does not touch history either way).

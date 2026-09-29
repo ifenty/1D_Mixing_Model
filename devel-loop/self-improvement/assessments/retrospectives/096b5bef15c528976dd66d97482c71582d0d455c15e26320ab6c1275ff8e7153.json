@@ -1,0 +1,371 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-060",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T09:41:22.267157+00:00",
+    "timestamp": "2026-09-28T11:00:00Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/a7a68dddf3ef73e1f8757cce27ea4e4257eb488f5aa4232b018b2262e411a313.json",
+      "sha256": "a7a68dddf3ef73e1f8757cce27ea4e4257eb488f5aa4232b018b2262e411a313"
+    },
+    "measured": {
+      "span_minutes": 79,
+      "dispatches": {
+        "richard": 3,
+        "bob": 2
+      },
+      "rounds": {
+        "richard": 3,
+        "bob": 2
+      },
+      "cost_usd": {
+        "richard": 6.39271325,
+        "bob": 16.946820250000002
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "claim_generalized_beyond_measurement",
+        "summary": "The implementer committed, one level down, exactly the defect this issue was filed to remove: a mechanism characterized at a single cell was written as applying to a whole group. Both of the reviewer's must-fixes were instances of it, and one of them also carried a plain miscount.",
+        "evidence": "seaice_obcs's ruling-out was measured only at cell (t=0,i=5,j=7,z=0) but stated over the 12-cell zero-signature group; Richard found (t=4,i=2,j=4,z=1) in that same group with a 13.14 m hbl disagreement on the identical bfsfc branch, so that cell is hbl-driven and the group is heterogeneous. The lab_sea_6mo cluster was stated as 49 cells and recounts to 42 at column (i=13,j=1), timesteps 58-99, with two of 54 zero-signature cells fitting neither stated route.",
+        "minutes_lost": 10
+      },
+      {
+        "category": "footer_field_citation",
+        "summary": "Richard's round-1 footer cited a navigate receipt where the sealed documentation report belonged, which recorded an otherwise clean APPROVE as incomplete and cost a whole correction round to fix a single field. The verdict, the candidate signature and the executed check were all already correct.",
+        "evidence": "Event b6c889eb1dc5425f9ef39178e679b346: verdict APPROVE, must_fix empty, candidate_signature matching the current source signature exactly, error 'invalid documentation evidence version/type'. documentation_review.report pointed at b2e731a951... rather than the packet's sealed report 0d900470a1.... The round-2 correction took 61 seconds and changed nothing but that field.",
+        "minutes_lost": 4
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-ESTIMATE-EVIDENCE-001",
+        "reason": "Same owner as the other occurrences of asserting beyond measurement. Worth recording rather than shrugging at, because the review caught it only by varying the oracle rather than recomputing the same statistic, which is not guaranteed to happen next time."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-ORIENTATION-RESEAL-001",
+        "reason": "That issue already owns footer-and-receipt bookkeeping that invalidates an otherwise complete turn; this is the same class with a different field, and it strengthens its case for making the required references explicit in the generated brief rather than left to recall."
+      }
+    ],
+    "carry_forward": [
+      "State a mechanism only over the population actually measured: characterizing the worst cell licenses a claim about that cell, not about the group it belongs to. Say what was probed and what was not.",
+      "Give a reviewer a question that varies the oracle rather than repeating the implementer's own statistic; the two real defects this iteration were found by Spearman, leave-out-top-k sensitivity and per-column regrouping, not by recomputing the same Pearson correlation.",
+      "Quote the exact sealed documentation reference in a reviewer's brief; a footer citing a navigate receipt instead cost a full correction round for one field."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 29.775974988937378,
+        "elapsed_seconds": 29.775974988937378,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 2476.245744943619,
+        "elapsed_seconds": 2476.245744943619,
+        "events": 2
+      },
+      "orientation": {
+        "effort_seconds": 0.6853237152099609,
+        "elapsed_seconds": 0.6853237152099609,
+        "events": 7
+      },
+      "review": {
+        "effort_seconds": 1161.300218820572,
+        "elapsed_seconds": 1161.300218820572,
+        "events": 3
+      },
+      "verification": {
+        "effort_seconds": 721.0423581600189,
+        "elapsed_seconds": 721.0423581600189,
+        "events": 8
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 16.946820250000002,
+        "rounds": 2,
+        "seconds": 2476.3509900569916,
+        "tool_calls": 115,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 569667,
+          "cache_read_input_tokens": 21098303,
+          "input_tokens": 210,
+          "output_tokens": 113448
+        }
+      },
+      "richard": {
+        "dispatches": 3,
+        "reported_usd": 6.39271325,
+        "rounds": 3,
+        "seconds": 1170.9751191139221,
+        "tool_calls": 46,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 475323,
+          "cache_read_input_tokens": 4029609,
+          "input_tokens": 73,
+          "output_tokens": 56271
+        }
+      }
+    },
+    "child_elapsed_seconds": 3647.3261091709137,
+    "components": [
+      {
+        "event_id": "65ecb937375941ef9769a4bd48410515",
+        "kind": "turn",
+        "parent_event_id": "65ecb937375941ef9769a4bd48410515",
+        "reported_usd": 1.61833775,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/12933cb0-81b4-40cc-90b8-0ceebaea4a1c/turns/65ecb937375941ef9769a4bd48410515/record.json"
+      },
+      {
+        "event_id": "b6c889eb1dc5425f9ef39178e679b346",
+        "kind": "turn",
+        "parent_event_id": "b6c889eb1dc5425f9ef39178e679b346",
+        "reported_usd": 1.6523262499999998,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/12933cb0-81b4-40cc-90b8-0ceebaea4a1c/turns/b6c889eb1dc5425f9ef39178e679b346/record.json"
+      },
+      {
+        "event_id": "cf32bdaca2fc4218977b5a34eb5a0c94",
+        "kind": "turn",
+        "parent_event_id": "cf32bdaca2fc4218977b5a34eb5a0c94",
+        "reported_usd": 3.12204925,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/12933cb0-81b4-40cc-90b8-0ceebaea4a1c/turns/cf32bdaca2fc4218977b5a34eb5a0c94/record.json"
+      },
+      {
+        "event_id": "95fb488ba7af4e26b369f7234b61bba6",
+        "kind": "turn",
+        "parent_event_id": "95fb488ba7af4e26b369f7234b61bba6",
+        "reported_usd": 10.7157655,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/e14b8abf-cc21-4367-88db-521b0af97c41/turns/95fb488ba7af4e26b369f7234b61bba6/record.json"
+      },
+      {
+        "event_id": "efb7f3bf0760404db104acd6d88b0c69",
+        "kind": "turn",
+        "parent_event_id": "efb7f3bf0760404db104acd6d88b0c69",
+        "reported_usd": 6.231054750000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/e14b8abf-cc21-4367-88db-521b0af97c41/turns/efb7f3bf0760404db104acd6d88b0c69/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T10:59:54.127303+00:00",
+    "issue_id": "1DMIX-060",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 1064.5340366363525,
+    "phase_events": [
+      {
+        "event_id": "d34f4e8b32644def833815d5a4d0584f",
+        "finished_at": "2026-09-28T09:42:33.338676+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09610404100385495,
+        "started_at": "2026-09-28T09:42:33.242439+00:00"
+      },
+      {
+        "event_id": "cb95ba0e0d3b4e95804b8033c769707a",
+        "finished_at": "2026-09-28T10:14:34.547964+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.691501666995464,
+        "started_at": "2026-09-28T10:13:39.856179+00:00"
+      },
+      {
+        "event_id": "2ea41b87d023474c8ef29fee4bb10e03",
+        "finished_at": "2026-09-28T10:14:49.128332+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09946991599281318,
+        "started_at": "2026-09-28T10:14:49.028728+00:00"
+      },
+      {
+        "event_id": "612d02b8a8a54c6bbd2b8c32828b7ca5",
+        "finished_at": "2026-09-28T10:16:59.774206+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 2087.463096249994,
+        "started_at": "2026-09-28T09:42:12.301194+00:00"
+      },
+      {
+        "event_id": "3b41580836704f869a2b72230226574b",
+        "finished_at": "2026-09-28T10:17:25.189324+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.10697745802463,
+        "started_at": "2026-09-28T10:17:16.082171+00:00"
+      },
+      {
+        "event_id": "dbbd886a6fe74455a65cc914d22e30b5",
+        "finished_at": "2026-09-28T10:18:11.104429+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09300429199356586,
+        "started_at": "2026-09-28T10:18:11.011253+00:00"
+      },
+      {
+        "event_id": "ea2b809d05ef4a58929bf28369e91a03",
+        "finished_at": "2026-09-28T10:19:19.613435+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10323558299569413,
+        "started_at": "2026-09-28T10:19:19.510052+00:00"
+      },
+      {
+        "event_id": "87695ce5a44f40efa77e4030ccb16be6",
+        "finished_at": "2026-09-28T10:30:47.189997+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.377630250004586,
+        "started_at": "2026-09-28T10:29:52.812151+00:00"
+      },
+      {
+        "event_id": "0c7e555b344c434691e0a0e099a49973",
+        "finished_at": "2026-09-28T10:35:14.894778+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "review",
+        "reason": null,
+        "seconds": 968.1304024169804,
+        "started_at": "2026-09-28T10:19:06.766809+00:00"
+      },
+      {
+        "event_id": "a0cd7f6106294010994480b7d042621e",
+        "finished_at": "2026-09-28T10:41:36.109221+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.963160874991445,
+        "started_at": "2026-09-28T10:40:40.144256+00:00"
+      },
+      {
+        "event_id": "ef226906039a47539af1b07549c1ece7",
+        "finished_at": "2026-09-28T10:41:50.700974+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09897333398112096,
+        "started_at": "2026-09-28T10:41:50.601788+00:00"
+      },
+      {
+        "event_id": "a5cc4c31c66740e799116bcd662d504e",
+        "finished_at": "2026-09-28T10:42:38.027248+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 388.7701237920264,
+        "started_at": "2026-09-28T10:36:09.254515+00:00"
+      },
+      {
+        "event_id": "7ffed5c3ceb24658869204cabb8ce836",
+        "finished_at": "2026-09-28T10:43:00.136341+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.09033570898464,
+        "started_at": "2026-09-28T10:42:51.045827+00:00"
+      },
+      {
+        "event_id": "5af5c3691f65421aad52d97fa781b8b3",
+        "finished_at": "2026-09-28T10:43:05.993186+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0934742919926066,
+        "started_at": "2026-09-28T10:43:05.899526+00:00"
+      },
+      {
+        "event_id": "1fca42dbd05e4ea080fc0613a9b78fa0",
+        "finished_at": "2026-09-28T10:44:35.723091+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.09993962501175702,
+        "started_at": "2026-09-28T10:44:35.623013+00:00"
+      },
+      {
+        "event_id": "1a84b7f2935a4fa8bd93bf3afde292a7",
+        "finished_at": "2026-09-28T10:45:51.299734+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.08749099998386,
+        "started_at": "2026-09-28T10:44:56.212011+00:00"
+      },
+      {
+        "event_id": "1ddca0b211de487e8956f4e92e187cf7",
+        "finished_at": "2026-09-28T10:46:37.687919+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "review",
+        "reason": null,
+        "seconds": 137.23919816702255,
+        "started_at": "2026-09-28T10:44:20.448463+00:00"
+      },
+      {
+        "event_id": "aef87a6a19b94185a9888c6c4bd62549",
+        "finished_at": "2026-09-28T10:48:30.862130+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "review",
+        "reason": null,
+        "seconds": 55.932719540986,
+        "started_at": "2026-09-28T10:47:34.929336+00:00"
+      },
+      {
+        "event_id": "e4ebd4de481a4571a9a51589e1cefd8a",
+        "finished_at": "2026-09-28T10:50:14.927680+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 8.628435708989855,
+        "started_at": "2026-09-28T10:50:06.298990+00:00"
+      },
+      {
+        "event_id": "bff7b1ab16764638a4ae20ad0147438c",
+        "finished_at": "2026-09-28T10:59:05.357418+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 474.1028578749974,
+        "started_at": "2026-09-28T10:51:11.263736+00:00"
+      },
+      {
+        "event_id": "523388b0860142e0a8843d1a2168acb4",
+        "finished_at": "2026-09-28T10:59:54.128596+00:00",
+        "issue_id": "1DMIX-060",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 29.777354209014447,
+        "started_at": "2026-09-28T10:59:24.351328+00:00"
+      }
+    ],
+    "reported_usd": 23.3395335,
+    "schema_version": 2,
+    "span_seconds": 4711.860145807266,
+    "start": "2026-09-28T09:41:22.267157+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

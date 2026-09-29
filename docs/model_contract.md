@@ -184,6 +184,68 @@ specifically) and `Vertical_Mixing_Models/tests/test_kpp_estimate_uref.py`.
 Non-local transport (`ghat`) is active only under unstable surface buoyancy forcing
 (`bfsfc < 0`, i.e. net surface cooling/freshening dominates) — see
 `Vertical_Mixing_Models/docs/dev_notes/KPP_PHYSICS_EXPLANATION.md` for the worked sign logic.
+`KPPParameters.use_ghat` (MITgcm `KPP_GHAT`) gates whether this coefficient is
+*applied* to the tracer diffusive flux (`MixingOutput.apply_ghat`, consumed by
+`UnifiedColumnDriver._apply_vertical_diffusion`/`main/shared_column_solver.py::
+solve_diffusion_implicit`, matching `kpp_transport_t.F`/`kpp_transport_s.F`) —
+it does NOT gate whether `ghat` itself is *computed*: MITgcm's `blmix`
+(`kpp_routines.F`) computes it unconditionally, with no `KPP_GHAT` reference
+anywhere in that routine (confirmed by direct read). Fixed 1DMIX-058: this
+port previously zeroed the computed coefficient itself whenever `use_ghat`
+was `False`, which is the root cause described just below.
+
+**`ghat` has no momentum analogue (1DMIX-061, invariant confirmed correct,
+coverage added).** In real MITgcm, `ghat` appears only in the tracer
+transport routines `kpp_transport_t.F`, `kpp_transport_s.F` and
+`kpp_transport_ptr.F` — nothing in `pkg/kpp` applies it to the momentum
+flux. `UnifiedColumnDriver._apply_vertical_diffusion` mirrors this exactly:
+`theta`/`salt` share one `ghat_to_apply` variable passed to
+`solve_diffusion_implicit`, while the `u_vel`/`v_vel` calls omit the `ghat=`
+keyword entirely (it defaults to `None`). This is a tracer-transport term,
+not a general vertical-diffusion feature — do not add a `ghat=` argument to
+either momentum call under any future refactor of this function. Guarded by
+`Vertical_Mixing_Models/tests/test_kpp_ghat_gate.py::
+test_momentum_solve_never_receives_ghat`, which spies on the keyword
+arguments `_apply_vertical_diffusion` passes into `solve_diffusion_implicit`
+(rather than comparing evolved velocities) and asserts the `u_vel`/`v_vel`
+calls never carry a non-`None` `ghat`. Measured before this test existed
+(1DMIX-061 design): a mutant routing `u_vel` through `ghat_to_apply` was
+caught by none of `test_kpp_ghat_gate.py`'s prior 3 tests nor by
+`test_full_scenario_validation.py`/`test_cross_scheme_validation.py`/
+`test_staggering.py` (13 passed).
+
+**Coverage of this invariant is two-layered (1DMIX-063).** The 1DMIX-061
+reviewer demonstrated that a call-level spy on one keyword catches only one
+leak *shape*, not the invariant itself: two other implementations of the
+same bug — folding `ghat` into the `visc_az` array handed to the momentum
+solve (keyword absent, `k_interface` contaminated instead), and a post-hoc
+counter-gradient correction applied to `u_vel`/`v_vel` after
+`solve_diffusion_implicit` returns (keyword absent, no contaminated array
+either) — were both measured passing all 68 tests that existed at the time,
+including `test_momentum_solve_never_receives_ghat` itself. Two witnesses
+are now registered, each guarding a different boundary of the same
+invariant:
+
+- `test_momentum_solve_never_receives_ghat` — call-level: spies on the exact
+  keyword arguments `_apply_vertical_diffusion` passes into
+  `solve_diffusion_implicit` and asserts `u_vel`/`v_vel` never carry a
+  non-`None` `ghat=`. Catches an explicit `ghat=` keyword leak into either
+  momentum call. Does not catch a leak that keeps the keyword absent.
+- `test_momentum_invariant_to_ghat_value` — quantity-level: holds
+  `apply_ghat=True` fixed and varies only the `ghat` array between two runs,
+  asserting the stepped `u_vel`/`v_vel` are EXACTLY (bit-identical, no
+  tolerance — momentum's true dependence on `ghat` is exactly zero, not
+  small) unchanged, while asserting `theta`/`salt` genuinely change between
+  the same two runs (so the test cannot pass vacuously on a `ghat`-insensitive
+  fixture). Indifferent to *how* a leak reaches momentum — a keyword, a
+  contaminated `visc_az`, or a post-hoc correction all change `u_vel` when
+  `ghat` changes, so all three are caught by this one property. Demonstrated
+  (1DMIX-063 design) failing under all three mutants above, including the
+  two that this file's other three tests, `test_momentum_solve_never_
+  receives_ghat` included, do not catch.
+
+Neither witness alone covers every route; together they are the
+currently-registered witnesses for this boundary.
 
 Salt-plume haline buoyancy forcing (`ALLOW_SALT_PLUME`/`useSALT_PLUME`, e.g.
 `seaice_obcs`'s brine-rejection-driven plumes) adds a term to `bfsfc` at each of
@@ -202,6 +264,179 @@ MITgcm's own default-off `useSALT_PLUME`). See issue 1DMIX-034 (root-caused a
 previously-entirely-missing term) and
 `MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_python/python_kpp_outputs_seaice_obcs_1dmix034.nc`
 for the captured validation evidence.
+
+**Double diffusion (`KPP_DOUBLEDIFF`), known unported option (1DMIX-059):**
+Real MITgcm's interior mixing step (`pkg/kpp/kpp_calc.F`) optionally adds a
+double-diffusive contribution to the salt/temperature diffusivities via
+`kpp_routines.F::KPP_DOUBLEDIFF` (salt fingering when the water column is
+salt-stratified/heat-unstable, diffusive convection in the opposite case),
+called whenever `EXCLUDE_KPP_DOUBLEDIFF` is `#undef` **and** the runtime flag
+`KPPuseDoubleDiff` is `.TRUE.`. `EXCLUDE_KPP_DOUBLEDIFF` is `#undef` by
+default in stock MITgcm (`pkg/kpp/KPP_OPTIONS.h:68`) — i.e. the
+double-diffusion code is compiled in by default — while the runtime switch
+`KPPuseDoubleDiff` itself defaults `.FALSE.` (`pkg/kpp/kpp_readparms.F:84`),
+so the physics is dormant unless a configuration's `data.kpp` explicitly
+turns it on.
+
+This Python port implements neither the salt-fingering nor the
+diffusive-convection branch: `Vertical_Mixing_Models/KPP/kpp_routines.py::
+ri_iwmix` (this port's `Ri_iwmix`-equivalent, where MITgcm's `KPP_DOUBLEDIFF`
+call site lives) has no double-diffusion code path at all, and the two
+associated physical constants declared on `KPPParameters`
+(`Rrho0`, density-ratio limit for salt fingering; `dsfmax`, max
+salt-fingering diffusivity) have no consumer anywhere in the port — confirmed
+by direct read of `ri_iwmix` and a repo-wide search for both names. Until
+1DMIX-059, the port's `use_doublediff` (`KPPuseDoubleDiff`) flag was declared
+but completely unguarded: a caller (or a replayed MITgcm capture) that set it
+`True` would silently get ordinary interior mixing with no double-diffusive
+term and no indication anything was missing. `KPPParameters.__post_init__`
+now raises `NotImplementedError` if `use_doublediff=True`, matching the
+existing `allow_shelfice`/unported-salt-plume idiom. Physical consequence of
+the omission (for any configuration that does legitimately need it): no
+salt-fingering contribution to `diffus_s`/`diffus_t` in stably-salt-stratified,
+heat-destabilized water (density ratio `0 < Rrho < Rrho0`), and no
+diffusive-convection contribution in the opposite (heat-stratified,
+salt-destabilized) regime — the interior mixing coefficients would be too
+small wherever that regime actually occurs. Currently dormant in practice:
+all 4 MITgcm captures this project regression-tests against
+(`1D_ocean_ice_column`, `lab_sea`, `seaice_obcs_1dmix034`,
+`global_oce_latlon_720`) carry `KPPuseDoubleDiff=0` in their own captured
+NetCDF input attributes (measured directly, not assumed), so the guard does
+not currently fire for any registered test. `exclude_doublediff`
+(`EXCLUDE_KPP_DOUBLEDIFF`, the *compile-time* exclusion flag) is deliberately
+**not** guarded: it is trivially satisfied at either value, since this port
+never compiles the double-diffusion code in regardless of the flag — guarding
+it would incorrectly reject configurations that set it in either direction
+for reasons unrelated to this gap. See
+`Vertical_Mixing_Models/tests/test_kpp_doublediff_guard.py` for the guard's
+regression coverage, and
+`MITgcm_to_Python_port_verification/scripts/parse_mitgcm_split.py`/
+`run_kpp_from_netcdf_input.py`, which already surface `KPPuseDoubleDiff` from
+a capture and thread it into `KPPParameters(use_doublediff=...)` on replay —
+so a future capture with `KPPuseDoubleDiff=1` raises this same
+`NotImplementedError` on replay instead of being silently run through
+unimplemented physics.
+
+**`wscale` lookup-table extrapolation, `keep_mitgcm_bugs` (measured, 1DMIX-056
+/ 1DMIX-057 — decided, default now `True`):**
+`Vertical_Mixing_Models/KPP/kpp_routines.py::wscale` computes the turbulent
+velocity scales `wm`/`ws` via bilinear interpolation into a precomputed
+lookup table indexed by `zdiff = zehat - zmin` (`zehat = vonk·sigma·hbl·bfsfc`).
+Real MITgcm (`pkg/kpp/kpp_routines.F:980`) uses the raw, unclamped `zdiff`
+unconditionally; for extremely negative `bfsfc` this linearly extrapolates
+below the table's lower edge, a hazard the MITgcm developers documented in
+their own source comment but left active (the fix, `zdiff = MAX(0, zehat -
+zmin)`, is present at line 990 but commented out). `KPPParameters.
+keep_mitgcm_bugs=True` (the **default**, since 1DMIX-057) reproduces this
+real, unmodified Fortran behavior — including the hazard — bit-for-bit;
+`keep_mitgcm_bugs=False` instead applies the never-activated Fortran fix
+(clamping `zdiff` to 0), trading exact MITgcm correspondence for protection
+against the hazard's documented crash risk under extreme forcing
+(`Vertical_Mixing_Models/KPP/kpp_routines.py:148-182`). Confirmed
+(`wscale`'s own only currently-gated site, 1DMIX-057; `main/eos.py`'s one
+`keep_mitgcm_bugs` mention is a comment stating explicitly that no gate is
+needed there — a genuine second gated site would have widened this decision's
+scope, and none was found).
+
+This is not a theoretical difference: it is the measured, dominant cause of
+`combined_storm`'s standalone-driver disagreement (`KPP_port_validation/
+reports/kpp_scenario_standalone_summary.md`) **and** of a real, previously
+mis-attributed disagreement on the actual MITgcm-capture comparison suite
+(1DMIX-057), not just an idealized-scenario artifact. 1DMIX-056 first tested
+and disproved the alternative hypothesis for `combined_storm` — substituting
+the real Fortran's own `hbl` at each timestep into the Python port
+(`MITgcm_to_Python_port_verification/scripts/
+kpp_hbl_substitution_experiment.py`) left `visc_az`'s `n_gt_1pct` at 261/600
+(was 270/600) and `max_abs` unchanged (3.064e-02 m²/s) — `hbl` itself is not
+the dominant mechanism. Setting `keep_mitgcm_bugs=True` instead (no `hbl`
+override needed) collapsed `hbl` to floating-point roundoff (max_abs
+2.8e-14 m) and `visc_az`/`diff_kz_s`/`diff_kz_t`'s `n_gt_1pct` to 2-4/600,
+confined to the two deepest grid cells at the two timesteps where `hbl` has
+deepened to the full column depth (`kbl==nz`) — a small residual left
+unexplained. `combined_storm`'s extreme cooling+wind forcing is, among this
+project's 6 idealized scenarios, the only one whose excursion is large
+enough for the clamp-vs-no-clamp difference to change the *result*, though
+`arctic_convection` (25/2350 `wscale` evaluation points) and `hurricane_wind`
+(277/2424) technically enter the clamp-differentiating branch too with no
+measurable effect; the other 4 KPP scenarios (and all 6 GGL90 scenarios) are
+unaffected and match to floating-point roundoff regardless of this switch.
+
+**1DMIX-057's own contribution**: does flipping the default change any
+*registered MITgcm-capture* comparison result — the real oracle this
+project's fidelity claims actually rest on, not the idealized scenarios?
+Both full local suites (`Vertical_Mixing_Models/tests
+MITgcm_to_Python_port_verification/tests`) were run at `keep_mitgcm_bugs`
+`False` and `True`: **identical `113 passed, 3 skipped` both times** — no
+currently-registered test's pass/fail outcome depends on this flag. But
+pass/fail alone understates it: directly instrumenting `wscale` across all 4
+real capture datasets this project regression-tests
+(`devel-loop/loop_state/1dmix057-wscale-capture-branch-counts.txt`) found the
+clamp-differentiating branch entered at 1.2%-12.9% of evaluation points in
+**every** capture — much higher than the idealized scenarios' near-zero rate
+for anything but `combined_storm` — so "enters the branch" alone does not
+predict "measurably affects the output"; a direct field-level A/B
+(`1dmix057-wscale-ab-diff.txt`) was required to settle it per-capture:
+- `1D_ocean_ice_column` (10-step and full 11,000-step) and
+  `seaice_obcs_1dmix034`: **exactly zero** field difference between
+  `keep_mitgcm_bugs=False` and `True`, despite nonzero branch entry (1.2%-
+  4.4%) — the affected `wscale` evaluations are on trial boundary-layer-depth
+  candidates that never end up selected as `hbl`, so the difference never
+  propagates to output. Genuinely unaffected, not just untested.
+- `lab_sea` (20-step and 6-month/100-step subsample): a real but tiny A/B
+  difference (`hbl` max_abs ~3.9e-3 m; mixing coefficients ~1e-3-7.6e-2
+  m²/s) — dwarfed by, and unrelated to, this experiment's own large,
+  already-characterized Rib/Ricr threshold-sensitivity tail (1DMIX-019: max
+  `hbl` diff vs. MITgcm 26-41 m). Confirmed by a three-way check
+  (`1dmix057-wscale-capture-threeway.txt`): `Python(False)` and
+  `Python(True)` vs. MITgcm max_abs/median_abs are identical to displayed
+  precision for every field; `n_gt_1pct` shifts by only ~5 cells out of
+  ~32,700-171,000. Practically unaffected.
+- **`global_oce_latlon_720` (2,315-wet-column, 5-of-720-timestep subsample):
+  materially affected, and improved.** The three-way check shows
+  `keep_mitgcm_bugs=True` cuts this capture's own worst-case disagreement
+  with real captured MITgcm output: `hbl` max_abs 33.90 m → 3.09 m (11x);
+  `visc_az` max_abs 0.332 → 0.096 m²/s (3.5x); `diff_kz_s`/`diff_kz_t` max_abs
+  0.959 → 0.110 m²/s (8.7x); `n_gt_1pct` for `hbl` drops 146→10 of 11,575.
+  These are the exact values `test_kpp_mitgcm_validation_extended.py`'s own
+  `test_global_oce_latlon_hbl`/`test_global_oce_latlon_mixing` docstrings
+  previously attributed *entirely* to "the same Rib/Ricr threshold-
+  sensitivity tail... mechanism as the other three experiments" — that
+  attribution is now shown to be substantially wrong for this capture, the
+  same way the pre-1DMIX-056 `combined_storm` "hbl propagation" attribution
+  was: most of `global_oce_latlon`'s own worst-case tail is this same
+  `wscale` clamp, not an independent Rib/Ricr effect. `ghat`'s own mismatch
+  (max_abs 116.0, 394/394 active cells >1% both ways) was **unchanged** by
+  this flag either way — a real, separate defect this issue did not
+  investigate further (flagged for a future issue). **Root-caused and fixed
+  by 1DMIX-058**: `global_oce_latlon_720` is this project's only registered
+  capture with `KPP_GHAT` `#undef`'d (`use_ghat=0`); the port's
+  `compute_bl_mixing` was zeroing the `ghat` *computation* itself whenever
+  `use_ghat` was `False`, instead of only gating its later *application* to
+  the tracer flux (which is all real MITgcm's `KPP_GHAT` actually gates —
+  `blmix` computes `ghat` unconditionally). That fully explained the 394-of-
+  394 (100%, not a tail) mismatch: MITgcm produced real nonzero `ghat`, the
+  port produced all zeros. See `KPPParameters.use_ghat` and
+  `MixingOutput.apply_ghat` above for the corrected gate location, and
+  `test_global_oce_latlon_ghat`'s own docstring for the re-measured bound.
+
+**Decision (1DMIX-057)**: the project's own stated constraint — "the ports
+must replicate MITgcm and any deviation is a bug" — plus this measured
+evidence (flipping breaks no registered test, is a no-op on 3 of 4 real
+captures, and *measurably improves* correspondence with real MITgcm on the
+4th) argues for `True` with no material counter-evidence found. The
+counter-consideration (the lookup-table hazard is a genuine, MITgcm-author-
+documented crash risk under extreme forcing) is real but does not argue for
+a *default* of `False` in a project whose own primary goal is bit-accurate
+correspondence with MITgcm, not production robustness against MITgcm's own
+known hazards — so `keep_mitgcm_bugs` defaults to `True` and remains
+available as an explicit `False` opt-out for callers who need the safety
+clamp more than exact correspondence. `test_global_oce_latlon_hbl`/
+`test_global_oce_latlon_mixing`'s tolerances and docstrings were re-derived
+from the `True`-variant measurements above (tightened, not widened — see
+`MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`).
+The 1DMIX-056 witness tests (`test_kpp_combined_storm_hbl_substitution.py`)
+pin `keep_mitgcm_bugs` explicitly per variant and are unaffected by this
+default change.
 
 ## Invariants
 

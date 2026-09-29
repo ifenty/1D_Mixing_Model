@@ -1,0 +1,266 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/4ed2d10b85601f1832b50644d2a76292bbe04d7340efad6b3cc54b78e9c6ba36.json",
+      "sha256": "4ed2d10b85601f1832b50644d2a76292bbe04d7340efad6b3cc54b78e9c6ba36"
+    },
+    "carry_forward": [
+      "Finalize every review_signature field in the closeout packet before taking the final-verification receipt: scope_decisions, subagents, agent_continuity, maintenance, candidate and map_delta. Doing it in that order made this closeout pass --check-done on the first attempt, after the previous one voided a passing receipt by adding agent_continuity afterwards.",
+      "When prepare-done demands a receipt and final_verification refuses the draft packet, break the cycle by clearing preparation.pending on the packet once every judgment it lists is actually supplied, and run final_verification against the packet rather than issue-done.json. Verify each pending item is genuinely filled first; the list is the only place they are enumerated.",
+      "Ask the reviewer for a different implementation of the same bug, not a re-run of the mutant already demonstrated. Two novel mutants took one 605-second turn and established that a passing witness guards one spelling of its invariant rather than the invariant, which is a filed issue rather than a rubber stamp."
+    ],
+    "closes_timestamp": "2026-09-28T22:33:37.511822+00:00",
+    "id": "1DMIX-061",
+    "iteration": 1,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator_coverage": "missing",
+      "cost_usd": {
+        "bob": 2.9957652500000003,
+        "richard": 2.1628787499999995
+      },
+      "dispatches": {
+        "bob": 1,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 1,
+        "richard": 1
+      },
+      "span_minutes": 52,
+      "unknown_cost_event_ids": []
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "restated_rules_prevented_rework",
+        "evidence": "Measured: span 52 minutes, one round each, bob $2.9957652500000003 and richard $2.1628787499999995, unknown_cost_event_ids empty, no correction rounds. Both briefs contain the restatement explicitly, naming the prior loss as the reason. The reviewer question asked for a different leak implementation rather than re-confirmation of the settled ghat= mutant, and he built two novel mutants -- folding ghat into visc_az, and a post-hoc counter-gradient correction on u_vel/v_vel -- establishing that both pass the full suite (68 passed, 3 skipped, unchanged) and that the new witness therefore guards the named leak shape and not the invariant in general. That became 1DMIX-063. He also grep-verified the MITgcm correspondence claim in real source rather than port comments (KPPghat consumed only in kpp_transport_t/s/ptr.F, zero references in pkg/mom_common, mom_fluxform, mom_vecinv), which is what established the statement written into model_contract.md is not overstated. Contrast with the prior iteration's measured 4 reviewer rounds and one event whose cost is permanently unknown.",
+        "minutes_lost": 0,
+        "summary": "Recorded because the schema has no success channel, and because this iteration is the controlled comparison for the immediately preceding one. Two rules were applied deliberately rather than rediscovered: the standing incremental-write rule was restated inside both dispatched briefs, and the reviewer was asked what the prior demonstrations had not covered rather than to confirm what they had. The result was a single-round iteration with no lost turn, no correction round, and a real filed issue. The previous issue, where the same incremental-write rule existed but was left in Arch's context instead of the brief, lost a 59-tool-call reviewer turn to a closing write that never happened."
+      },
+      {
+        "category": "receipt_before_record_ordering_cycle",
+        "evidence": "prepare-done returned {'status': 'blocked', 'reason': 'supply the final_verification.py run result'} because issue-start workflow kind was scientific_change. final_verification check on the same packet returned 'review packet still has pending preparation fields'. The five pending entries were outcome/summary/tests_status, scope decisions, milestone/lesson/rule decisions, git and communication disposition, and verification/documentation evidence -- all of which were supplied, four through the metadata file prepare-done itself consumes. Breaking the cycle by clearing pending on the packet and running final_verification against it produced review_signature cc71cb8e7092e8003beb and then EXECUTED PASS (121 passed, 3 skipped, 648.47s), and prepare-done carried scope_decisions, subagents, agent_continuity, maintenance, candidate and map_delta through unchanged so the receipt stayed valid through --check-done on the first attempt.",
+        "minutes_lost": 5,
+        "summary": "For an issue whose start kind is already scientific_change, prepare-done refuses to write the closeout without a final-verification receipt, while final_verification refuses a draft packet for having pending preparation fields. The cycle has to be broken by hand: clear preparation.pending on the packet once every judgment it lists is genuinely supplied, run final_verification against the packet rather than against issue-done.json, then let prepare-done carry the signed fields through unchanged. Nothing documents that route, and getting it wrong in the other direction is what voided a passing receipt on the previous issue."
+      }
+    ],
+    "schema_version": 2,
+    "solutions": [
+      {
+        "action": "filed",
+        "issue": "TEAM-DISPATCH-TIMEOUT-001",
+        "problem": 0,
+        "reason": "Recorded against that issue as the positive counterpart to its failures, and specifically as evidence for the brief-generation half this project attached to it one retrospective earlier. There the finding was that the incremental-write rule was available and unstated in the brief; here it was stated, and the turn that would have been at risk -- a 625-second implementer turn building and running a mutant -- completed with its report intact. That is the cheapest possible confirmation that the fix belongs in brief generation rather than only in runtime handling, and it should be cited when that issue is implemented."
+      },
+      {
+        "action": "filed",
+        "issue": "TEAM-VERIFY-RERUN-001",
+        "problem": 1,
+        "reason": "Belongs to that issue as already narrowed. Its retargeted scope, recorded in the previous retrospective, is that the closeout record cannot be known complete before the receipt is taken because --check-done reveals its requirements one rejection at a time. This instance is the same defect approached from the other side: for a scientific_change issue the receipt is demanded before the record exists at all, so the two tools each refuse until the other has run. Surfacing the full set of required closeout fields up front, which is that issue's acceptance criterion, would resolve both faces of it."
+      }
+    ],
+    "timestamp": "2026-09-28T23:25:13Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 45.45481514930725,
+        "elapsed_seconds": 45.45481514930725,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 624.2597057819366,
+        "elapsed_seconds": 624.2597057819366,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.6580190658569336,
+        "elapsed_seconds": 0.6580190658569336,
+        "events": 5
+      },
+      "review": {
+        "effort_seconds": 596.2018930912018,
+        "elapsed_seconds": 596.2018930912018,
+        "events": 1
+      },
+      "verification": {
+        "effort_seconds": 837.1629841327667,
+        "elapsed_seconds": 837.1629841327667,
+        "events": 4
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 2.9957652500000003,
+        "rounds": 1,
+        "seconds": 624.5239059925079,
+        "tool_calls": 52,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 102871,
+          "cache_read_input_tokens": 3110953,
+          "input_tokens": 89,
+          "output_tokens": 31876
+        }
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 2.1628787499999995,
+        "rounds": 1,
+        "seconds": 604.9921400547028,
+        "tool_calls": 36,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 86543,
+          "cache_read_input_tokens": 2194620,
+          "input_tokens": 65,
+          "output_tokens": 20974
+        }
+      }
+    },
+    "child_elapsed_seconds": 1229.5160460472107,
+    "components": [
+      {
+        "event_id": "2a406012558942b18a4937ad62a1b2a1",
+        "kind": "turn",
+        "parent_event_id": "2a406012558942b18a4937ad62a1b2a1",
+        "reported_usd": 2.1628787499999995,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/511d36d2-0838-4f8f-9b91-9201ebbe2045/turns/2a406012558942b18a4937ad62a1b2a1/record.json"
+      },
+      {
+        "event_id": "67b769b2609d445bab2c14fc2e92a67b",
+        "kind": "turn",
+        "parent_event_id": "67b769b2609d445bab2c14fc2e92a67b",
+        "reported_usd": 2.9957652500000003,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/ea16bddd-7ad1-4736-a345-69ea023bfff4/turns/67b769b2609d445bab2c14fc2e92a67b/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T23:25:07.551686+00:00",
+    "issue_id": "1DMIX-061",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 1860.5238180160522,
+    "phase_events": [
+      {
+        "event_id": "47d3f26a67214015955cd523eb2f6437",
+        "finished_at": "2026-09-28T22:35:10.631240+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10692116599966539,
+        "started_at": "2026-09-28T22:35:10.524124+00:00"
+      },
+      {
+        "event_id": "ace870202ce5481c8151eee14770673a",
+        "finished_at": "2026-09-28T22:41:44.507182+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 80.43388116700044,
+        "started_at": "2026-09-28T22:40:24.073164+00:00"
+      },
+      {
+        "event_id": "db88dc48fdad4574ba3746d5a79b1ef6",
+        "finished_at": "2026-09-28T22:43:35.485358+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.16188716699980432,
+        "started_at": "2026-09-28T22:43:35.323263+00:00"
+      },
+      {
+        "event_id": "ea4e66eb404140e5b192d02098d7d435",
+        "finished_at": "2026-09-28T22:44:58.012349+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 624.2438101250009,
+        "started_at": "2026-09-28T22:34:33.752643+00:00"
+      },
+      {
+        "event_id": "0927284dcdaf41ed811c789b5eba47bb",
+        "finished_at": "2026-09-28T22:52:51.534584+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 13.810789834002207,
+        "started_at": "2026-09-28T22:52:37.723491+00:00"
+      },
+      {
+        "event_id": "2f2e7ef6bcbd4571983d5674f93710ed",
+        "finished_at": "2026-09-28T22:52:53.380670+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.11094724999929895,
+        "started_at": "2026-09-28T22:52:53.269410+00:00"
+      },
+      {
+        "event_id": "b8335643283e4089bfd0e23e20f75d2e",
+        "finished_at": "2026-09-28T22:54:14.266075+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10934658300175215,
+        "started_at": "2026-09-28T22:54:14.156530+00:00"
+      },
+      {
+        "event_id": "fbec67f5a0804be788e7678152fd931e",
+        "finished_at": "2026-09-28T23:01:45.593302+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 79.31084750000082,
+        "started_at": "2026-09-28T23:00:26.282018+00:00"
+      },
+      {
+        "event_id": "f5d8ba70655a4de18dd925c6eafbc41d",
+        "finished_at": "2026-09-28T23:02:50.174085+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.1678036669982248,
+        "started_at": "2026-09-28T23:02:50.006082+00:00"
+      },
+      {
+        "event_id": "a709cef52ac7479c86be33d4f94d688e",
+        "finished_at": "2026-09-28T23:03:51.490489+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "review",
+        "reason": null,
+        "seconds": 596.1999769169997,
+        "started_at": "2026-09-28T22:53:55.288596+00:00"
+      },
+      {
+        "event_id": "0cbfbc44ad0f466b8890502fccae8557",
+        "finished_at": "2026-09-28T23:18:44.457673+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 663.6038790839993,
+        "started_at": "2026-09-28T23:07:40.851084+00:00"
+      },
+      {
+        "event_id": "3b7865fdd9af4e5895f0a08686fee2b4",
+        "finished_at": "2026-09-28T23:25:07.553949+00:00",
+        "issue_id": "1DMIX-061",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 45.45668750000186,
+        "started_at": "2026-09-28T23:24:22.096871+00:00"
+      }
+    ],
+    "reported_usd": 5.158644,
+    "schema_version": 2,
+    "span_seconds": 3090.039864063263,
+    "start": "2026-09-28T22:33:37.511822+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

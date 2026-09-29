@@ -1,0 +1,407 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/722759cdb3dd02d9b39174cf229cf1e48e2eac23eabc571459debd0572c98d64.json",
+      "sha256": "722759cdb3dd02d9b39174cf229cf1e48e2eac23eabc571459debd0572c98d64"
+    },
+    "carry_forward": [
+      "A final-verification receipt reading FAILED is not evidence the science failed. Grep its log for FAILED|ERROR and check whether a pytest summary line exists before re-opening an issue or re-litigating physics: here the FAILED receipt's log held zero failures, stopped at 70% of 123 tests, and the same suite passed 120/3-skipped on either side of it.",
+      "A passing final-verification receipt is bound to the closeout record's review_signature, so any later edit to subagents, agent_continuity, scope_decisions, maintenance or map_delta voids it. final_verification.py check prints that signature in seconds; compare it against the receipt before trusting a prior PASS or paying for another full suite, which cost 10:55 here.",
+      "Do not read closed_issues.md as evidence that an iteration actually closed. The gate requires the entry to be there before it will validate the closeout, so a resolved-looking entry can precede its passing receipt by hours; 1DMIX-057's preceded it by 3h10m. Check loop_state for an accepted closed_at before reporting an issue as closed."
+    ],
+    "closes_timestamp": "2026-09-28T16:40:40.419142+00:00",
+    "id": "1DMIX-057",
+    "iteration": 3,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator_coverage": "missing",
+      "cost_usd": {
+        "bob": 3.93889025,
+        "richard": 5.800313749999999
+      },
+      "dispatches": {
+        "bob": 3,
+        "richard": 2
+      },
+      "rounds": {
+        "bob": 3,
+        "richard": 2
+      },
+      "span_minutes": 220,
+      "unknown_cost_event_ids": []
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "final_verification_rerun_lifecycle",
+        "evidence": "Three receipts for one candidate ce0546991f, owner arch, iteration timestamp 2026-09-28T16:40:40.419142+00:00: 9aab3c9e PASS 17:29:06Z under review_signature f43fdb82; c776b4b8 FAILED 17:35:55Z under fb6d1180; 9d4a346a PASS 20:15:41Z under fb6d1180. The first PASS was correctly treated as void once the record was edited and its signature moved, and a re-run was launched; that re-run is what did not survive. Its log run-9958b8af12e54753899315786d2b1b75.log holds zero lines matching FAILED|ERROR, carries no pytest summary line, and stops mid-line at test_global_ocean_cs32x15_pressure_coordinate_gap[visc_az-90.0-1000.0] at [ 70%] of 123 collected tests. The same suite completed 120 passed, 3 skipped in 486.59s immediately before (run-c1742ac0) and 655.58s after. The receipt's error string 'verification failed or source changed' conflates three causes; --check-done's entire output was 'BLOCKED: [Errno 2] No such file or directory: .../final-verification/current.json'. prepare_done writes verification.receipt once, so the record still cited the void 9aab3c9e after the fresh PASS existed.",
+        "minutes_lost": 27,
+        "summary": "An interrupted scientific suite was recorded as FAILED, indistinguishable in the receipt from a real regression; --check-done then reported only the resulting missing current.json, naming neither the attempt nor its log; and after the successful re-run the closeout record still cited the superseded receipt, so re-pointing it required hand-editing the active record the gate validates. Establishing that no test had failed cost about 14 minutes before the 11-minute run that was the actual remedy, plus 5 to re-point the record by hand."
+      },
+      {
+        "category": "ledger_precedes_validation",
+        "evidence": "loop_gate.py:158 requires done['id'] in closed and done['id'] not in opened; prepare_done sets open_issues_md_updated=True unconditionally. The 1DMIX-057 entry carries Date Resolved 2026-09-28T17:10:00Z while the accepted closeout records closed_at 2026-09-28T20:20:28.881815+00:00, so for 3h10m the permanent record said Resolved, no passing receipt was bound to it, and the receipt it cited (9aab3c9e) was void. Realized consequence: asked for project status at approximately 19:40Z, inside the window, the readable sources (open_issues.md, closed_issues.md, the notification ledger) were all consistent with a closed 1DMIX-057 and the answer given to the owner treated it as closed; the gate's contrary view was reachable only via loop_gate.py --next.",
+        "minutes_lost": 0,
+        "summary": "The gate requires a completed issue's entry to be in closed_issues.md before it will validate the closeout, so the permanent ledger publishes a resolution before anything qualifies it. When validation then fails, the durable record asserts an unqualified resolution for as long as validation takes to succeed. This is entailed by the ordering, not caused by working out of order."
+      }
+    ],
+    "schema_version": 2,
+    "solutions": [
+      {
+        "action": "filed",
+        "issue": "TEAM-VERIFY-RERUN-001",
+        "problem": 0,
+        "reason": "New issue; no existing entry covers it. TEAM-DISPATCH-TIMEOUT-001 owns a wall-clock timeout discarding a dispatched agent turn whose durable work is complete, which is a different artifact and a different mechanism: this is the verification receipt for the suite itself, and the defect is that its status field cannot express incompleteness. The three sub-fixes are independent and cheap, and none relaxes an integrity property, since a void receipt must still fail check_receipt."
+      },
+      {
+        "action": "filed",
+        "issue": "TEAM-LEDGER-AHEAD-001",
+        "problem": 1,
+        "reason": "New issue; nothing in the ledger covers the ordering between the permanent record and its validation. TEAM-REITERATION-CLOSEOUT-001 owns the discoverability of closeout bookkeeping steps, not which artifact is authoritative while those steps are still failing. Filed rather than deferred because the consequence was realized this session, in the status answer given to the owner, and because the preferred fix is small: --check-done already parses both issue files and knows the outcome, so it can perform the move itself on acceptance."
+      }
+    ],
+    "timestamp": "2026-09-28T20:26:37Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 99.81518387794495,
+        "elapsed_seconds": 99.81518387794495,
+        "events": 4
+      },
+      "implementation": {
+        "effort_seconds": 638.790205001831,
+        "elapsed_seconds": 638.790205001831,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 0.5805268287658691,
+        "elapsed_seconds": 0.5805268287658691,
+        "events": 7
+      },
+      "review": {
+        "effort_seconds": 963.880224943161,
+        "elapsed_seconds": 963.880224943161,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 1761.09392786026,
+        "elapsed_seconds": 1761.09392786026,
+        "events": 9
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 3,
+        "reported_usd": 3.93889025,
+        "rounds": 3,
+        "seconds": 639.3134059906006,
+        "tool_calls": 52,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 272963,
+          "cache_read_input_tokens": 2929373,
+          "input_tokens": 77,
+          "output_tokens": 30712
+        }
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 5.800313749999999,
+        "rounds": 2,
+        "seconds": 971.6544752120972,
+        "tool_calls": 69,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 308249,
+          "cache_read_input_tokens": 4812065,
+          "input_tokens": 100,
+          "output_tokens": 58689
+        }
+      }
+    },
+    "child_elapsed_seconds": 1610.9678812026978,
+    "components": [
+      {
+        "event_id": "4a4243cbf2d04aad8caf2ce232d259a9",
+        "kind": "turn",
+        "parent_event_id": "4a4243cbf2d04aad8caf2ce232d259a9",
+        "reported_usd": 1.4541425000000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/acd63a4b-48d8-4b1f-8d29-5aea0504da11/turns/4a4243cbf2d04aad8caf2ce232d259a9/record.json"
+      },
+      {
+        "event_id": "93f6e9b79d82464e985c34ee9686c58e",
+        "kind": "turn",
+        "parent_event_id": "93f6e9b79d82464e985c34ee9686c58e",
+        "reported_usd": 1.2413450000000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/acd63a4b-48d8-4b1f-8d29-5aea0504da11/turns/93f6e9b79d82464e985c34ee9686c58e/record.json"
+      },
+      {
+        "event_id": "bbd72f9287114b059fdb471caec663d6",
+        "kind": "turn",
+        "parent_event_id": "bbd72f9287114b059fdb471caec663d6",
+        "reported_usd": 1.2434027499999998,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/acd63a4b-48d8-4b1f-8d29-5aea0504da11/turns/bbd72f9287114b059fdb471caec663d6/record.json"
+      },
+      {
+        "event_id": "6c51816ff5294026b6a629bf9185445a",
+        "kind": "turn",
+        "parent_event_id": "6c51816ff5294026b6a629bf9185445a",
+        "reported_usd": 2.3325052499999996,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b1455d70-0bda-4d1f-bc58-fd7cced8651e/turns/6c51816ff5294026b6a629bf9185445a/record.json"
+      },
+      {
+        "event_id": "8ed6aba0461342e285c32c38cf09cb26",
+        "kind": "turn",
+        "parent_event_id": "8ed6aba0461342e285c32c38cf09cb26",
+        "reported_usd": 3.4678085,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/b1455d70-0bda-4d1f-bc58-fd7cced8651e/turns/8ed6aba0461342e285c32c38cf09cb26/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T20:20:28.881815+00:00",
+    "issue_id": "1DMIX-057",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 11577.49479174614,
+    "phase_events": [
+      {
+        "event_id": "0ac064bc2ea445d98fceab01ae199232",
+        "finished_at": "2026-09-28T16:41:34.667136+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.824617665988626,
+        "started_at": "2026-09-28T16:41:24.842345+00:00"
+      },
+      {
+        "event_id": "fc2214008be846acabdb6449e8bf894a",
+        "finished_at": "2026-09-28T16:43:35.822528+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0762135419936385,
+        "started_at": "2026-09-28T16:43:35.746167+00:00"
+      },
+      {
+        "event_id": "b7d3dce93ed94084888bbfa7623a83f6",
+        "finished_at": "2026-09-28T16:46:11.264372+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.845865415991284,
+        "started_at": "2026-09-28T16:45:15.418430+00:00"
+      },
+      {
+        "event_id": "3dae5e6e48454493ab20bdb7c6b9b8e4",
+        "finished_at": "2026-09-28T16:46:27.745564+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0795624169986695,
+        "started_at": "2026-09-28T16:46:27.665864+00:00"
+      },
+      {
+        "event_id": "02d362d87d1c4edeb8fa1387d5fc8296",
+        "finished_at": "2026-09-28T16:47:36.693947+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 257.7389149160008,
+        "started_at": "2026-09-28T16:43:18.955327+00:00"
+      },
+      {
+        "event_id": "9dc971df0a9947f6b637bf2f70d27735",
+        "finished_at": "2026-09-28T16:50:05.798097+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0793602500052657,
+        "started_at": "2026-09-28T16:50:05.718599+00:00"
+      },
+      {
+        "event_id": "946d269483f843d5a96204caa07feee6",
+        "finished_at": "2026-09-28T16:55:12.106709+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 57.898512167012086,
+        "started_at": "2026-09-28T16:54:14.208096+00:00"
+      },
+      {
+        "event_id": "23f8d203f4494b8ea7bdd9c3d1da5f47",
+        "finished_at": "2026-09-28T16:59:22.093528+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0891021250281483,
+        "started_at": "2026-09-28T16:59:22.004266+00:00"
+      },
+      {
+        "event_id": "57d9e6256b9544f087209ff0db609c50",
+        "finished_at": "2026-09-28T17:00:57.507731+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "review",
+        "reason": null,
+        "seconds": 671.752806000004,
+        "started_at": "2026-09-28T16:49:45.744425+00:00"
+      },
+      {
+        "event_id": "d6f7c532ab104d41b1659bbac2958274",
+        "finished_at": "2026-09-28T17:04:14.786969+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 58.492925666010706,
+        "started_at": "2026-09-28T17:03:16.293766+00:00"
+      },
+      {
+        "event_id": "03c315bf0f4f41eb851a7dcff143cf09",
+        "finished_at": "2026-09-28T17:04:23.716291+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08965262499987148,
+        "started_at": "2026-09-28T17:04:23.626497+00:00"
+      },
+      {
+        "event_id": "e703fd62fe484b9aa061871235b9b8bb",
+        "finished_at": "2026-09-28T17:05:02.592016+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 190.84239249999519,
+        "started_at": "2026-09-28T17:01:51.749381+00:00"
+      },
+      {
+        "event_id": "f0d5d8f4d6b9462bb4c2e588b28fb1ae",
+        "finished_at": "2026-09-28T17:08:04.067666+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 58.2098735839827,
+        "started_at": "2026-09-28T17:07:05.857547+00:00"
+      },
+      {
+        "event_id": "2b6afb5d37064e0aaa6a201894d8b479",
+        "finished_at": "2026-09-28T17:08:13.405132+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07913299999199808,
+        "started_at": "2026-09-28T17:08:13.325855+00:00"
+      },
+      {
+        "event_id": "ab0d7b127f894d889975dad86c6614a0",
+        "finished_at": "2026-09-28T17:08:51.194555+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 190.20870654200553,
+        "started_at": "2026-09-28T17:05:40.985605+00:00"
+      },
+      {
+        "event_id": "d2cd6c4611af46daa46652a6fa84235a",
+        "finished_at": "2026-09-28T17:13:56.631884+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 58.34781037500943,
+        "started_at": "2026-09-28T17:12:58.283844+00:00"
+      },
+      {
+        "event_id": "d4c6ad29d55e4475b3117f663bd09bc4",
+        "finished_at": "2026-09-28T17:14:07.795341+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08644608300528489,
+        "started_at": "2026-09-28T17:14:07.708706+00:00"
+      },
+      {
+        "event_id": "4d5405bae04a434ea649704bbef969ca",
+        "finished_at": "2026-09-28T17:15:12.049547+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "review",
+        "reason": null,
+        "seconds": 292.11439895798685,
+        "started_at": "2026-09-28T17:10:19.932628+00:00"
+      },
+      {
+        "event_id": "44115b6e9ae0474dac3f956f03d22d41",
+        "finished_at": "2026-09-28T17:28:54.034802+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 497.6269442079938,
+        "started_at": "2026-09-28T17:20:36.406570+00:00"
+      },
+      {
+        "event_id": "f46050f454ee4bedbd9a9eabd5e9c6b8",
+        "finished_at": "2026-09-28T17:29:18.889768+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.9092020000098273,
+        "started_at": "2026-09-28T17:29:17.980419+00:00"
+      },
+      {
+        "event_id": "c8e66a6116db419a98900487afc67ffa",
+        "finished_at": "2026-09-28T17:30:19.016097+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 26.87280725000892,
+        "started_at": "2026-09-28T17:29:52.143062+00:00"
+      },
+      {
+        "event_id": "b3466484f18647d4b409e1ade4394e8c",
+        "finished_at": "2026-09-28T17:35:55.074900+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 294.49602612497984,
+        "started_at": "2026-09-28T17:31:00.576276+00:00"
+      },
+      {
+        "event_id": "784bf9ab1d504d348e0a88835bb91585",
+        "finished_at": "2026-09-28T20:00:39.645656+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 22.957613709000725,
+        "started_at": "2026-09-28T20:00:16.687797+00:00"
+      },
+      {
+        "event_id": "da4f531e21a94d25a94f3e6cbe11e8f4",
+        "finished_at": "2026-09-28T20:15:24.521681+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 670.3463970000003,
+        "started_at": "2026-09-28T20:04:14.175317+00:00"
+      },
+      {
+        "event_id": "83fbc2a8d1db41d59d80abf03791671d",
+        "finished_at": "2026-09-28T20:20:28.883980+00:00",
+        "issue_id": "1DMIX-057",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 49.0768906659996,
+        "started_at": "2026-09-28T20:19:39.806874+00:00"
+      }
+    ],
+    "reported_usd": 9.739203999999999,
+    "schema_version": 2,
+    "span_seconds": 13188.462672948837,
+    "start": "2026-09-28T16:40:40.419142+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

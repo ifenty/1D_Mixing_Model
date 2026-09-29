@@ -22,8 +22,10 @@ exists.
 
 No `outputs_from_python/` file exists for this capture (only a bounded
 5-timestep subsample was ever replayed through the Python port; a full
-720-timestep replay, estimated ~1.5 h, was deliberately not attempted this
-issue — see `VALIDATION_RESULTS.md`'s `global_oce_latlon` section).
+720-timestep replay, estimated ~1.5 h, remains a separate, not-yet-scoped
+follow-up — see
+`MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md`'s
+`global_oce_latlon` section).
 
 ## `1D_10` (10 timesteps, single column, `1D_ocean_ice_column` verification experiment)
 
@@ -34,7 +36,7 @@ UUIDs cross-checked directly (`input_uuid` in each output matches its own input'
 |---|---|---|
 | `inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend_rawflux_fix.nc` | **current** | The capture `tests/test_kpp_mitgcm_validation.py` actually loads (`DATA_1D`). |
 | `outputs_from_mitgcm/mitgcm_kpp_outputs_1D_10_kppmix_extend_rawflux_fix.nc` | **current** | Paired MITgcm output for the above, same test. |
-| `outputs_from_python/python_kpp_outputs_1D_10_kppmix_extend_rawflux_fix.nc` | **current** | Regenerated 2026-09-27; the file `reports/kpp_validation_1D_ocean_ice_column_10.pdf` was built from (see `VALIDATION_RESULTS.md`'s report-provenance table). |
+| `outputs_from_python/python_kpp_outputs_1D_10_kppmix_extend_rawflux_fix.nc` | **current** | Regenerated 2026-09-27; the file `reports/kpp_validation_1D_ocean_ice_column_10.pdf` was built from (see `MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md`'s Reproducibility section). |
 | `inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend.nc` | superseded, retained | **Documented-buggy legacy capture** — `scripts/run_kpp_from_netcdf_input.py::derive_raw_flux_forcing`'s own docstring (1DMIX-013) states this capture's `q_net`/`fw_flux` columns are *not* real raw fluxes despite the name (they hold MITgcm's own already-converted `surfaceForcingT`/`surfaceForcingS`, a pre-fix `KPP_OUTPUT_VALIDATION` bug) — feeding them through the raw-flux formula double-applies the conversion. This is why `_rawflux_fix` was captured. No active test/script loads this file's data (the one reference is that explanatory comment, not a load path). |
 | `outputs_from_mitgcm/mitgcm_kpp_outputs_1D_10_kppmix_extend.nc` | superseded, retained | Paired MITgcm output for the legacy capture above. No active reference. |
 | `outputs_from_mitgcm_standalone/mitgcm_kpp_outputs_standalone_1D_10.nc` | superseded, retained | Standalone-Fortran-driver output (three-way method step 2) paired (by `input_uuid`) to the *legacy* `_kppmix_extend.nc` capture, not the current `_rawflux_fix` one — from the KPP standalone driver's original bring-up test (README's own status table, "`1D_ocean_ice_column` \| KPP standalone (step 2)" row, 1DMIX-012, resolved: exact match to floating-point roundoff). Not re-run against the corrected capture since 1DMIX-012 closed; no active script/test references this file by name. The raw-flux bug above affects `q_net`/`fw_flux` specifically, which the standalone driver never consumes (it calls `KPPMIX` directly with `ustar`/`bo`/`bosol`), so this historical result is not itself invalidated by that bug — it simply predates the fix and has not been re-verified against it. |

@@ -164,9 +164,14 @@ def wscale(
             # tables are used." The commented-out fix (attributed to Dimitry
             # Sidorenko) is the correct, safe behaviour.
             #
-            # We treat the clamped form as the bug-fixed default. Setting
-            # keep_mitgcm_bugs=True reproduces the stock (unclamped, hazardous)
-            # MITgcm behaviour bit-for-bit for validation runs.
+            # Default (True, 1DMIX-057): reproduce the stock (unclamped)
+            # MITgcm behaviour bit-for-bit -- measured to improve, not harm,
+            # agreement with real captured MITgcm output (see
+            # kpp_parameters.py's keep_mitgcm_bugs docstring and
+            # docs/model_contract.md). Setting keep_mitgcm_bugs=False
+            # instead clamps to the never-activated Fortran fix, trading
+            # exact correspondence for protection against this hazard's
+            # documented crash risk under extreme forcing.
             if config.keep_mitgcm_bugs:
                 # Stock MITgcm (line 980): unclamped -> may extrapolate below the
                 # table and produce bad/unstable velocity scales.

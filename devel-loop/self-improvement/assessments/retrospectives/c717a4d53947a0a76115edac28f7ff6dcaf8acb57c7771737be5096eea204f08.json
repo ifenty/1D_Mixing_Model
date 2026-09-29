@@ -1,0 +1,274 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-059",
+    "iteration": 2,
+    "closes_timestamp": "2026-09-28T15:23:43.661269+00:00",
+    "timestamp": "2026-09-28T15:55:26Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/7f0ae5bc29af0e8808eadcba4d6e4a9411ba7a869ddd96766ff8773c3eb9e404.json",
+      "sha256": "7f0ae5bc29af0e8808eadcba4d6e4a9411ba7a869ddd96766ff8773c3eb9e404"
+    },
+    "measured": {
+      "span_minutes": 32,
+      "dispatches": {
+        "bob": 1,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 1,
+        "richard": 1
+      },
+      "cost_usd": {
+        "bob": 0.9746555000000001,
+        "richard": 4.6690065
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "partial_closeout_defers_review_debt",
+        "summary": "Eighteen Fortran build-input files sat in the tree unreviewed for a full day because 1DMIX-054 closed partial without a sealed documentation report, and the pinned baseline then made an unrelated issue carry them. They received their first review only as a side effect of closing 1DMIX-059.",
+        "evidence": "Of this closeout's 33 judgment targets, 18 were 1DMIX-054's two *_code_validation/ directories. loop_history shows 1DMIX-054 partial with no maintenance.documentation reference, which is also why ESX 1.4.0 carried_forward attribution could not cover them: only completed closeouts confer it. Richard's review of those 18 was substantive rather than a rubber stamp -- he verified the instrumented sources are real symlinks byte-identical to the canonical copies, SIZE.h grid literals match each experiment, and each packages.conf change is exactly one documented line.",
+        "minutes_lost": 12
+      },
+      {
+        "category": "bounded_first_step_paid_off",
+        "summary": "Recorded because the schema has no success channel: aiming the reviewer at the two genuinely distinct concerns, rather than at the change in general, is what made a 33-target closeout worth its cost. The flag-choice judgment was tested against MITgcm source and the unreviewed scaffolding was actually inspected, both because the question named them separately and said not to skim the second.",
+        "evidence": "Richard tested the exclude_doublediff decision against kpp_calc.F:533-545 and all 8 captured inputs rather than accepting the stated reasoning, confirming the alternative would have rejected every existing configuration. He read ri_iwmix end to end plus a repo-wide grep to confirm the guard's premise, and broke the guard in a scratch copy to confirm the witness fails. One Bob turn at $0.97 and one Richard turn at $4.67 closed the issue with no correction round.",
+        "minutes_lost": 0
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-BASELINE-PIN-001",
+        "reason": "That issue owns the pinned-baseline consequence, and this occurrence sharpens it: the cost is not only re-judging accepted work, which ESX 1.4.0 now attributes, but inheriting genuinely unreviewed work from a partial closeout, which carried_forward deliberately cannot cover."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-ORIENTATION-RESEAL-001",
+        "reason": "Recorded under the brief-generation owner as the positive counterpart to its failures: naming the distinct concerns in the reviewer's question, and saying explicitly not to skim the second, is what produced a substantive review of both."
+      }
+    ],
+    "carry_forward": [
+      "Seal a documentation report even when an iteration closes partial, if its own work landed: an unsealed partial leaves that work unreviewed, ineligible for carried-forward attribution, and inherited by whichever unrelated issue closes next.",
+      "When a closeout inherits another issue's unreviewed work, name it in the reviewer's question and say not to skim it. Eighteen inherited build-input files got a real first review that way rather than a rubber stamp."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 34.298705101013184,
+        "elapsed_seconds": 34.298705101013184,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 208.89001488685608,
+        "elapsed_seconds": 208.89001488685608,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.4214191436767578,
+        "elapsed_seconds": 0.4214191436767578,
+        "events": 5
+      },
+      "review": {
+        "effort_seconds": 808.610023021698,
+        "elapsed_seconds": 808.610023021698,
+        "events": 1
+      },
+      "verification": {
+        "effort_seconds": 606.3070569038391,
+        "elapsed_seconds": 606.3070569038391,
+        "events": 5
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 0.9746555000000001,
+        "rounds": 1,
+        "seconds": 209.03584909439087,
+        "tool_calls": 23,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 62692,
+          "cache_read_input_tokens": 645721,
+          "input_tokens": 29,
+          "output_tokens": 10393
+        }
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 4.6690065,
+        "rounds": 1,
+        "seconds": 815.6671171188354,
+        "tool_calls": 72,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 162436,
+          "cache_read_input_tokens": 4771243,
+          "input_tokens": 87,
+          "output_tokens": 50709
+        }
+      }
+    },
+    "child_elapsed_seconds": 1024.7029662132263,
+    "components": [
+      {
+        "event_id": "e60975d47cc548feaa1bbb9699024f8c",
+        "kind": "turn",
+        "parent_event_id": "e60975d47cc548feaa1bbb9699024f8c",
+        "reported_usd": 0.9746555000000001,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/79d573ad-f21c-48c1-8aa0-6fe0e9c8682c/turns/e60975d47cc548feaa1bbb9699024f8c/record.json"
+      },
+      {
+        "event_id": "64b7d386e1724d7fa3961d0211d26e1c",
+        "kind": "turn",
+        "parent_event_id": "64b7d386e1724d7fa3961d0211d26e1c",
+        "reported_usd": 4.6690065,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/bf2a89f9-0df4-4e0f-b1a2-bacfdc766dc5/turns/64b7d386e1724d7fa3961d0211d26e1c/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T15:55:16.795345+00:00",
+    "issue_id": "1DMIX-059",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 868.4311099052429,
+    "phase_events": [
+      {
+        "event_id": "c98c6ccb1db3449abcb35f84df198505",
+        "finished_at": "2026-09-28T15:25:04.161572+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.762730749993352,
+        "started_at": "2026-09-28T15:24:54.398646+00:00"
+      },
+      {
+        "event_id": "de43190bf7834599b3839b68616a1a15",
+        "finished_at": "2026-09-28T15:25:51.317828+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07903570798225701,
+        "started_at": "2026-09-28T15:25:51.238659+00:00"
+      },
+      {
+        "event_id": "21e6b99e109d4e2bbfcf5114799712c8",
+        "finished_at": "2026-09-28T15:27:57.655445+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.13361762498971,
+        "started_at": "2026-09-28T15:27:01.521764+00:00"
+      },
+      {
+        "event_id": "24f536a11e60467ba4ff0047290b1ec9",
+        "finished_at": "2026-09-28T15:28:08.347221+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07824099998106249,
+        "started_at": "2026-09-28T15:28:08.268849+00:00"
+      },
+      {
+        "event_id": "9e2862e0e16c42d597d8cf0efed9d9c0",
+        "finished_at": "2026-09-28T15:29:03.625690+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 208.89026137502515,
+        "started_at": "2026-09-28T15:25:34.735675+00:00"
+      },
+      {
+        "event_id": "758632469d494b9ab18ad3a0b27419ac",
+        "finished_at": "2026-09-28T15:29:25.123078+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07196720800129697,
+        "started_at": "2026-09-28T15:29:25.050908+00:00"
+      },
+      {
+        "event_id": "949261d8aa7b4a9da40ff9def3f4015b",
+        "finished_at": "2026-09-28T15:30:39.479899+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.07640566700138152,
+        "started_at": "2026-09-28T15:30:39.403336+00:00"
+      },
+      {
+        "event_id": "d68f164264ca4df598d6f6cbe8d48c09",
+        "finished_at": "2026-09-28T15:39:55.655389+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 59.170474624988856,
+        "started_at": "2026-09-28T15:38:56.484812+00:00"
+      },
+      {
+        "event_id": "7659ea63e2d94b3faf44780dfc39bc15",
+        "finished_at": "2026-09-28T15:41:44.521346+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.1149947920057457,
+        "started_at": "2026-09-28T15:41:44.406201+00:00"
+      },
+      {
+        "event_id": "1dc5a1769ffb49078b69422773dbb75a",
+        "finished_at": "2026-09-28T15:43:47.940010+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "review",
+        "reason": null,
+        "seconds": 808.6087169999955,
+        "started_at": "2026-09-28T15:30:19.329987+00:00"
+      },
+      {
+        "event_id": "d9ffdddfbb7b47039de01d409a77cf1e",
+        "finished_at": "2026-09-28T15:45:44.070981+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 8.742680416995427,
+        "started_at": "2026-09-28T15:45:35.328129+00:00"
+      },
+      {
+        "event_id": "ec937ea8b312472e9798ffa78a23f280",
+        "finished_at": "2026-09-28T15:54:21.532635+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 472.4930259580142,
+        "started_at": "2026-09-28T15:46:29.035614+00:00"
+      },
+      {
+        "event_id": "b05816ffc109466fb976e7ca69d4a303",
+        "finished_at": "2026-09-28T15:55:16.796883+00:00",
+        "issue_id": "1DMIX-059",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 34.29997754198848,
+        "started_at": "2026-09-28T15:54:42.496640+00:00"
+      }
+    ],
+    "reported_usd": 5.643662,
+    "schema_version": 2,
+    "span_seconds": 1893.1340761184692,
+    "start": "2026-09-28T15:23:43.661269+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

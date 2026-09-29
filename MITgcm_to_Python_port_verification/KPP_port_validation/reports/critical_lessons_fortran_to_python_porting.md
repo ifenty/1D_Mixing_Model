@@ -427,10 +427,24 @@ else:
 3. Document the bug thoroughly with MITgcm line references
 4. Include the developer's own comments about the hazard
 
-**Validation strategy**:
+**Validation strategy (original, 2026-08-20; superseded, 1DMIX-057, resolved):**
 - Set `keep_mitgcm_bugs=True` only for bit-level validation against MITgcm
 - Use `keep_mitgcm_bugs=False` (default) for production runs
 - Document that results will differ (for the better)
+
+**Superseded**: the default has since been **flipped to `True`**. Measured
+evidence on the real MITgcm capture `global_oce_latlon` showed the opposite
+of "results will differ for the better" under `False`: the flip to `True`
+cuts `hbl` max_abs disagreement with real captured MITgcm from 3.390e+01 m to
+3.092e+00 m and cells exceeding 1% relative error from 146/11575 to 10/11575
+-- the unclamped (real, unmodified Fortran) behaviour agrees *better* with
+MITgcm than the clamped "fix" did, because this project's production use
+case is itself bit-accurate correspondence with MITgcm, not independent
+production robustness. See `docs/model_contract.md`'s KPP section for the
+full evidence. The general lesson above (steps 1-4: implement correct-by-
+MITgcm-standard behaviour as default, gate the alternative behind a flag,
+document thoroughly) still holds; only which behaviour counts as "the
+default" changed.
 
 ---
 

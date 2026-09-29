@@ -1,0 +1,385 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-056",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-28T04:58:34.703809+00:00",
+    "timestamp": "2026-09-28T06:14:42Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/1caef15494f577ff46b5c5d3a1cfa42c2cad2dbfb077a0e4e30fc5caaa00abce.json",
+      "sha256": "1caef15494f577ff46b5c5d3a1cfa42c2cad2dbfb077a0e4e30fc5caaa00abce"
+    },
+    "measured": {
+      "span_minutes": 76,
+      "dispatches": {
+        "richard": 2,
+        "bob": 3
+      },
+      "rounds": {
+        "richard": 2,
+        "bob": 3
+      },
+      "cost_usd": {
+        "richard": 7.929698250000001,
+        "bob": 18.90695625
+      },
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "unverified_scope_claim",
+        "summary": "Bob's root-cause narrative asserted that combined_storm was the only one of six scenarios extreme enough to reach the wscale clamp regime. That was literally false and reached three documents before review caught it. He had measured the regime only in the scenario he was investigating and generalized to the other five without instrumenting them.",
+        "evidence": "Richard instrumented the real wscale() across all six scenarios and measured arctic_convection at 25 of 2350 evaluation points and hurricane_wind at 277 of 2424 entering the clamp-differentiating negative-zdiff branch. His A/B toggle of keep_mitgcm_bugs across all six confirmed the practical conclusion held -- zero measurable change for the five calmer scenarios -- so the numbers were right and only the scope claim was wrong. The false claim had reached docs/code_map.md, kpp_scenario_standalone_summary.md and the experiment script's own module docstring, requiring a third Bob round to correct.",
+        "minutes_lost": 8
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-ESTIMATE-EVIDENCE-001",
+        "reason": "Same root behaviour as that issue already owns -- a quantitative or scope claim asserted without running the command that would establish it -- appearing here in a root-cause narrative rather than in issue scoping or a brief. Recorded under the existing owner rather than split into a near-duplicate category."
+      }
+    ],
+    "carry_forward": [
+      "A claim that a finding is confined to one case must be measured across the other cases before it is written down; instrumenting only the case under investigation establishes the mechanism, never its scope.",
+      "Aim a reviewer's question at the specific way the candidate could be wrong rather than at the work in general: asking whether an exact-zero diff might be a self-comparison, whether a switch acts through the claimed path, and whether a new witness fails when deliberately broken produced three findings a general correctness review would have missed."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 30.023041009902954,
+        "elapsed_seconds": 30.023041009902954,
+        "events": 1
+      },
+      "implementation": {
+        "effort_seconds": 2063.2080211639404,
+        "elapsed_seconds": 2063.2080211639404,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 0.8132948875427246,
+        "elapsed_seconds": 0.8132948875427246,
+        "events": 9
+      },
+      "review": {
+        "effort_seconds": 1336.4311668872833,
+        "elapsed_seconds": 1336.4311668872833,
+        "events": 2
+      },
+      "verification": {
+        "effort_seconds": 768.2415177822113,
+        "elapsed_seconds": 768.2415177822113,
+        "events": 9
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 3,
+        "reported_usd": 18.90695625,
+        "rounds": 3,
+        "seconds": 2063.340449810028,
+        "tool_calls": 112,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 1065197,
+          "cache_read_input_tokens": 18831470,
+          "input_tokens": 193,
+          "output_tokens": 113311
+        }
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 7.929698250000001,
+        "rounds": 2,
+        "seconds": 1341.8187160491943,
+        "tool_calls": 82,
+        "unknown_cost_events": 0,
+        "unknown_tool_call_events": 0,
+        "usage": {
+          "cache_creation_input_tokens": 438903,
+          "cache_read_input_tokens": 7195729,
+          "input_tokens": 98,
+          "output_tokens": 63528
+        }
+      }
+    },
+    "child_elapsed_seconds": 3405.1591658592224,
+    "components": [
+      {
+        "event_id": "2192e012c88544e582cf5d2deaedef2a",
+        "kind": "turn",
+        "parent_event_id": "2192e012c88544e582cf5d2deaedef2a",
+        "reported_usd": 2.7811245,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/6b1044dd-f4d1-4720-ae23-3ca550778886/turns/2192e012c88544e582cf5d2deaedef2a/record.json"
+      },
+      {
+        "event_id": "f1d0ebbc8fb340ba873b5ae111eac21e",
+        "kind": "turn",
+        "parent_event_id": "f1d0ebbc8fb340ba873b5ae111eac21e",
+        "reported_usd": 5.148573750000001,
+        "role": "richard",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/6b1044dd-f4d1-4720-ae23-3ca550778886/turns/f1d0ebbc8fb340ba873b5ae111eac21e/record.json"
+      },
+      {
+        "event_id": "69b9f2db655841379104cb1024d689ba",
+        "kind": "turn",
+        "parent_event_id": "69b9f2db655841379104cb1024d689ba",
+        "reported_usd": 11.171080500000002,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/ceef8ab6-f3a0-4852-adbd-0cc6615c2316/turns/69b9f2db655841379104cb1024d689ba/record.json"
+      },
+      {
+        "event_id": "6d2023c6609e4aedb12106b1c97a8e5a",
+        "kind": "turn",
+        "parent_event_id": "6d2023c6609e4aedb12106b1c97a8e5a",
+        "reported_usd": 3.6360019999999995,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/ceef8ab6-f3a0-4852-adbd-0cc6615c2316/turns/6d2023c6609e4aedb12106b1c97a8e5a/record.json"
+      },
+      {
+        "event_id": "95575e59345045e39715140e258fd087",
+        "kind": "turn",
+        "parent_event_id": "95575e59345045e39715140e258fd087",
+        "reported_usd": 4.09987375,
+        "role": "bob",
+        "source": "devel-loop/loop_state/agent_runtime/sessions/ceef8ab6-f3a0-4852-adbd-0cc6615c2316/turns/95575e59345045e39715140e258fd087/record.json"
+      }
+    ],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T06:14:36.824431+00:00",
+    "issue_id": "1DMIX-056",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 1156.9614560604095,
+    "phase_events": [
+      {
+        "event_id": "c1c1909b28e04c169b86289b0185e77b",
+        "finished_at": "2026-09-28T05:00:06.408808+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08558562499820255,
+        "started_at": "2026-09-28T05:00:06.323093+00:00"
+      },
+      {
+        "event_id": "5f97a411d0344c4da4a1e8eeee432fa0",
+        "finished_at": "2026-09-28T05:25:44.872050+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10994991700863466,
+        "started_at": "2026-09-28T05:25:44.761964+00:00"
+      },
+      {
+        "event_id": "64ad59dd56e24713bfd58df46d8b4d20",
+        "finished_at": "2026-09-28T05:26:48.405417+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.52849516697461,
+        "started_at": "2026-09-28T05:25:53.876563+00:00"
+      },
+      {
+        "event_id": "161d0c10383248bf9fec18d3ce28448a",
+        "finished_at": "2026-09-28T05:27:58.834811+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 1696.398450165987,
+        "started_at": "2026-09-28T04:59:42.405166+00:00"
+      },
+      {
+        "event_id": "c11938ed919b414b8da9424ca983a99e",
+        "finished_at": "2026-09-28T05:30:10.882583+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.0869892499758862,
+        "started_at": "2026-09-28T05:30:10.795441+00:00"
+      },
+      {
+        "event_id": "e055f1b95d6c4547be7eab4f38b5fc7d",
+        "finished_at": "2026-09-28T05:31:00.260544+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08743945899186656,
+        "started_at": "2026-09-28T05:31:00.172979+00:00"
+      },
+      {
+        "event_id": "bdb11ace10b94319b9f6263ed517e1ca",
+        "finished_at": "2026-09-28T05:31:59.992547+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 53.6521457080089,
+        "started_at": "2026-09-28T05:31:06.340037+00:00"
+      },
+      {
+        "event_id": "7a0d7545a7374d8eb62051565f56fe0f",
+        "finished_at": "2026-09-28T05:32:31.140791+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 192.48413225001423,
+        "started_at": "2026-09-28T05:29:18.655823+00:00"
+      },
+      {
+        "event_id": "b41d8458ccb44bc184a1cdd624f4e69f",
+        "finished_at": "2026-09-28T05:32:51.677254+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.021420624980237,
+        "started_at": "2026-09-28T05:32:42.655632+00:00"
+      },
+      {
+        "event_id": "fb8ec79e1edb457bb9f35d75162edc50",
+        "finished_at": "2026-09-28T05:34:25.604953+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08314200001768768,
+        "started_at": "2026-09-28T05:34:25.521682+00:00"
+      },
+      {
+        "event_id": "f5a5c0bff3054d7f9a352513fc3b7d22",
+        "finished_at": "2026-09-28T05:35:35.718851+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.087395957991248,
+        "started_at": "2026-09-28T05:35:35.631314+00:00"
+      },
+      {
+        "event_id": "d3ef99834b6b44a98185976576a5488c",
+        "finished_at": "2026-09-28T05:45:18.379875+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 55.53846579202218,
+        "started_at": "2026-09-28T05:44:22.841145+00:00"
+      },
+      {
+        "event_id": "6762282fa4fd4632b9e025090ce779ac",
+        "finished_at": "2026-09-28T05:53:39.940502+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "review",
+        "reason": null,
+        "seconds": 1107.8805458749994,
+        "started_at": "2026-09-28T05:35:12.075874+00:00"
+      },
+      {
+        "event_id": "e56ed6bc406946dcaf81a5bab7881747",
+        "finished_at": "2026-09-28T05:55:48.463539+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.10538770799757913,
+        "started_at": "2026-09-28T05:55:48.357910+00:00"
+      },
+      {
+        "event_id": "d850e358fee34dbe9875addf8f63397c",
+        "finished_at": "2026-09-28T05:56:53.222894+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 56.19045762499445,
+        "started_at": "2026-09-28T05:55:57.032385+00:00"
+      },
+      {
+        "event_id": "93135497a77e458bb3f0258f31888ed6",
+        "finished_at": "2026-09-28T05:57:32.850830+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "implementation",
+        "reason": null,
+        "seconds": 174.29371733398875,
+        "started_at": "2026-09-28T05:54:38.557422+00:00"
+      },
+      {
+        "event_id": "59a45074c1b245a48262a860f2557388",
+        "finished_at": "2026-09-28T05:57:56.572854+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.189400000002934,
+        "started_at": "2026-09-28T05:57:47.383314+00:00"
+      },
+      {
+        "event_id": "63a6fce1cdf7417ea6f673b466ab5f53",
+        "finished_at": "2026-09-28T05:58:18.888569+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08289620801224373,
+        "started_at": "2026-09-28T05:58:18.805488+00:00"
+      },
+      {
+        "event_id": "8a00809266824bbfa369bad55961f3f0",
+        "finished_at": "2026-09-28T05:59:21.632722+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.08311091602081433,
+        "started_at": "2026-09-28T05:59:21.549453+00:00"
+      },
+      {
+        "event_id": "8c3a3677f88e4cce8f55a483916cc8d4",
+        "finished_at": "2026-09-28T06:01:53.789858+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 54.28665370901581,
+        "started_at": "2026-09-28T06:00:59.503162+00:00"
+      },
+      {
+        "event_id": "1ebae23651e94c14ae0703f7032e3c75",
+        "finished_at": "2026-09-28T06:02:51.948107+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "review",
+        "reason": null,
+        "seconds": 228.5669436250173,
+        "started_at": "2026-09-28T05:59:03.381568+00:00"
+      },
+      {
+        "event_id": "c4d7b2952e274b928595ee646a539357",
+        "finished_at": "2026-09-28T06:04:13.241160+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 8.582094542012783,
+        "started_at": "2026-09-28T06:04:04.658887+00:00"
+      },
+      {
+        "event_id": "a46aaab717ef4babbee66faad98d9b0a",
+        "finished_at": "2026-09-28T06:13:45.176015+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 467.27393816699623,
+        "started_at": "2026-09-28T06:05:57.925231+00:00"
+      },
+      {
+        "event_id": "6a1029400f6b443ab49346393c3e2040",
+        "finished_at": "2026-09-28T06:14:36.825578+00:00",
+        "issue_id": "1DMIX-056",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 30.024190875003114,
+        "started_at": "2026-09-28T06:14:06.801390+00:00"
+      }
+    ],
+    "reported_usd": 26.8366545,
+    "schema_version": 2,
+    "span_seconds": 4562.120621919632,
+    "start": "2026-09-28T04:58:34.703809+00:00",
+    "unknown_cost_event_ids": []
+  }
+}

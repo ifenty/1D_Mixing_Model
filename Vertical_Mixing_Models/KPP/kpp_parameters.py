@@ -46,11 +46,29 @@ class KPPParameters:
     # Shear mixing scaling
     scale_shearmixing: bool = False  # KPP_SCALE_SHEARMIXING (Polzin 1996)
 
-    # Nonlocal transport
-    use_ghat: bool = True  # KPP_GHAT: include nonlocal transport term
+    # Nonlocal transport. KPP_GHAT gates whether the nonlocal transport
+    # coefficient is APPLIED to the tracer diffusive flux
+    # (kpp_transport_t.F/kpp_transport_s.F) -- NOT whether it is computed;
+    # MITgcm's blmix (kpp_routines.F) computes ghat unconditionally, with no
+    # KPP_GHAT reference anywhere in that routine. `compute_bl_mixing`
+    # (kpp_scheme_specific.py) always computes the real coefficient; this
+    # flag instead controls `MixingOutput.apply_ghat`, consumed by
+    # `UnifiedColumnDriver._apply_vertical_diffusion` when it decides whether
+    # to pass `ghat` into `solve_diffusion_implicit`. Fixed 1DMIX-058 (see
+    # docs/model_contract.md's KPP section): this flag used to (incorrectly)
+    # zero the computed coefficient itself.
+    use_ghat: bool = True  # KPP_GHAT: apply nonlocal transport term to fluxes
 
     # Interior mixing options
     exclude_shear_mix: bool = False  # EXCLUDE_KPP_SHEAR_MIX
+    # EXCLUDE_KPP_DOUBLEDIFF: compile-time exclusion of the double-diffusion
+    # code. Real MITgcm's own default is #undef (i.e. that code IS compiled
+    # in) -- this port's default `False` matches that #undef, not an
+    # affirmative "exclude". Irrelevant to this port's fidelity either way:
+    # the double-diffusion code is never implemented here regardless of this
+    # flag's value, so there is nothing for it to guard. See `use_doublediff`
+    # below (the runtime switch) for the flag that actually matters, and
+    # docs/model_contract.md's KPP section (1DMIX-059).
     exclude_doublediff: bool = False  # EXCLUDE_KPP_DOUBLEDIFF
 
     # Vertical smoothing
@@ -107,6 +125,18 @@ class KPPParameters:
     cstar: float = 10.0  # Proportionality coefficient for nonlocal transport
 
     # Flags
+    # KPPuseDoubleDiff: runtime switch for double-diffusive (salt-fingering /
+    # diffusive-convection) mixing (real MITgcm: kpp_routines.F::
+    # KPP_DOUBLEDIFF, invoked from kpp_calc.F only when EXCLUDE_KPP_DOUBLEDIFF
+    # is #undef AND this flag is .TRUE. at runtime; MITgcm's own runtime
+    # default is .FALSE., kpp_readparms.F:84). Confirmed by direct read: this
+    # Python port implements NONE of that physics -- `ri_iwmix`
+    # (kpp_routines.py) has no KPP_DOUBLEDIFF-equivalent code path, and
+    # Rrho0/dsfmax below have no consumer anywhere in the port. Unlike
+    # exclude_doublediff above, there is no defensible partial-physics
+    # approximation to fall back on here, so __post_init__ raises
+    # NotImplementedError if this is True rather than silently ignoring the
+    # request (1DMIX-059). See docs/model_contract.md's KPP section.
     use_doublediff: bool = False  # KPPuseDoubleDiff
     limit_hbl_stable: bool = True  # LimitHblStable
     ghat_use_total_diffus: bool = False  # KPP_ghatUseTotalDiffus
@@ -114,9 +144,12 @@ class KPPParameters:
     debug: bool = False  # Enable debug output (default: False)
 
     # ========== MITgcm bug-compatibility switch ==========
-    # When True, reproduce the *exact* stock-MITgcm pkg/kpp behaviour, including
-    # a known numerical hazard that the MITgcm developers themselves flagged in
-    # the source but left active. When False (default), branch to bug-fixed code.
+    # When True (default, 1DMIX-057), reproduce the *exact* stock-MITgcm
+    # pkg/kpp behaviour, including a known numerical hazard that the MITgcm
+    # developers themselves flagged in the source but left active. When
+    # False, branch instead to the never-activated Fortran fix (a clamp)
+    # that trades bit-for-bit MITgcm correspondence for protection against
+    # that hazard's documented crash risk under extreme forcing.
     #
     # This flag ONLY gates places where the stock Fortran77 is genuinely wrong
     # (or hazardous) AND the fix diverges from the MITgcm reference solution.
@@ -126,7 +159,32 @@ class KPPParameters:
     #
     # Currently gated bug(s):
     #   - wscale zdiff linear-extrapolation hazard (kpp_routines.F:980 vs :990)
-    keep_mitgcm_bugs: bool = False
+    #
+    # Default changed False -> True by 1DMIX-057 (was False since the port's
+    # earliest version; see closed_issues.md 1DMIX-056/1DMIX-057 and
+    # docs/model_contract.md's KPP section for the full evidence). Measured,
+    # not assumed: at False (the old default), this project's own real
+    # MITgcm capture `global_oce_latlon_720` disagreed with real captured
+    # MITgcm hbl/visc_az/diff_kz_s/diff_kz_t by up to 33.9 m / 0.332 / 0.959 /
+    # 0.959 (m^2/s) at its worst cells -- previously mis-attributed entirely
+    # to the unrelated Rib/Ricr threshold-sensitivity tail (1DMIX-019).
+    # Setting this flag True instead (the real, unmodified MITgcm behaviour)
+    # cuts those same worst-case disagreements to 3.09 m / 0.096 / 0.110 --
+    # a 3.5x-11x improvement in fidelity to the real Fortran oracle this
+    # project exists to validate against, on a real (not idealized-scenario)
+    # capture. The other 3 real captures this project regression-tests
+    # against (`1D_ocean_ice_column` at both 10-step and full 11,000-step
+    # length, `lab_sea` at both 20-step and 6-month/100-step-subsample
+    # length, `seaice_obcs_1dmix034`) show zero or negligible (<0.02% of
+    # cells) change either way -- measured directly, not inferred; see
+    # `devel-loop/loop_state/1dmix057-wscale-capture-threeway.txt` and
+    # `1dmix057-wscale-capture-branch-counts.txt`. No currently-registered
+    # test's pass/fail outcome depends on this flag (both full-suite runs:
+    # 113 passed, 3 skipped, identical). `keep_mitgcm_bugs=False` remains
+    # available as an explicit, documented opt-out for callers who need
+    # protection from the lookup-table extrapolation hazard's crash risk
+    # more than they need bit-for-bit MITgcm correspondence.
+    keep_mitgcm_bugs: bool = True
 
     # ========== Shortwave penetration (SHORTWAVE_HEATING / selectPenetratingSW) ==========
     shortwave_heating: bool = False  # Whether Qsw is treated as a separate penetrating flux
@@ -215,6 +273,18 @@ class KPPParameters:
             )
         if self.allow_shelfice:
             unimplemented.append("shelf ice coupling (allow_shelfice)")
+        # 1DMIX-059: KPPuseDoubleDiff (runtime double-diffusion switch) was
+        # previously declared but silently ignored -- no code path in
+        # ri_iwmix (kpp_routines.py) implements KPP_DOUBLEDIFF at all, so a
+        # caller requesting it got ordinary interior mixing with no warning.
+        # exclude_doublediff (the compile-time exclusion CPP flag) is
+        # deliberately NOT guarded: setting it True/False changes nothing the
+        # port does either way, since the double-diffusion code is never
+        # compiled in here regardless.
+        if self.use_doublediff:
+            unimplemented.append(
+                "double diffusion (use_doublediff / KPPuseDoubleDiff)"
+            )
         if unimplemented:
             raise NotImplementedError(
                 "KPPConfig option(s) not yet implemented in this Python port: "

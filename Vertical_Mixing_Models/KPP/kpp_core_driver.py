@@ -146,6 +146,11 @@ class KPPDriver:
         # effect when self.params.use_salt_plume is True.
         boplume_forcing: float = 0.0,
         sp_depth_forcing: float = 0.0,
+        # Investigation-only override (1DMIX-056), passed straight through to
+        # kpp_scheme_specific.diagnose_bl_depth. Default None is an exact
+        # behavioral no-op -- see that function's own docstring for the exact
+        # substitution semantics.
+        hbl_override: float = None,
     ) -> KPPOutput:
         """
         Compute KPP mixing coefficients for a single column.
@@ -214,6 +219,13 @@ class KPPDriver:
         sp_depth_forcing : float, optional
             Salt plume penetration (e-folding) depth, SPDepth [m]
             (1DMIX-034). Default 0.0.
+        hbl_override : float, optional
+            Investigation-only (1DMIX-056): substitute this value for the
+            diagnosed boundary-layer depth before the boundary-layer shape
+            function (`kpp_scheme_specific.compute_bl_mixing`) and downstream
+            steps consume it -- see `diagnose_bl_depth`'s own docstring for
+            exact semantics. Default `None` is an exact behavioral no-op;
+            every existing caller/scenario is unaffected.
 
         Notes
         -----
@@ -386,6 +398,7 @@ class KPPDriver:
             dvsq, dbloc, Ritop, ustar, bo, bosol, coriol,
             depth, cell_thickness, self.wmt, self.wst, self.params,
             boplume=boplume_forcing, sp_depth=sp_depth_forcing,
+            hbl_override=hbl_override,
         )
 
         # ===== Step 6: Boundary layer mixing =====

@@ -180,7 +180,12 @@ The `.npz` file contains these arrays (time-by-depth unless noted):
   - `Ricr`: critical bulk Richardson number for boundary layer depth (default: 0.3)
   - `epsilon`: surface layer extent fraction (default: 0.1)
   - `vonk`: von Karman constant (default: 0.4)
-  - `use_ghat`: enable nonlocal (counter-gradient) transport (default: true)
+  - `use_ghat`: apply the nonlocal (counter-gradient) transport term to the
+    tracer flux (default: true). The `ghat` coefficient itself is always
+    computed (matching MITgcm's blmix, which computes it unconditionally);
+    this flag only gates whether it is used when stepping temperature/salt
+    (mirrors MITgcm's `KPP_GHAT` compile flag, which gates
+    `kpp_transport_t.F`/`kpp_transport_s.F`, not `blmix`).
   - Background viscosity/diffusivity come from `configuration_yamls/physical_parameters.yaml` (`background_viscosity`, `background_diffusivity`), not from the KPP parameter file.
 
 **Use KPP when** your scenario involves strong surface forcing (wind, cooling, heating) and you need to capture sharp transitions at the base of the mixed layer.

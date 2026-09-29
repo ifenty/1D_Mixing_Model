@@ -1,0 +1,103 @@
+{
+  "retrospective": {
+    "schema_version": 2,
+    "id": "1DMIX-055",
+    "iteration": 2,
+    "closes_timestamp": "2026-09-28T14:05:09.720485+00:00",
+    "timestamp": "2026-09-28T14:07:50Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/eaea269264de18c4167b0842a94fcb57a568d919833aabdb12e6986be09fa539.json",
+      "sha256": "eaea269264de18c4167b0842a94fcb57a568d919833aabdb12e6986be09fa539"
+    },
+    "measured": {
+      "span_minutes": 3,
+      "dispatches": {},
+      "rounds": {},
+      "cost_usd": {},
+      "unknown_cost_event_ids": [],
+      "coordinator_coverage": "missing",
+      "billing_status": "provider_reported_not_invoice_reconciled"
+    },
+    "problems": [
+      {
+        "category": "upgrade_pollutes_issue_diffs",
+        "summary": "Arch's own ESX 1.1.1 to 1.2.2 upgrade injected 18 to 20 framework-owned disposition targets into every one of the six open issues, because FRAMEWORK_PATHS participates in the inventory a candidate diff is computed over. For 1DMIX-055 that is its entire diff, so closing it would require asserting documentation accuracy for tools/esx symbols it never touched.",
+        "evidence": "Measured directly with doc_contract.draft against each issue's pinned baseline: 1DMIX-055 18 targets of which 18 framework-owned, 1DMIX-054 36/18, 1DMIX-059 56/19, 1DMIX-058 71/19, 1DMIX-057 75/19, 1DMIX-052 102/20. FRAMEWORK_PATHS is ['tools/esx', '.claude', 'devel-loop', 'docs', 'esx', 'CLAUDE.md', '.gitignore']. The upgrade changed team_budget.py, brief.py, agent_runtime.py, team_driver.py, ralph_stop.py and devel-loop/team_operations.md. Before the upgrade 1DMIX-055's diff would have been one target, docs/code_map.md; its own deliverables sit outside every scanned root and contribute none.",
+        "minutes_lost": 25
+      },
+      {
+        "category": "recommended_route_was_not_verified_before_proposing",
+        "summary": "Arch recommended retire-and-refile to the Owner as a cheap way to close a long-open issue, and the Owner approved it, before Arch had checked that any move to closed runs the full gate. loop_lifecycle's own docstring says promotion runs the full gate, so retirement is exactly as expensive as ordinary closure and the recommendation could not have worked as described.",
+        "evidence": "loop_lifecycle.py module docstring: 'Promotion stages the ledgers and runs the full gate; check-done records the accepted iteration afterwards.' records.py permits only 'resolved' and 'false positive' for a closed entry, so there is no lighter-weight retired state either. Arch proposed the route in one turn and discovered the contradiction in the next, after the Owner had already approved it.",
+        "minutes_lost": 10
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-UPGRADE-DIFF-001",
+        "reason": "Filed this iteration with the six-issue measurement. The fix needs a decision about whether three-way-merge results are attributable from the deployment record, which is analysis rather than scientific work, and it touches a documentation-integrity mechanism so it should not be changed unilaterally."
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-ESTIMATE-EVIDENCE-001",
+        "reason": "Same owner as the other occurrences of asserting before measuring. This instance is worse than those because the unverified claim was a recommendation to the Owner that shaped a decision, rather than a figure in a brief."
+      }
+    ],
+    "carry_forward": [
+      "Verify a route exists before recommending it to the Owner: read the mechanism that would have to permit it, not just the one that blocks the current path. A recommendation the Owner approves and Arch then retracts costs more than the measurement would have.",
+      "Apply a framework upgrade when few issues are open, or expect it to enlarge every open issue's candidate diff by the number of framework symbols it changes."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 0.8359560966491699,
+        "elapsed_seconds": 0.8359560966491699,
+        "events": 1
+      },
+      "verification": {
+        "effort_seconds": 9.402167081832886,
+        "elapsed_seconds": 9.402167081832886,
+        "events": 1
+      }
+    },
+    "by_role": {},
+    "child_elapsed_seconds": 0,
+    "components": [],
+    "coordinator_coverage": "missing",
+    "end": "2026-09-28T14:07:42.714611+00:00",
+    "issue_id": "1DMIX-055",
+    "missing_timing_event_ids": [],
+    "outside_child_intervals_seconds": 152.99412608146667,
+    "phase_events": [
+      {
+        "event_id": "be3ded566442437da872a9e4e62b10f4",
+        "finished_at": "2026-09-28T14:05:31.042814+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "verification",
+        "reason": null,
+        "seconds": 9.401930541993352,
+        "started_at": "2026-09-28T14:05:21.640647+00:00"
+      },
+      {
+        "event_id": "b913c3bca01a42838e0ae381f3008f3b",
+        "finished_at": "2026-09-28T14:07:42.715282+00:00",
+        "issue_id": "1DMIX-055",
+        "phase": "closeout",
+        "reason": null,
+        "seconds": 0.8364198749768548,
+        "started_at": "2026-09-28T14:07:41.878655+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 152.99412608146667,
+    "start": "2026-09-28T14:05:09.720485+00:00",
+    "unknown_cost_event_ids": []
+  }
+}
