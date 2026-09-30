@@ -979,3 +979,77 @@ The next issue touching validation results produces a sealed report with disposi
 
 ### Expected Effect
 Validation-report passages are covered by the sealed documentation contract.
+
+---
+
+## 🔴 PROPOSED: `/esx-loop cancel` must not stop the loop; it should only prevent the next iteration from starting from the top
+
+**Date Identified**: 2026-09-30  15:10
+**Status**: Proposed
+**UUID**: TEAM-LOOP-CANCEL-DRAIN-001
+**Category**: loop_control
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
+**Anchors**: .claude/commands/esx-loop.md; tools/esx/loop_control.py:cancel
+
+### Issue
+The owner ran `/esx-loop cancel` while Bob was implementing 1DMIX-072. The command text says "drain the queued cancellation notification, and stop". `loop_control.cancel` archives the state immediately and queues "Loop ending: cancelled ... Unfinished work remains recorded on disk". Arch took this as abandonment: it stopped its wait monitors and offered to stop the running implementer. The owner's intended semantics: "/esx-loop cancel should only stop the NEXT loop cycle, not stop work in progress". After cancel, the Stop hook also no longer holds Arch in-turn for the running dispatch, although `loop_gate.py --next` still reports the active iteration.
+
+### Evidence
+Session 377c3c70, 2026-09-30 ~15:05 UTC. The loop_end notice was sent while native_inflight/a4085c6d408956115.json existed and issue-start.json named 1DMIX-072.
+
+### Potential Impact
+In-flight issues are abandoned half-implemented and uncommitted, or running agents are killed mid-edit.
+
+### Proposed Fix
+Owner semantics (verbatim): "/esx-loop cancel command should not stop the loop, just stop the next iteration from kicking off from the top."
+`loop_control.cancel` should neither archive the state nor end the loop. It should set a flag in the live state, e.g. `stop_after_current: true` plus the reason. Everything else keeps running unchanged:
+- the Stop hook still holds Arch in-turn for running dispatches;
+- `loop_gate.py --next` still drives the active iteration through review, correction rounds, final verification, --check-done, commit/push, notifications and the retrospective.
+
+The flag acts only at the point where `--next` would select a new issue from the top. There it ends the loop: archive the state as CANCELLED and send loop_end with the closed issue listed. If no iteration is active at cancel time, the loop ends immediately, as now. Update the command text in .claude/commands/esx-loop.md, replacing "drain the queued cancellation notification, and stop" with "the active iteration is finished normally; no new iteration starts". An immediate abandon, if ever wanted, is a separate explicit `abort` subcommand.
+
+### Acceptance Criteria
+Cancel issued mid-iteration while an implementer is running:
+- the dispatch keeps running and the Stop hook still holds;
+- the active issue closes and its retrospective is accepted;
+- no new issue is selected;
+- loop_end is sent after the retrospective, and the archived state records the cancellation reason and the last issue closed.
+
+Cancel with no active iteration ends the loop immediately.
+
+### Expected Effect
+Owner cancellations never strand in-flight work.
+
+---
+
+## 🔴 PROPOSED: Stop hook blocks the owner session while a subagent runs, and Claude Code shows each block to the owner as "Stop hook error"
+
+**Date Identified**: 2026-09-30  15:15
+**Status**: Proposed
+**UUID**: TEAM-LOOP-INFLIGHT-BLOCK-NOISE-001
+**Category**: owner_experience
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
+**Anchors**: tools/esx/ralph_stop.py:305; tools/esx/ralph_stop.py:native_in_flight
+
+### Issue
+When Arch ends a turn while a native subagent (Bob/Richard) runs, `ralph_stop.step` returns `{"decision": "block", "reason": "An ESX dispatch (retained session or Agent-tool subagent) is still running. Wait in-turn for its completion record (do not end the turn to wait), then continue with tools/esx/loop_gate.py --next."}`. Claude Code renders every Stop-hook block to the owner as "Ran 2 stop hooks / Stop hook error: ..." and "Stop hook blocking error from command: ...". The owner asked whether this was an ESX failure and called the messages ridiculous.
+
+The instruction is also not satisfiable in this harness. Foreground `sleep` chains are refused. A foreground until-loop is moved to the background after its 600 s timeout. Background tasks and Monitor notify only asynchronously. So Arch cannot actually "wait in-turn" for a long dispatch: it ends the turn, gets blocked, re-polls, and every cycle produces another "error" line for the owner.
+
+### Evidence
+Session 377c3c70 on 2026-09-30: blocks during 1DMIX-054 correction round 2 (Bob ac6067da...) and during 1DMIX-072 (Bob a4085c6d...). One foreground until-loop hit the 600 s limit and was backgrounded; `sleep 30; for ...` was refused ("Do not chain shorter sleeps"). The owner's words: "why did stop hook error ... is this an esx error?" and "file an esx-team issue about these ridiculous messages".
+
+### Potential Impact
+The owner sees false error reports during normal operation, erodes trust in real errors, and has to interrupt work to ask about them. Arch spends turns re-polling.
+
+### Proposed Fix
+While a native dispatch is in flight, allow the stop: return `{}`, do not advance the iteration counter and send no progress post. The purpose of the 1.5.1 in-flight check (TEAM-LOOP-WAIT-BURNS-ITERATION-001) was to stop iteration burn, not to force a busy-wait. Claude Code re-invokes the session with the subagent's completion notification, and the next Stop event continues the loop as usual. Keep the block only for cases where no completion notification will arrive (e.g. a retained external session with no notifier), and there word the reason as status, not failure. Example: "ESX: holding the loop — Bob (a4085c6d) has been running for 12 min; continuing when it reports." Remove the impossible "do not end the turn to wait" instruction from the hook text and from the Arch guidance.
+
+### Acceptance Criteria
+- With a native subagent running, ending Arch's turn produces no "Stop hook error" line, does not change the iteration counter, sends no Slack post, and the loop resumes on the completion notification.
+- The existing NativeInFlightTests are updated to assert "allow stop, no advance" instead of "block".
+
+### Expected Effect
+No false error lines shown to the owner during normal dispatch waits; no busy-wait turns.
