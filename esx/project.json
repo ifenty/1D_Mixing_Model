@@ -22,7 +22,9 @@
     "MITgcm_to_Python_port_verification/KPP_port_validation/NETCDF_DATA_FORMAT.md",
     "MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md",
     "MITgcm_to_Python_port_verification/GGL90_port_validation/CONVENTIONS_STANDALONE_DATA.md",
-    "MITgcm_to_Python_port_verification/GGL90_port_validation/NETCDF_DATA_FORMAT.md"
+    "MITgcm_to_Python_port_verification/GGL90_port_validation/NETCDF_DATA_FORMAT.md",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md",
+    "MITgcm_to_Python_port_verification/GGL90_port_validation/GGL90_VALIDATION_RESULTS.md"
   ],
   "output_paths": [
     "Vertical_Mixing_Models/output"
