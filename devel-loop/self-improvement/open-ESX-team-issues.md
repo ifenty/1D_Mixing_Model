@@ -1064,7 +1064,7 @@ No false error lines shown to the owner during normal dispatch waits; no busy-wa
 **Category**: owner_experience
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
-**Anchors**: tools/esx/notifications.py; tools/esx/ralph_stop.py; tools/esx/loop_gate.py:--next; .claude/skills/esx-announce/SKILL.md
+**Anchors**: tools/esx/notifications.py; tools/esx/ralph_stop.py; tools/esx/loop_gate.py; .claude/skills/esx-announce/SKILL.md
 
 ### Issue
 On long runs (multi-hour issues, a 20-iteration loop, Bob dispatches lasting 15-60+ min), the owner sees nothing on screen for long stretches. The harness had to inject "The user hasn't heard from you in a while" several times this session. Slack gets only event-driven posts (issue start/close/new issue/loop end), so there is no periodic sign of life or ETA.
@@ -1083,7 +1083,7 @@ The owner can't tell progress from a hang without interrupting, and has no remai
    - Enforcement: loop_gate/ralph_stop records `last_screen_status_at`. Guidance (plus a gate NEXT hint when overdue) tells Arch to emit the line. Waits are split so Arch regains the turn at least every 15 min (background watcher with a 15-min wake, not one 2-h wait).
 2. **Slack, hourly, one sentence.**
    - A new notification kind `loop_heartbeat` is queued by notifications.synchronize when at least 60 min have passed since the last heartbeat and the loop is active. It is delivered like the other kinds, with receipts.
-   - Fixed one-sentence template: "[1D-Mixing] Loop iteration {i}/{max}: {status} on {issue} ({phase}); ~{eta} remaining; {n_open} open issues."
+   - Fixed one-sentence template: "[{project_short_name}] Loop iteration {i}/{max}: {status} on {issue} ({phase}); ~{eta} remaining; {n_open} open issues." `{project_short_name}` is the project's brief name from project.json (the same prefix the other notification kinds use, e.g. "1D-Mixing"), never hard-coded
    - ETA comes from recorded per-phase durations (team_accounting / prior issue timings) times the remaining phases and the open-issue count, and is marked "~" and "unknown" when there is no history.
    - No heartbeat is sent within 10 min of an event post, to avoid duplicates.
 3. Both cadences go in project.json (e.g. `communication.screen_status_minutes: 15`, `communication.slack_heartbeat_minutes: 60`), so projects can tune them.
