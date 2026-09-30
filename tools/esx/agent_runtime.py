@@ -121,12 +121,48 @@ def footer_from(message):
     return value if isinstance(value, dict) else None
 
 
+def transcript_report(path):
+    """The subagent's final report from its own transcript: the last SubagentHandback
+    message, else the last assistant text. Never another agent's or the parent's text."""
+    try:
+        lines = Path(path).read_text(errors="replace").splitlines() if path else []
+    except (OSError, TypeError, ValueError):
+        return None
+    for line in reversed(lines):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        message = row.get("message") if isinstance(row, dict) else None
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        content = message.get("content")
+        blocks = content if isinstance(content, list) else [{"type": "text", "text": content}]
+        for block in reversed(blocks):
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("name") == "SubagentHandback":
+                text = (block.get("input") or {}).get("message")
+                if isinstance(text, str) and text.strip():
+                    return text
+            if block.get("type") == "text" and isinstance(block.get("text"), str) and block["text"].strip():
+                return block["text"]
+    return None
+
+
 def stop_record(root, event, *, transport="native_subagent"):
     """Persist a native hook stop without equating a stop with a completed report."""
     event = event if isinstance(event, dict) else {}
     message = event.get("last_assistant_message") or ""
     if not isinstance(message, str):
         message = ""
+    report_source = "last_assistant_message"
+    if footer_from(message) is None:
+        # A subagent may deliver its report through the SubagentHandback tool, leaving
+        # the final assistant text empty; recover the same report from its transcript.
+        recovered = transcript_report(event.get("agent_transcript_path"))
+        if recovered and footer_from(recovered) is not None:
+            message, report_source = recovered, "agent_transcript"
     footer = footer_from(message)
     status, error = "completed", None
     if event.get("is_error") or event.get("error"):
@@ -150,7 +186,8 @@ def stop_record(root, event, *, transport="native_subagent"):
         "issue_id": (footer or {}).get("issue_id"),
         "iteration_timestamp": (footer or {}).get("iteration_timestamp"),
         "correction_round": (footer or {}).get("correction_round", 0),
-        "message_chars": len(message), "report": reference(report_path, Path(root)),
+        "message_chars": len(message), "report_source": report_source,
+        "report": reference(report_path, Path(root)),
     }
     append_record(root, record)
     return record
@@ -682,13 +719,16 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
             if review is not None:
                 assignment["review"] = review
                 state["review_packet"] = review
-            command += ["--append-system-prompt",
-                        "ESX dispatcher assignment: " + json.dumps(assignment)
-                        + "\nUse agent_id as your verification owner and peer sender identity. "
-                        "Use the supplied issue, iteration and correction round in your footer. "
-                        "The baseline identifies issue maintenance evidence. Follow the bounded brief, "
-                        "record your own orientation and preserve project permissions. "
-                        "Read supplied review references and confirm the exact sealed documentation in your footer."]
+            # A file, not an argv string: Linux caps one argument at 131,072 bytes
+            # (MAX_ARG_STRLEN) and the review context grows with each round.
+            (turn / "assignment.txt").write_text(
+                "ESX dispatcher assignment: " + json.dumps(assignment)
+                + "\nUse agent_id as your verification owner and peer sender identity. "
+                "Use the supplied issue, iteration and correction round in your footer. "
+                "The baseline identifies issue maintenance evidence. Follow the bounded brief, "
+                "record your own orientation and preserve project permissions. "
+                "Read supplied review references and confirm the exact sealed documentation in your footer.")
+            command += ["--append-system-prompt-file", str(turn / "assignment.txt")]
         if transition_result and transition_result["classification"] == "assessed":
             prompt = "Assessed runtime transition for this retained session. Read changed instruction files before acting: " + json.dumps(transition_result) + "\n" + prompt
         (turn / "prompt.txt").write_text(prompt)
@@ -722,8 +762,9 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
             error = 'invalid provider cost; full reservation retained'
             usage['cost_usd'] = None
         settlement = team_budget.settle(root, event_id, usage.get('cost_usd'))
-        if settlement.get('provider_overshoot'):
-            error = 'provider exceeded reservation; further launches are blocked'
+        # Reservations are nominal (team_budget): an overshoot is recorded data, never a
+        # turn failure. A retained session's per-turn cost grows with its context.
+        provider_overshoot = bool(settlement.get('provider_overshoot'))
         footer = footer_from(message)
         review_outcome = None
         status = "completed"
@@ -765,6 +806,7 @@ def _run_turn(root, *, role=None, issue=None, prompt, session=None, correction_r
                   "iteration_timestamp": iteration_timestamp,
                   "status": status, "error": error, "footer": footer,
                   "review_outcome": review_outcome,
+                  "provider_overshoot": provider_overshoot,
                   "execution_phase": ("launch_failed" if code is None else
                       "approved" if status == "completed" and (footer or {}).get("verdict") in ("APPROVE", "APPROVE_WITH_FIXES")
                       else "completed" if status == "completed" else "executed_" + status),

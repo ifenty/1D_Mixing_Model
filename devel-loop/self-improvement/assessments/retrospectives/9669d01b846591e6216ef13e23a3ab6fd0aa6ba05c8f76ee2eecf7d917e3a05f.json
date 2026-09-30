@@ -1,0 +1,325 @@
+{
+  "retrospective": {
+    "schema_version": 3,
+    "id": "1DMIX-065",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-30T04:37:27.455351+00:00",
+    "timestamp": "2026-09-30T06:54:33Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/afe864af4ff29b15a977c6cedc33a6d391dd2b6c6e8df4f5d61462a573bc5c2c.json",
+      "sha256": "afe864af4ff29b15a977c6cedc33a6d391dd2b6c6e8df4f5d61462a573bc5c2c"
+    },
+    "measured": {
+      "span_minutes": 135,
+      "dispatches": {
+        "bob": 1,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 1,
+        "richard": 1
+      },
+      "cost_usd": {
+        "bob": 0.0,
+        "richard": 0.0
+      },
+      "unknown_cost_event_ids": [
+        "43d4571727214c5584f3fbce91198e0a",
+        "46d592ae96684b2da6af27f9c9f85ad2"
+      ],
+      "coordinator_coverage": "recorded",
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator": {
+        "tool_measured_minutes": 2.3,
+        "self_reported_minutes": 150.0,
+        "self_reported_usd": null,
+        "provider_reported_usd": null
+      },
+      "cost_scope": "cost_usd and span-based figures describe dispatched agents; coordinator cost is recorded separately: Arch self-reported 150 min, cost unknown (coordinator.self_reported; not added to cost_usd)"
+    },
+    "problems": [
+      {
+        "category": "resource_bounds",
+        "summary": "A native Bob ran a whole-file MITgcm output parser on a 13.8 GB capture that held about 24 GB of 27 GB for 25+ minutes; the owner had to kill it.",
+        "evidence": "PID 234086 RSS 23.9 GB, free 0 GB; owner kill; parser rewritten to stream at 0.155 GB peak",
+        "minutes_lost": 45
+      },
+      {
+        "category": "completion_capture",
+        "summary": "Bob and Richard reports delivered via SubagentHandback were recorded as incomplete dispatches; each needed a resume turn to re-state its footer.",
+        "evidence": "events 19439763a8a745bc85af8a5dacfaaf56 and 24f08e96201f461cbfafb0a71d616cf1 incomplete with empty reports",
+        "minutes_lost": 10
+      },
+      {
+        "category": "documentation_inventory",
+        "summary": "The authoritative capture provenance docs are outside the documentation inventory, so the sealed report could not cite them.",
+        "evidence": "doc_contract seal: \"contains no inventoried documentation\" for KPP/GGL90 CAPTURES/CONVENTIONS/NETCDF docs",
+        "minutes_lost": 8
+      },
+      {
+        "category": "closeout_receipt",
+        "summary": "The final-verification receipt went stale when agent_continuity was added and could only be rebound against issue-done.json.",
+        "evidence": "RECEIPT_SIGNATURE_STALE; rebind-receipt refused the packet-bound receipt; issue-done rebind REUSED EVIDENCE",
+        "minutes_lost": 6
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-HEAVY-COMMAND-MEMORY-001"
+      },
+      {
+        "problem": 1,
+        "action": "filed",
+        "issue": "TEAM-HANDBACK-CAPTURE-001"
+      },
+      {
+        "problem": 2,
+        "action": "filed",
+        "issue": "TEAM-DOC-INVENTORY-PROVENANCE-001"
+      },
+      {
+        "problem": 3,
+        "action": "filed",
+        "issue": "TEAM-RECEIPT-CONTINUITY-001"
+      }
+    ],
+    "confirmations": [
+      {
+        "category": "independent_review",
+        "summary": "Asking Richard to re-derive values from the raw MITgcm text with his own streaming oracle, not to re-run the implementer harness, produced strong independent evidence.",
+        "evidence": "Richard compared 1,382,400 global_oce_latlon and 162,000 lab_sea printed values exactly and corroborated the tile remap against Coriolis and MITgcm binary T snapshots"
+      }
+    ],
+    "carry_forward": [
+      "Before any parse or processing of a capture, check its size and free memory and run under ulimit -v; parsers must stream."
+    ],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 1.653536081314087,
+        "elapsed_seconds": 1.653536081314087,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.23478007316589355,
+        "elapsed_seconds": 0.23478007316589355,
+        "events": 5
+      },
+      "verification": {
+        "effort_seconds": 236.82787680625916,
+        "elapsed_seconds": 236.82787680625916,
+        "events": 6
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 1,
+        "reported_usd": 0.0,
+        "rounds": 1,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 1,
+        "usage": {}
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 0.0,
+        "rounds": 1,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 1,
+        "usage": {}
+      }
+    },
+    "child_elapsed_seconds": 0,
+    "components": [
+      {
+        "event_id": "43d4571727214c5584f3fbce91198e0a",
+        "kind": "unmetered_native",
+        "parent_event_id": "43d4571727214c5584f3fbce91198e0a",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "46d592ae96684b2da6af27f9c9f85ad2",
+        "kind": "unmetered_native",
+        "parent_event_id": "46d592ae96684b2da6af27f9c9f85ad2",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      }
+    ],
+    "coordinator": {
+      "coverage": "recorded",
+      "included_in_reported_usd": "no",
+      "provider_reported_usd": null,
+      "self_reported": {
+        "minutes": 150.0,
+        "records": [
+          {
+            "minutes": 150.0,
+            "phase": "coordination",
+            "record_id": "c2920d4f8da04f33a8946ae11601505e",
+            "recorded_at": "2026-09-30T06:54:32.509772+00:00",
+            "source": "Arch estimate from session wall-clock 04:36-06:55 UTC, including ESX 1.5.5-1.5.7 work interleaved; USD not observable in the interactive session",
+            "usd": null
+          }
+        ],
+        "records_without_usd": 1,
+        "usd": null
+      },
+      "tool_measured": {
+        "basis": "wall time of gate commands run as arch; excludes interactive session time",
+        "effort_seconds": 140.93895888328552,
+        "elapsed_seconds": 140.93895888328552,
+        "events": 5
+      }
+    },
+    "coordinator_coverage": "recorded",
+    "end": "2026-09-30T06:52:48.708162+00:00",
+    "issue_id": "1DMIX-065",
+    "missing_timing_event_ids": [
+      "43d4571727214c5584f3fbce91198e0a",
+      "46d592ae96684b2da6af27f9c9f85ad2"
+    ],
+    "outside_child_intervals_seconds": 8121.252810955048,
+    "phase_events": [
+      {
+        "event_id": "53e43220616a4955b9ff5856d68b8b9b",
+        "finished_at": "2026-09-30T04:37:45.844489+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.07588693200000307,
+        "started_at": "2026-09-30T04:37:45.768598+00:00"
+      },
+      {
+        "event_id": "949d741e3f43499cab822553e5e48d96",
+        "finished_at": "2026-09-30T04:38:56.690284+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.023819951999939803,
+        "started_at": "2026-09-30T04:38:56.666460+00:00"
+      },
+      {
+        "event_id": "afb31fb3af874513924e1ac883b3a32f",
+        "finished_at": "2026-09-30T04:39:08.979484+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.05426036100004694,
+        "started_at": "2026-09-30T04:39:08.925219+00:00"
+      },
+      {
+        "event_id": "41c73b69d5d043a4868bfff0a39f82c3",
+        "finished_at": "2026-09-30T06:20:40.742977+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "verification",
+        "reason": null,
+        "role": "a929aa3cc03062333",
+        "seconds": 3.3800999960003537,
+        "started_at": "2026-09-30T06:20:37.362870+00:00"
+      },
+      {
+        "event_id": "4bef592f334f4396ae576a4cb4cf1198",
+        "finished_at": "2026-09-30T06:22:21.824691+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "verification",
+        "reason": null,
+        "role": "a929aa3cc03062333",
+        "seconds": 3.0695172119994822,
+        "started_at": "2026-09-30T06:22:18.755169+00:00"
+      },
+      {
+        "event_id": "f5198352f9a24c588abfc3f6e489304f",
+        "finished_at": "2026-09-30T06:23:30.552790+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "verification",
+        "reason": null,
+        "role": "a929aa3cc03062333",
+        "seconds": 46.30728502199963,
+        "started_at": "2026-09-30T06:22:44.245503+00:00"
+      },
+      {
+        "event_id": "9f9483f2dbdc4ff1823e0c363e2053fe",
+        "finished_at": "2026-09-30T06:29:33.570630+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.039665825000156474,
+        "started_at": "2026-09-30T06:29:33.530960+00:00"
+      },
+      {
+        "event_id": "b31910c1c3b746fc9eb76d346059d40c",
+        "finished_at": "2026-09-30T06:31:08.971623+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 3.004535883999779,
+        "started_at": "2026-09-30T06:31:05.967081+00:00"
+      },
+      {
+        "event_id": "0cd2d5600afd4438b5a10cfb7c5e2985",
+        "finished_at": "2026-09-30T06:32:25.027895+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.04112553199956892,
+        "started_at": "2026-09-30T06:32:24.986765+00:00"
+      },
+      {
+        "event_id": "0cef4464996946958dd2da6e8eee52cd",
+        "finished_at": "2026-09-30T06:33:13.860813+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "verification",
+        "reason": null,
+        "role": "a403bea90aa9b0485",
+        "seconds": 44.90109314300025,
+        "started_at": "2026-09-30T06:32:28.959714+00:00"
+      },
+      {
+        "event_id": "505d8a15dc3f44b980c0d173c2d981ac",
+        "finished_at": "2026-09-30T06:49:52.436157+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 136.16531946899886,
+        "started_at": "2026-09-30T06:47:36.270837+00:00"
+      },
+      {
+        "event_id": "64c82bece56545c3af40682d927b0ca6",
+        "finished_at": "2026-09-30T06:50:39.810848+00:00",
+        "issue_id": "1DMIX-065",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 1.6535399539989157,
+        "started_at": "2026-09-30T06:50:38.157312+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 8121.252810955048,
+    "start": "2026-09-30T04:37:27.455351+00:00",
+    "unknown_cost_event_ids": [
+      "43d4571727214c5584f3fbce91198e0a",
+      "46d592ae96684b2da6af27f9c9f85ad2"
+    ]
+  }
+}

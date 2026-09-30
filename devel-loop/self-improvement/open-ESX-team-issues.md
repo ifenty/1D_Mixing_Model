@@ -737,3 +737,123 @@ With a final assistant message containing the promise and a transcript that is f
 
 ### Expected Effect
 Zero iterations consumed after a gate-confirmed no-actionable-work state.
+
+---
+
+## 🔴 PROPOSED: A heavy role command ran with unbounded memory and nearly exhausted the host
+
+**Date Identified**: 2026-09-30  07:00
+**Status**: Proposed
+**UUID**: TEAM-HEAVY-COMMAND-MEMORY-001
+**Category**: resource_bounds
+**Severity**: High
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/runtime_tool_hook.py; .claude/skills/esx-common/SKILL.md
+
+### Issue
+A native Bob ran `parse_mitgcm_split.py` on a 13.8 GB MITgcm output.txt; the parser accumulated every timestep and held ~24 GB of 27 GB for 25+ minutes with 0 free. Nothing in the kit bounds a role command's memory, and the owner had to kill it by hand (Arch's kill was denied by the auto-mode classifier).
+
+### Evidence
+1DMIX-065, 2026-09-30: PID 234086, RSS 23.9 GB, `free -g` available 0; owner `kill 234086`. The project parser was rewritten to stream (0.155 GB peak) under the same issue.
+
+### Potential Impact
+One role command can starve the whole machine, including other projects' sessions, and the loop has no way to notice.
+
+### Proposed Fix
+esx-common guidance: check file sizes and `free -g` before heavy commands and run them under `ulimit -v`; optionally have bounded_command apply an address-space limit from project config for wrapped commands.
+
+### Acceptance Criteria
+A wrapped command exceeding the configured limit fails fast with a recorded error instead of consuming host memory.
+
+### Expected Effect
+Zero host-memory exhaustion incidents from role commands.
+
+---
+
+## 🔴 PROPOSED: Reports returned through SubagentHandback were recorded as incomplete dispatches
+
+**Date Identified**: 2026-09-30  07:00
+**Status**: Proposed
+**UUID**: TEAM-HANDBACK-CAPTURE-001
+**Category**: completion_capture
+**Severity**: High
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/agent_runtime.py:stop_record
+
+### Issue
+The CLI now makes Agent-tool subagents return their final report via the SubagentHandback tool; SubagentStop's last_assistant_message is then empty and ESX 1.5.6 records the finished dispatch as `incomplete: missing ... footer`.
+
+### Evidence
+1DMIX-065 Bob event 19439763a8a745bc85af8a5dacfaaf56 and Richard event 24f08e96201f461cbfafb0a71d616cf1 both incomplete with empty reports; each needed a resumed turn to re-state its footer in plain text.
+
+### Potential Impact
+Every native dispatch needs an extra resume turn, and a completion can be lost if not noticed.
+
+### Proposed Fix
+Recover the report from the subagent transcript (ESX-Team 1.5.7, ff1c0ee); deploy to this project after 1DMIX-065.
+
+### Acceptance Criteria
+A SubagentHandback-only report records as completed with report_source agent_transcript.
+
+### Expected Effect
+Zero resume turns needed only to re-state footers.
+
+---
+
+## 🔴 PROPOSED: Capture provenance docs are outside the documentation inventory, so the sealed report cannot cite them
+
+**Date Identified**: 2026-09-30  07:00
+**Status**: Proposed
+**UUID**: TEAM-DOC-INVENTORY-PROVENANCE-001
+**Category**: documentation_inventory
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: esx/project.json; tools/esx/doc_contract.py:docs_measure
+
+### Issue
+The KPP/GGL90 `*_port_validation/*.md` files (CAPTURES.md, CONVENTIONS_STANDALONE_DATA.md, NETCDF_DATA_FORMAT.md) hold the authoritative capture provenance but are not in the documentation inventory, so doc_contract rejects them as references ('contains no inventoried documentation').
+
+### Evidence
+1DMIX-065 seal failed on those references; dispositions had to cite scripts/README.md and name the provenance docs only in reason text. Richard reviewed them manually.
+
+### Potential Impact
+The documentation contract cannot measure or bind the most important provenance record of a data-regeneration issue.
+
+### Proposed Fix
+Decide with the owner whether to add the *_port_validation docs to an inventoried configuration path in esx/project.json.
+
+### Acceptance Criteria
+doc_contract accepts a CAPTURES.md section as a disposition reference.
+
+### Expected Effect
+Provenance docs are bound by sealed reports.
+
+---
+
+## 🔴 PROPOSED: Final verification must be rebound against the closeout because the review packet lacks agent_continuity
+
+**Date Identified**: 2026-09-30  07:00
+**Status**: Proposed
+**UUID**: TEAM-RECEIPT-CONTINUITY-001
+**Category**: closeout_receipt
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/loop_lifecycle.py:prepare_done; tools/esx/final_verification.py
+
+### Issue
+final_verification binds its receipt to the review packet's signed fields, but agent_continuity (a signed closeout field) is only added after prepare-done, so the receipt is always stale and `rebind-receipt` refuses a packet-bound receipt.
+
+### Evidence
+1DMIX-065: RECEIPT_SIGNATURE_STALE after adding agent_continuity; rebind succeeded only by running `final_verification.py run --review devel-loop/loop_state/issue-done.json` (REUSED EVIDENCE).
+
+### Potential Impact
+Every scientific closeout needs an undocumented extra step.
+
+### Proposed Fix
+Have prepare-done derive agent_continuity from the selected events (or carry it in the final packet) before the receipt is taken, or document the issue-done rebind.
+
+### Acceptance Criteria
+A scientific closeout reaches --check-done without a manual rebind.
+
+### Expected Effect
+Zero manual receipt rebinds.
