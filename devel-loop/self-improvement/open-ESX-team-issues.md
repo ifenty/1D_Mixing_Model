@@ -1053,3 +1053,45 @@ While a native dispatch is in flight, allow the stop: return `{}`, do not advanc
 
 ### Expected Effect
 No false error lines shown to the owner during normal dispatch waits; no busy-wait turns.
+
+---
+
+## 🔴 PROPOSED: long loop runs need a 15-minute on-screen status line and an hourly one-sentence Slack heartbeat
+
+**Date Identified**: 2026-09-30  15:25
+**Status**: Proposed
+**UUID**: TEAM-LOOP-PROGRESS-CADENCE-001
+**Category**: owner_experience
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
+**Anchors**: tools/esx/notifications.py; tools/esx/ralph_stop.py; tools/esx/loop_gate.py:--next; .claude/skills/esx-announce/SKILL.md
+
+### Issue
+On long runs (multi-hour issues, a 20-iteration loop, Bob dispatches lasting 15-60+ min), the owner sees nothing on screen for long stretches. The harness had to inject "The user hasn't heard from you in a while" several times this session. Slack gets only event-driven posts (issue start/close/new issue/loop end), so there is no periodic sign of life or ETA.
+
+Owner requirement (verbatim): "on long runs I want a status update to the screen (not slack) every 15 minutes. on long runs I want a very brief update (one sentence) to slack every 1h mentioning loop iteration, status, expected remaining time, # open issues remaining".
+
+### Evidence
+Session 377c3c70, 2026-09-30: 1DMIX-054 ran about 2 h and 1DMIX-072's Bob dispatch about 17 min, with no periodic owner-facing status. The "hasn't heard from you" reminders are in the transcript.
+
+### Potential Impact
+The owner can't tell progress from a hang without interrupting, and has no remaining-time estimate.
+
+### Proposed Fix
+1. **Screen, every 15 min, no Slack.**
+   - While a loop is active, Arch prints one terminal status line at least every 15 min of wall-clock: active issue, phase (implementing/review round N/closeout), running agent and elapsed time.
+   - Enforcement: loop_gate/ralph_stop records `last_screen_status_at`. Guidance (plus a gate NEXT hint when overdue) tells Arch to emit the line. Waits are split so Arch regains the turn at least every 15 min (background watcher with a 15-min wake, not one 2-h wait).
+2. **Slack, hourly, one sentence.**
+   - A new notification kind `loop_heartbeat` is queued by notifications.synchronize when at least 60 min have passed since the last heartbeat and the loop is active. It is delivered like the other kinds, with receipts.
+   - Fixed one-sentence template: "[1D-Mixing] Loop iteration {i}/{max}: {status} on {issue} ({phase}); ~{eta} remaining; {n_open} open issues."
+   - ETA comes from recorded per-phase durations (team_accounting / prior issue timings) times the remaining phases and the open-issue count, and is marked "~" and "unknown" when there is no history.
+   - No heartbeat is sent within 10 min of an event post, to avoid duplicates.
+3. Both cadences go in project.json (e.g. `communication.screen_status_minutes: 15`, `communication.slack_heartbeat_minutes: 60`), so projects can tune them.
+
+### Acceptance Criteria
+- In a simulated 2-h active loop, at least 8 screen status lines and exactly 2 Slack heartbeats appear.
+- Each heartbeat is one sentence containing the iteration, status, ETA and open-issue count.
+- No heartbeat is sent when the loop is inactive or cancelled, and none goes to Slack from the 15-min cadence.
+
+### Expected Effect
+The owner always knows the loop is alive, where it is, and roughly how long remains, without interrupting.
