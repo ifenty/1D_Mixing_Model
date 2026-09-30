@@ -114,6 +114,63 @@ collapse it to floating-point noise once corrected. Fixed in
 `compute_buoyancy_gradients`/`compute_ggl90_buoyancy_frequency_squared`/
 `compute_static_instability_mask`.
 
+**Resolved (1DMIX-068) -- bit-level operation order of the GGL90 N²**: the
+port already matched MITgcm's *formula* (potential density, k-1 water at level
+k's pressure; 1DMIX-001/039), but not its floating-point *association order*,
+which moves ρ by ~1 ulp (2.3e-13 kg/m³ near 1027 kg/m³) in about half of all
+cells. In a near-neutral cell at the TKE floor N² is itself about one such
+quantum, and `Ri = N²/GGL90eps` then crossed the 0.2 Prandtl threshold that
+MITgcm's did not (attempt-A capture of 1DMIX-066: bottom-face N² 6.4e-17 vs
+MITgcm 3.2e-17, Ri 0.289 vs 0.144). MITgcm's exact chain, reproduced operation
+for operation by `main/eos.py::compute_ggl90_buoyancy_frequency_squared` and
+`::jmd95_eos`:
+
+```
+p(k)      = (top_Pres + rhoConst*(rC(k)-rF(1))*gravity*gravitySign) * SItoBar   set_ref_state.F:96-97, find_rho.F
+rho'(k)   = rhoP0/(1 - p/bulkMod) - rhoConst                      find_rho.F  (anomaly, not full rho)
+  rhoP0   = rfresh + (s*(..) + s3o2*(..) + c9*s*s)                FIND_RHOP0: salt terms summed FIRST
+  bulkMod = bMfresh + bMsalt + bMpres                             FIND_BULKMOD: three group sums added last
+sigmaR(k) = recip_drC(k) * rkSign * (rho'(k) - rho'(k-1 @ p(k)))  grad_sigma.F:93-95 (rkSign = -1)
+  recip_drC(k) = 1/drC(k),  drC(k) = 0.5*(delR(k-1)+delR(k))      ini_vertical_grid.F:123-127
+Nsquare(k)= gravity*gravitySign*recip_rhoConst*sigmaR(k)          ggl90_calc.F:353-354 (gravitySign = -1)
+```
+
+Every operation is the same IEEE-754 double operation in the same order
+(MITgcm built `-O0`, no FMA, non-factorised EOS). `compute_ggl90_buoyancy_
+frequency_squared` therefore takes the layer thicknesses (`cell_thickness=dz`
+from `GGL90Driver.compute_mixing`) to form `drC` as MITgcm does (subtracting
+adjacent centre depths is only the fallback and differs by ~1 ulp), and calls
+`jmd95_eos(..., pressure_bar=...)` with `main/eos.py::_mitgcm_eos_pressure_bar`
+so the pressure conversion has MITgcm's rounding too. `jmd95_eos`'s
+`rho_surf`/`bulkmod` sums are now associated as `FIND_RHOP0`/`FIND_BULKMOD`
+(this also applies to its other callers, e.g. KPP's `compute_buoyancy_gradients`.
+There the change moves full ρ by up to 2 ulp -- measured on 3M random samples,
+0.07-0.5% exceed 1 ulp -- and KPP cell-level outputs can shift non-monotonically
+by up to ~4e-5 through branch flips, while aggregate statistics stay unchanged
+or improve (Richard, 1DMIX-068 review: 1D_10, 11k, lab_sea_1000); the KPP tests
+pass unchanged. The port's KPP path is not yet fully MITgcm-ordered: its
+pressure order and full-ρ handling in `compute_buoyancy_gradients` still differ.)
+**Caveat on N² bit-identity**: it assumes `depth` equals MITgcm's `rC`
+exactly, which the capture/replay path supplies. `ColumnGrid.from_thickness`
+builds centres from face midpoints, which differ from `rC` at ulp level in
+about 0.1% of faces (74 of 69,000; up to 3e-11 relative), so scenario-driven
+columns match MITgcm's N² to that level rather than bit-for-bit.
+Regression coverage: `Vertical_Mixing_Models/tests/test_ggl90_n2_mitgcm_bit_order.py`
+(real captured witnesses with exact MITgcm sigma_r/Ri, plus bit-equality against
+an independent restatement of `find_rho.F`/`grad_sigma.F` over 66,000 faces).
+
+**Known limit of the capture, not of the port (1DMIX-068)**: the instrumented
+`ggl90_calc.F`/`kpp_calc.F` print T, S, sigma_r, Ri and shear with `FORMAT E25.16`,
+i.e. 16 significant digits (a double needs 17). The captured T, S are therefore
+not bit-exact MITgcm inputs (S≈30 is quantised at 1e-14), so ~1.7% of faces
+(4341 of 242,000 in the attempt-A capture) legitimately come out one density
+quantum away from MITgcm's own sigma_r; every one of them is reproduced exactly
+by some T,S that prints identically to the captured values (a control target 3
+quanta away is reproduced by none). Feeding MITgcm's captured sigma_r instead
+of recomputed N² makes the whole replay agree with MITgcm to ~1e-15 relative,
+so nothing downstream of N² is limited. A bit-for-bit N² check needs the capture
+format widened to 17 significant digits (e.g. `ES25.17`) and the capture redone.
+
 ## GGL90 (prognostic TKE closure)
 
 Governing equation (full derivation: `Vertical_Mixing_Models/docs/GGL90/GGL90_package_description.tex`

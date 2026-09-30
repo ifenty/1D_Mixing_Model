@@ -1828,3 +1828,27 @@ Either add a variant that makes face 0 negative and above 100 (e.g. `-g - 10*(1+
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-09-30T09:29:02.956304+00:00 for iteration 2026-09-30T08:58:01.647123+00:00. test_real_pipeline_momentum_invariant_to_ghat gains face0neg (every face negative, face 0 = -115.8) and face0pos (face 0 = +115.8) variants with non-vacuity asserts, so leaks keyed to a face-0 condition alone (negative sign, |ghat[0]| > 100) at the sampled values are caught (N1, N5); both variants were shown necessary by ablation. Richard's round-0 REJECT showed face-0-plus-other-face conjunction leaks (M2-M4) escaping while the contract claimed face-0 sign covered; round 1 narrowed the claims to face-0-alone conditions at sampled values, named the conjunction class as uncovered, and stated that the witness certifies invariance only across its sampled variants (no further variants, to stop moving the boundary). Richard round 1: APPROVE. No model source changed. Final verification EXECUTED PASS: 128 passed, 3 skipped, 0 failed.
+
+## 🟢 RESOLVED: GGL90's epsilon-scaled Richardson number flips the Prandtl branch on a 1-ulp N² difference in near-neutral cells at the TKE floor
+
+**Date Identified**: 2026-09-30T08:56:00Z
+**Date Resolved**: 2026-09-30T10:35:32.512704+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-068
+**Anchors**: `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing`; `Vertical_Mixing_Models/main/physics_basis.py::compute_richardson_number`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`
+
+### Issue or research question
+In 1DMIX-066's rejected attempt-A capture (1D_ocean_ice_column, 11,000 steps, minimal data.ggl90), the bottom cell was near-neutral with TKE at the 1e-11 floor and shear about 1e-100. There the Prandtl number is set by Ri = N²/GGL90eps (eps = 2.23e-16), and the port's N² from captured T,S (6.4e-17) differed from MITgcm's implied N² (3.2e-17; captured sigma_r -3.37e-15) by about one ulp of density. That moved Ri from 0.144 to 0.289 across the 0.2 threshold, so diff_kz and mixing_length disagreed at the bottom two levels (19 cells >1%, mixing_length max abs 0.194 m). The kept recipe B avoids this regime (0 of 11,000 steps with Ri in [0.1, 0.4]); it does not cure it.
+
+### Evidence
+Bob (1DMIX-066 dispatch 7b291fc7, scratch probe_1d_A2.py) and Richard (dispatch 42b0e978, independent re-check) both reproduced the mechanism; attempt-A files are in devel-loop/loop_state/scratch/a90896957ec186e4c/attemptA_1d_minimal_namelist/.
+
+### Scientific or engineering impact
+Low: a documented EOS-roundoff-amplification family, confined to near-neutral cells at the TKE floor. But it means GGL90 agreement in such regimes depends on bit-level N², and any capture that exercises them will disagree.
+
+### Proposed action and acceptance
+Investigate whether MITgcm and the port compute N² at the face from the same quantities in the same order (e.g. MITgcm's sigma_r vs the port's recomputation from T,S), and whether replays should consume the captured sigma_r. Acceptance: either a port change that reproduces MITgcm's N² bit-for-bit in this regime (attempt-A capture then passes with no tolerance widened), or a documented, test-backed explanation of why the difference is irreducible.
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-09-30T10:35:32.512704+00:00 for iteration 2026-09-30T09:30:42.495951+00:00. Fixed a real port-vs-MITgcm mismatch: the port's GGL90 face N2 used MITgcm's formula but not its floating-point operation order, shifting density by about 1 ulp in half of all cells and flipping the Ri=0.2 Prandtl branch in near-neutral cells at the TKE floor. eos.py now follows find_rho.F / grad_sigma.F exactly (rhoP0 salt terms summed first, bulkMod fresh+salt+pressure, drC from delR, recip_drC*rkSign form, g*gravitySign*recip_rhoConst prefactor, MITgcm pressure rounding); GGL90Driver passes cell_thickness. Bit-identical to an independent MITgcm-order restatement on 242,000 attempt-A faces (Bob and, independently, Richard); 9 new regression tests with captured MITgcm witnesses. The shared jmd95_eos change is MITgcm's order for KPP too (same FIND_RHO_2D); KPP aggregates unchanged or improved. Residual 9 bottom-face cells traced to E25.16 capture print precision (exact when captured sigma_r is replayed), filed with an instrumentation loop-bound defect as 1DMIX-069. Richard: APPROVE_WITH_FIXES then APPROVE after doc corrections. Final verification EXECUTED PASS: 137 passed, 3 skipped, 0 failed.

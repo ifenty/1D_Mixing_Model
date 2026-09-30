@@ -413,9 +413,14 @@ class GGL90Driver:
         # Compute N² using POTENTIAL density gradients (MITgcm's sigmaR).
         # This is the key fix: the old code used in-situ density gradients,
         # which incorrectly included compressibility effects.
+        # `cell_thickness=dz` lets the function form MITgcm's drC =
+        # 0.5*(delR(k-1)+delR(k)) exactly; together with its MITgcm-ordered
+        # EOS this reproduces MITgcm's N^2 bit-for-bit, which matters in
+        # near-neutral cells at the TKE floor (1DMIX-068).
         from main.eos import compute_ggl90_buoyancy_frequency_squared
         n_square = compute_ggl90_buoyancy_frequency_squared(
-            theta, salt, depth, rho_const, gravity, use_jmd95=True
+            theta, salt, depth, rho_const, gravity, use_jmd95=True,
+            cell_thickness=dz
         )
         shear_square = compute_vertical_shear_squared(u, v, z)
 

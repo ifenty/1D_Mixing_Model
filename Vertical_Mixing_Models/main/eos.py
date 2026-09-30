@@ -6,7 +6,7 @@ Completely independent of mixing scheme - physical constants passed as parameter
 """
 
 import numpy as np
-from typing import Tuple
+from typing import Optional, Tuple
 
 # The jmd95 polynomial fit is only valid over roughly -2 to 40 degC. Without a
 # sea-ice model, nothing stops a column's surface temperature from cooling far
@@ -65,6 +65,32 @@ def _depth_to_eos_pressure(
     `rho_const*gravity*1e-4*(-depth)`.
     """
     return (-depth) * rho_const * gravity * 1.0e-4
+
+
+def _mitgcm_eos_pressure_bar(
+    depth: np.ndarray,
+    rho_const: float,
+    gravity: float,
+) -> np.ndarray:
+    """
+    EOS pressure in bar, with MITgcm's exact floating-point operation order.
+
+    Same physical value as `_depth_to_eos_pressure(...) * 0.1` (see that
+    function for the default-branch conditions), but formed the way MITgcm
+    does, for callers that need bit-level agreement (1DMIX-068):
+
+        - `model/src/set_ref_state.F:96-97`: `pRef4EOS(k) = pRefIntF(1) +
+          rhoConst*(rC(k)-rF(1))*gravity*gravitySign` [Pa], evaluated left to
+          right with `pRefIntF(1)=top_Pres=0`, `rF(1)=0`, `gravitySign=-1`;
+        - `model/src/find_rho.F` (FIND_RHO_2D/FIND_BULKMOD): `p =
+          locPres*SItoBar`, `SItoBar = 1.D-05` (`model/inc/EOS.h:19`).
+
+    `_depth_to_eos_pressure(...)` followed by `jmd95_eos`'s own `0.1*` gives
+    the same number only to ~1 ulp; that ulp was enough to move one
+    density quantum in ~0.05% of near-neutral cells.
+    """
+    loc_pres_pa = 0.0 + rho_const * (depth - 0.0) * gravity * -1.0
+    return loc_pres_pa * 1.0e-5
 
 
 def linear_eos(
@@ -126,6 +152,8 @@ def jmd95_eos(
     salt: np.ndarray,
     pressure: np.ndarray,
     rho_const: float = 1029.0,
+    *,
+    pressure_bar: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Jackett and McDougall (1995) equation of state.
@@ -143,6 +171,11 @@ def jmd95_eos(
         Pressure [dbar] (approximately depth in m * 10)
     rho_const : float
         Reference density [kg/m^3] for anomaly calculation
+    pressure_bar : np.ndarray, optional (keyword-only)
+        If given, the pressure in bar, used as-is instead of ``0.1 *
+        pressure``. Lets a caller supply MITgcm's exact ``locPres*SItoBar``
+        (see ``_mitgcm_eos_pressure_bar``, 1DMIX-068); ``pressure`` is then
+        ignored. Default ``None`` keeps the historical ``0.1 * pressure``.
 
     Returns
     -------
@@ -167,8 +200,11 @@ def jmd95_eos(
     # temperatures that this model has no sea-ice process to actually produce.
     t = np.maximum(t, EOS_MIN_THETA_C)
 
-    # Convert pressure from dbar to bar
-    p = 0.1 * p
+    # Convert pressure from dbar to bar (or take the caller's exact bar value)
+    if pressure_bar is None:
+        p = 0.1 * p
+    else:
+        p = np.atleast_1d(pressure_bar)
 
     # Precompute powers
     t2 = t * t
@@ -208,17 +244,26 @@ def jmd95_eos(
                  + eosJMDCFw[4] * t4
                  + eosJMDCFw[5] * t4 * t)
 
-    # Density of sea water at surface
-    rho_surf = (rho_fresh
-                + s * (eosJMDCSw[0]
-                       + eosJMDCSw[1] * t
-                       + eosJMDCSw[2] * t2
-                       + eosJMDCSw[3] * t3
-                       + eosJMDCSw[4] * t4)
+    # Density of sea water at surface. The salt terms are summed FIRST and
+    # then added to the fresh-water density, exactly MITgcm's
+    # FIND_RHOP0 (model/src/find_rho.F): `rsalt = s*(..) + s3o2*(..) +
+    # c9*s*s ; rhoP0 = rfresh + rsalt`. Floating-point addition is not
+    # associative, and the previous left-to-right form
+    # `((rho_fresh + s*(..)) + s3o2*(..)) + c9*s*s` differed from MITgcm by
+    # ~1 ulp of rho in about half of all cells -- invisible in aggregate
+    # stats, but the bit-level difference decides the Prandtl branch in
+    # near-neutral cells at the TKE floor, where N^2 is itself one density
+    # quantum (1DMIX-068).
+    rho_salt = (s * (eosJMDCSw[0]
+                     + eosJMDCSw[1] * t
+                     + eosJMDCSw[2] * t2
+                     + eosJMDCSw[3] * t3
+                     + eosJMDCSw[4] * t4)
                 + s3o2 * (eosJMDCSw[5]
                           + eosJMDCSw[6] * t
                           + eosJMDCSw[7] * t2)
                 + eosJMDCSw[8] * s * s)
+    rho_surf = rho_fresh + rho_salt
 
     # Bulk modulus
     bulkmod = _bulkmod_jmd95(s, t, p, t2, t3, t4, s3o2, p2)
@@ -332,32 +377,36 @@ def _bulkmod_jmd95(s, t, p, t2, t3, t4, s3o2, p2):
                      + eosJMDCKFw[3] * t3
                      + eosJMDCKFw[4] * t4)
 
-    # Bulk modulus of sea water at surface
-    bulkmod_surf = (bulkmod_fresh
-                    + s * (eosJMDCKSw[0]
-                           + eosJMDCKSw[1] * t
-                           + eosJMDCKSw[2] * t2
-                           + eosJMDCKSw[3] * t3)
+    # Bulk modulus of sea water at surface (salt terms only; combined with
+    # the fresh-water part below exactly as MITgcm's FIND_BULKMOD does).
+    bulkmod_salt = (s * (eosJMDCKSw[0]
+                         + eosJMDCKSw[1] * t
+                         + eosJMDCKSw[2] * t2
+                         + eosJMDCKSw[3] * t3)
                     + s3o2 * (eosJMDCKSw[4]
                               + eosJMDCKSw[5] * t
                               + eosJMDCKSw[6] * t2))
 
-    # Bulk modulus at pressure p
-    bulkmod = (bulkmod_surf
-               + p * (eosJMDCKP[0]
-                      + eosJMDCKP[1] * t
-                      + eosJMDCKP[2] * t2
-                      + eosJMDCKP[3] * t3)
-               + p * s * (eosJMDCKP[4]
-                          + eosJMDCKP[5] * t
-                          + eosJMDCKP[6] * t2)
-               + p * s3o2 * eosJMDCKP[7]
-               + p2 * (eosJMDCKP[8]
-                       + eosJMDCKP[9] * t
-                       + eosJMDCKP[10] * t2)
-               + p2 * s * (eosJMDCKP[11]
-                           + eosJMDCKP[12] * t
-                           + eosJMDCKP[13] * t2))
+    # Pressure-dependent part of the secant bulk modulus (MITgcm `bMpres`)
+    bulkmod_pres = (p * (eosJMDCKP[0]
+                         + eosJMDCKP[1] * t
+                         + eosJMDCKP[2] * t2
+                         + eosJMDCKP[3] * t3)
+                    + p * s * (eosJMDCKP[4]
+                               + eosJMDCKP[5] * t
+                               + eosJMDCKP[6] * t2)
+                    + p * s3o2 * eosJMDCKP[7]
+                    + p2 * (eosJMDCKP[8]
+                            + eosJMDCKP[9] * t
+                            + eosJMDCKP[10] * t2)
+                    + p2 * s * (eosJMDCKP[11]
+                                + eosJMDCKP[12] * t
+                                + eosJMDCKP[13] * t2))
+
+    # MITgcm (find_rho.F FIND_BULKMOD): bulkMod = bMfresh + bMsalt + bMpres,
+    # three group sums added last -- not a single running left-to-right sum
+    # (1DMIX-068: association order is a bit-level, ulp-of-rho effect).
+    bulkmod = bulkmod_fresh + bulkmod_salt + bulkmod_pres
 
     return bulkmod
 
@@ -598,6 +647,7 @@ def compute_ggl90_buoyancy_frequency_squared(
     rho_const: float = 1029.0,
     gravity: float = 9.81,
     use_jmd95: bool = True,
+    cell_thickness: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Compute N² for GGL90 using potential density gradients.
@@ -617,7 +667,25 @@ def compute_ggl90_buoyancy_frequency_squared(
         - grad_sigma.F:90-98 — sigmaR = (sigKp1 - sigKm1) * recip_drC
         - do_oceanic_phys.F:812-836 — sigKp1 = rho_insitu(k),
           sigKm1 = FIND_RHO_2D(T(k-1), S(k-1), P(k))
-        - ggl90_calc.F:347-348 — Nsquare = g * sigmaR / rho_const
+        - ggl90_calc.F:353-354 — Nsquare = gravity*gravitySign*recip_rhoConst*sigmaR
+
+    **Bit-level operation order (1DMIX-068)**. MITgcm forms N² in exactly this
+    order and this function reproduces it operation for operation, because
+    floating-point addition/multiplication is not associative and in a
+    near-neutral cell N² is itself only ~1 quantum of ρ (~2.3e-13 kg/m³) --
+    a 1-ulp difference then moves the Richardson number ``Ri = N²/GGL90eps``
+    across the 0.2 Prandtl-branch threshold:
+
+        ρ' = FIND_RHO_2D(...)               density anomaly ρ - rhoConst (see ``jmd95_eos``:
+                                            rhoP0 = rfresh + rsalt, bulk = bMfresh + bMsalt + bMpres)
+        recip_drC = 1 / drC(k),  drC(k) = 0.5*(delR(k-1) + delR(k))
+        sigmaR(k) = recip_drC * rkSign * (ρ'(k) - ρ'(k-1 @ P(k)))     rkSign = -1, left to right
+        N²(k)     = gravity * gravitySign * recip_rhoConst * sigmaR(k) gravitySign = -1, recip_rhoConst = 1/rhoConst
+
+    The centre-to-centre distance ``drC`` is built from the cell thicknesses
+    when ``cell_thickness`` is given (MITgcm's ``ini_vertical_grid.F:123-127``);
+    subtracting adjacent centre depths instead is a different rounding
+    (e.g. -75.005 - -65 vs 0.5*(10 + 10.01)) and is only the fallback.
 
     Parameters
     ----------
@@ -633,6 +701,11 @@ def compute_ggl90_buoyancy_frequency_squared(
         Gravitational acceleration [m/s^2]
     use_jmd95 : bool
         If True, use JMD95 EOS; if False, use linear EOS
+    cell_thickness : np.ndarray, shape (nz,), optional
+        Layer thicknesses ``delR`` [m]. When given, ``drC(k) =
+        0.5*(cell_thickness[k-1] + cell_thickness[k])`` as in MITgcm; when
+        omitted, ``drC(k) = depth[k-1] - depth[k]`` (same value, different
+        rounding -- exact only to ~1 ulp).
 
     Returns
     -------
@@ -658,39 +731,40 @@ def compute_ggl90_buoyancy_frequency_squared(
     # exactly -- see `_depth_to_eos_pressure` (1DMIX-039) rather than a flat
     # "1 dbar per metre".
     pressure = _depth_to_eos_pressure(depth, rho_const, gravity)
+    # ... and the same pressure in bar formed in MITgcm's operation order
+    # (bit-level; see `_mitgcm_eos_pressure_bar`, 1DMIX-068).
+    p_bar = _mitgcm_eos_pressure_bar(depth, rho_const, gravity)
+
+    # centre-to-centre distance drC(k), k = 1..nz-1 (index k-1 below)
+    dr_c_depth = depth[:-1] - depth[1:]
+    if cell_thickness is not None:
+        dr_c = 0.5 * (cell_thickness[:-1] + cell_thickness[1:])
+        # zero/invalid thickness (dry padding) cannot form a drC: fall back to
+        # the centre-depth difference there instead of dividing by zero
+        dr_c = np.where(dr_c > 0.0, dr_c, dr_c_depth)
+    else:
+        dr_c = dr_c_depth
+    recip_dr_c = 1.0 / dr_c
+    recip_rho_const = 1.0 / rho_const
 
     if use_jmd95:
-        # Compute in-situ density at all levels
-        rho_anom, _, _ = jmd95_eos(theta, salt, pressure, rho_const)
-        rho_insitu = rho_anom + rho_const
+        # sigKp1: density anomaly of level k at its own pressure P(k)
+        rho_deep, _, _ = jmd95_eos(theta, salt, pressure, rho_const, pressure_bar=p_bar)
 
-        # For each interface k (between cells k-1 and k):
-        # sigmaR(k) = [rho_insitu(k) - rho_potential(k-1 at pressure k)] / dz
-        for k in range(1, nz):
-            # rho_deep: in-situ density at level k
-            rho_deep = rho_insitu[k]
+        # sigKm1: density anomaly of level k-1 water evaluated at P(k)
+        # (potential density relative to the deeper interface). Vectorised:
+        # every operation is elementwise IEEE, identical to a per-level loop.
+        rho_shal_at_deep, _, _ = jmd95_eos(
+            theta[:-1], salt[:-1], pressure[1:], rho_const, pressure_bar=p_bar[1:]
+        )
 
-            # rho_shal_at_deep: potential density of level k-1 water
-            # evaluated at level k's pressure
-            rho_shal_anom, _, _ = jmd95_eos(
-                np.array([theta[k-1]]),
-                np.array([salt[k-1]]),
-                np.array([pressure[k]]),
-                rho_const
-            )
-            rho_shal_at_deep = rho_shal_anom[0] + rho_const
+        # MITgcm works on the density ANOMALIES rho - rhoConst (FIND_RHO_2D
+        # returns rho - rhoConst) and subtracts them directly.
+        # grad_sigma.F:93-95: recip_drC * rkSign * (sigKp1 - sigKm1)
+        sigma_r = (recip_dr_c * -1.0) * (rho_deep[1:] - rho_shal_at_deep)
 
-            # Density gradient: ∂ρ/∂z where z is positive up
-            # depth is negative-down, so z = -depth (positive-up)
-            # z[k-1] > z[k] (shallower is less negative)
-            # For stable: rho[k-1] < rho[k] (lighter above denser)
-            # drho/dz = (rho[k] - rho[k-1]) / (z[k] - z[k-1]) < 0
-            dz = depth[k] - depth[k-1]  # negative (depth[k] is more negative)
-            drho_dz = (rho_deep - rho_shal_at_deep) / dz  # Corrected: deep - shallow
-
-            # N² = -(g/ρ₀) × ∂ρ/∂z
-            # For stable stratification: drho/dz < 0, so N² > 0
-            n_square[k] = -(gravity / rho_const) * drho_dz
+        # ggl90_calc.F:353-354, gravitySign = -1: g*gravitySign*recip_rhoConst*sigmaR
+        n_square[1:] = ((gravity * -1.0) * recip_rho_const) * sigma_r
 
     else:
         # Linear EOS is pressure-independent, so potential = in-situ
