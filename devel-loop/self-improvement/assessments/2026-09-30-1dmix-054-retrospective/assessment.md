@@ -1,0 +1,4 @@
+# 1DMIX-054 retrospective assessment (2026-09-30)
+
+1. **Re-derived port reference (TEAM-BRIEF-PORT-REFERENCE-001).** Bob's column-local dVsq/shear_sq reference used 0.5*(du**2+dv**2). The 0.5 belongs only to MITgcm's four-term neighbour average; the port computes du**2+dv**2 (Vertical_Mixing_Models/KPP/kpp_core_driver.py line 669). Because the assertion was loose (median > 0.1), it passed either way. Richard's round-1 recomputation caught it: dVsq median 27% and 97.6% of cells >1% over 207,369 cells; 0.58/0.61/0.72 at the 90 m column. Bob's round 2 also corrected shear_sq to 51%/98.8% (previously stated as 96.4%). Cost: one correction round (~15 min).
+2. **Doc inventory gap (TEAM-DOC-INVENTORY-RESULTS-001).** KPP_VALIDATION_RESULTS.md and GGL90_VALIDATION_RESULTS.md were not in configuration_paths, so the sealed doc report could not cover the mis-stated passages; Richard reviewed them manually. Added to configuration_paths in commit 32e4285.

@@ -918,3 +918,64 @@ The same verify.py evidence validates identically whether the gate is invoked fr
 
 ### Expected Effect
 Zero spurious stale-evidence refusals caused by invocation environment.
+
+---
+
+## 🔴 PROPOSED: implementer comparisons re-derive a port quantity instead of citing the port's own computation
+
+**Date Identified**: 2026-09-30  14:50
+**Status**: Proposed
+**UUID**: TEAM-BRIEF-PORT-REFERENCE-001
+**Category**: scientific_accuracy
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
+**Anchors**: .claude/ESX-team/ARCHITECT.md; MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py::test_global_ocean_90x40x15_dvsq_is_four_point_average
+
+### Issue
+In 1DMIX-054, the implementer built a "column-local" reference for dVsq/shear_sq by re-deriving the formula. He carried over a 0.5 factor that belongs only to MITgcm's four-term neighbour average; the port computes du**2+dv**2 (kpp_core_driver.py line 669). The test's loose assertion (median > 0.1) held either way, so the wrong figures reached a docstring and KPP_VALIDATION_RESULTS.md. The error surfaced only when the reviewer recomputed independently, costing a correction round.
+
+### Evidence
+Richard 1DMIX-054 round-1 REJECT must_fix; Bob round-2 remeasurement (dVsq median 27%/97.6%; shear_sq 51%/98.8% vs mis-stated 96.4%).
+
+### Potential Impact
+Known-gap magnitudes in validation docs are mis-stated, and the error hides behind loose characterization bounds.
+
+### Proposed Fix
+Arch briefs (and the Bob role guidance) require any comparison against a port quantity to call or cite the port function/line that computes it, not a re-derived formula. Known-gap characterization tests should assert the measured figure with a stated margin rather than only a loose lower guard.
+
+### Acceptance Criteria
+Subsequent Bob briefs that involve port-vs-capture characterizations carry the citation requirement, and no retrospective records a re-derived-formula slip.
+
+### Expected Effect
+No correction rounds spent on reference-formula convention slips.
+
+---
+
+## 🟡 IMPLEMENTED: validation-results docs were outside the sealed documentation inventory
+
+**Date Identified**: 2026-09-30  14:50
+**Status**: Implemented — awaiting publication/effectiveness evidence
+**UUID**: TEAM-DOC-INVENTORY-RESULTS-001
+**Category**: documentation_coverage
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
+**Anchors**: esx/project.json:configuration_paths
+**Implementation-Reference**: 1D_Mixing_Model 32e4285
+
+### Issue
+KPP_VALIDATION_RESULTS.md and GGL90_VALIDATION_RESULTS.md hold the measured known-gap figures that tests cite, but they were not in configuration_paths. The doc_contract seal therefore never covered them; in 1DMIX-054 the mis-stated figures lived exactly there, and the reviewer re-read them manually.
+
+### Evidence
+Richard 1DMIX-054 round-2 documentation_review notes/limits.
+
+### Potential Impact
+Documentation errors in the validation reports escape the sealed review.
+
+### Proposed Fix
+Add both files to configuration_paths (done in 32e4285).
+
+### Acceptance Criteria
+The next issue touching validation results produces a sealed report with dispositions for both files.
+
+### Expected Effect
+Validation-report passages are covered by the sealed documentation contract.
