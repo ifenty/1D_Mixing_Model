@@ -1,0 +1,353 @@
+{
+  "retrospective": {
+    "schema_version": 3,
+    "id": "1DMIX-064",
+    "iteration": 2,
+    "closes_timestamp": "2026-09-30T06:55:55.612667+00:00",
+    "timestamp": "2026-09-30T07:19:33Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/b5b2456779337abeacc7f7e886c03284a7c9123a52d68dd3255817d356599c23.json",
+      "sha256": "b5b2456779337abeacc7f7e886c03284a7c9123a52d68dd3255817d356599c23"
+    },
+    "measured": {
+      "span_minutes": 22,
+      "dispatches": {
+        "bob": 2,
+        "richard": 2
+      },
+      "rounds": {
+        "bob": 2,
+        "richard": 2
+      },
+      "cost_usd": {
+        "bob": 0.0,
+        "richard": 0.0
+      },
+      "unknown_cost_event_ids": [
+        "db0d8a34e5d14d1e8e3dc8f97aa3aca7",
+        "b525df56c9984d81bfb6acb6fe81829d",
+        "520703d123504cf3850c0e48055c856e",
+        "7395bad8f6d6457caed7a488bd00442e"
+      ],
+      "coordinator_coverage": "recorded",
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator": {
+        "tool_measured_minutes": 2.3,
+        "self_reported_minutes": 25.0,
+        "self_reported_usd": null,
+        "provider_reported_usd": null
+      },
+      "cost_scope": "cost_usd and span-based figures describe dispatched agents; coordinator cost is recorded separately: Arch self-reported 25 min, cost unknown (coordinator.self_reported; not added to cost_usd)"
+    },
+    "problems": [
+      {
+        "category": "documentation_inventory",
+        "summary": "A stale baseline from before 1DMIX-065 and the ESX upgrades made the documentation plan list 135 targets for a three-file change, and --previous reuse re-blanked every judgment because none declared dependencies.",
+        "evidence": "doc_contract draft: 135 dispositions (56 carried_forward, 50 upgrade_supplied, 29 blank) on both the first and correction drafts",
+        "minutes_lost": 6
+      }
+    ],
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "deferred",
+        "issue": "TEAM-DOC-INVENTORY-PROVENANCE-001",
+        "reason": "Same documentation-inventory ergonomics owner; carried_forward and upgrade_supplied prefill already absorbed most rows, and dependency suggestion was deliberately deferred in ESX 1.5.3 because a wrong inferred dependency would make stale judgments look reusable."
+      }
+    ],
+    "confirmations": [
+      {
+        "category": "independent_review",
+        "summary": "Framing Richard's question as adversarial (try to break the coverage map) found a real overstatement that three prior rounds of this thread had missed.",
+        "evidence": "Round-0 REJECT: eight face-location, sign and threshold mutants on documented routes passed 6/6; the two added variants caught all eight, and the round-1 re-review confirmed the map matches the tests."
+      }
+    ],
+    "carry_forward": [],
+    "no_problem_reason": ""
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 1.5862810611724854,
+        "elapsed_seconds": 1.5862810611724854,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.324237585067749,
+        "elapsed_seconds": 0.324237585067749,
+        "events": 8
+      },
+      "verification": {
+        "effort_seconds": 333.7075626850128,
+        "elapsed_seconds": 333.7075626850128,
+        "events": 7
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 2,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 2,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      }
+    },
+    "child_elapsed_seconds": 0,
+    "components": [
+      {
+        "event_id": "db0d8a34e5d14d1e8e3dc8f97aa3aca7",
+        "kind": "unmetered_native",
+        "parent_event_id": "db0d8a34e5d14d1e8e3dc8f97aa3aca7",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "b525df56c9984d81bfb6acb6fe81829d",
+        "kind": "unmetered_native",
+        "parent_event_id": "b525df56c9984d81bfb6acb6fe81829d",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "520703d123504cf3850c0e48055c856e",
+        "kind": "unmetered_native",
+        "parent_event_id": "520703d123504cf3850c0e48055c856e",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "7395bad8f6d6457caed7a488bd00442e",
+        "kind": "unmetered_native",
+        "parent_event_id": "7395bad8f6d6457caed7a488bd00442e",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      }
+    ],
+    "coordinator": {
+      "coverage": "recorded",
+      "included_in_reported_usd": "no",
+      "provider_reported_usd": null,
+      "self_reported": {
+        "minutes": 25.0,
+        "records": [
+          {
+            "minutes": 25.0,
+            "phase": "coordination",
+            "record_id": "1cf70020b654406391b7e4e80de42763",
+            "recorded_at": "2026-09-30T07:19:32.954916+00:00",
+            "source": "Arch estimate from session wall-clock 06:55-07:20 UTC; USD not observable in the interactive session",
+            "usd": null
+          }
+        ],
+        "records_without_usd": 1,
+        "usd": null
+      },
+      "tool_measured": {
+        "basis": "wall time of gate commands run as arch; excludes interactive session time",
+        "effort_seconds": 135.85418820381165,
+        "elapsed_seconds": 135.85418820381165,
+        "events": 7
+      }
+    },
+    "coordinator_coverage": "recorded",
+    "end": "2026-09-30T07:17:58.456653+00:00",
+    "issue_id": "1DMIX-064",
+    "missing_timing_event_ids": [
+      "db0d8a34e5d14d1e8e3dc8f97aa3aca7",
+      "b525df56c9984d81bfb6acb6fe81829d",
+      "520703d123504cf3850c0e48055c856e",
+      "7395bad8f6d6457caed7a488bd00442e"
+    ],
+    "outside_child_intervals_seconds": 1322.8439860343933,
+    "phase_events": [
+      {
+        "event_id": "bbbd3aef62384b4fa258224a9f7cad09",
+        "finished_at": "2026-09-30T06:56:22.654906+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.07346452699857764,
+        "started_at": "2026-09-30T06:56:22.581435+00:00"
+      },
+      {
+        "event_id": "5df05eabf9fe4a7c9bd938487fb8ae01",
+        "finished_at": "2026-09-30T06:58:25.895467+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "bob",
+        "seconds": 45.10376543299935,
+        "started_at": "2026-09-30T06:57:40.791701+00:00"
+      },
+      {
+        "event_id": "1ae6a3a431eb48348f3d299d975ac753",
+        "finished_at": "2026-09-30T06:58:51.951925+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.033524947000842076,
+        "started_at": "2026-09-30T06:58:51.918391+00:00"
+      },
+      {
+        "event_id": "f7c7b629bdcc44c6943fea8b4a45da99",
+        "finished_at": "2026-09-30T06:59:44.580146+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.047300276999521884,
+        "started_at": "2026-09-30T06:59:44.532840+00:00"
+      },
+      {
+        "event_id": "afffc2535992461c9314871349516f74",
+        "finished_at": "2026-09-30T06:59:49.954794+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 3.2229514139999083,
+        "started_at": "2026-09-30T06:59:46.731830+00:00"
+      },
+      {
+        "event_id": "1b33f839e91c48a981f477403cbc5f20",
+        "finished_at": "2026-09-30T07:00:54.878458+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.028829008000684553,
+        "started_at": "2026-09-30T07:00:54.849634+00:00"
+      },
+      {
+        "event_id": "b569feb6bd594f13819141a480277f61",
+        "finished_at": "2026-09-30T07:01:08.744875+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.024624458999824128,
+        "started_at": "2026-09-30T07:01:08.720250+00:00"
+      },
+      {
+        "event_id": "745cb2773b054879938e7a82002b5338",
+        "finished_at": "2026-09-30T07:01:21.697792+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.033936631998585653,
+        "started_at": "2026-09-30T07:01:21.663853+00:00"
+      },
+      {
+        "event_id": "4aeeac1cebc44c90a6dbf4c1dcac3383",
+        "finished_at": "2026-09-30T07:02:26.608583+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "ac23403baa4729f6e",
+        "seconds": 46.11894687699896,
+        "started_at": "2026-09-30T07:01:40.489629+00:00"
+      },
+      {
+        "event_id": "3647dee402304352a960e7088cb9ab39",
+        "finished_at": "2026-09-30T07:08:52.410405+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "bob",
+        "seconds": 64.67918500000087,
+        "started_at": "2026-09-30T07:07:47.731112+00:00"
+      },
+      {
+        "event_id": "96b2392ed01042eeabaad4537a7b2cf4",
+        "finished_at": "2026-09-30T07:10:15.384650+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.04225373400004173,
+        "started_at": "2026-09-30T07:10:15.342388+00:00"
+      },
+      {
+        "event_id": "a408b940c6b44db1b5e371d89bcac52d",
+        "finished_at": "2026-09-30T07:10:20.780299+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 3.1821906349996425,
+        "started_at": "2026-09-30T07:10:17.598103+00:00"
+      },
+      {
+        "event_id": "a8ec7d727f1245e9b07001964a54fba2",
+        "finished_at": "2026-09-30T07:13:10.400074+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "ac23403baa4729f6e",
+        "seconds": 43.70067032800034,
+        "started_at": "2026-09-30T07:12:26.699392+00:00"
+      },
+      {
+        "event_id": "17f2cf1c76014353ae39829a5ebafb09",
+        "finished_at": "2026-09-30T07:13:13.079382+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.04027298400069412,
+        "started_at": "2026-09-30T07:13:13.039106+00:00"
+      },
+      {
+        "event_id": "954438c5ec4b4b6ebd28fe40f7d22a5d",
+        "finished_at": "2026-09-30T07:16:40.355017+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 127.69970601800014,
+        "started_at": "2026-09-30T07:14:32.655309+00:00"
+      },
+      {
+        "event_id": "782d3d56d6ee47819d887e7f3420d6af",
+        "finished_at": "2026-09-30T07:17:03.028911+00:00",
+        "issue_id": "1DMIX-064",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 1.5862881270004436,
+        "started_at": "2026-09-30T07:17:01.442630+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 1322.8439860343933,
+    "start": "2026-09-30T06:55:55.612667+00:00",
+    "unknown_cost_event_ids": [
+      "db0d8a34e5d14d1e8e3dc8f97aa3aca7",
+      "b525df56c9984d81bfb6acb6fe81829d",
+      "520703d123504cf3850c0e48055c856e",
+      "7395bad8f6d6457caed7a488bd00442e"
+    ]
+  }
+}
