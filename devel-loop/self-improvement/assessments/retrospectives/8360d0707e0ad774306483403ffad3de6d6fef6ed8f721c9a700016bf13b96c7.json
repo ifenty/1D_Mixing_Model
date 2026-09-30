@@ -1,0 +1,268 @@
+{
+  "retrospective": {
+    "schema_version": 3,
+    "id": "1DMIX-069",
+    "iteration": 1,
+    "closes_timestamp": "2026-09-30T10:37:45.997100+00:00",
+    "timestamp": "2026-09-30T11:20:30Z",
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/5eb9394b25a8c107aa7d647fd0daea45f23ecc249d4f3abae12a961e4305bbdd.json",
+      "sha256": "5eb9394b25a8c107aa7d647fd0daea45f23ecc249d4f3abae12a961e4305bbdd"
+    },
+    "measured": {
+      "span_minutes": 41,
+      "dispatches": {
+        "bob": 2,
+        "richard": 1
+      },
+      "rounds": {
+        "bob": 1,
+        "richard": 1
+      },
+      "cost_usd": {
+        "bob": 0.0,
+        "richard": 0.0
+      },
+      "unknown_cost_event_ids": [
+        "24dfaadb3118408a9448b04de683d889",
+        "30b2aaa5e0f94ee58b2d7724a2da0f43",
+        "66f3cf8bba69436fa9f758072481fb7c"
+      ],
+      "coordinator_coverage": "recorded",
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator": {
+        "tool_measured_minutes": 3.8,
+        "self_reported_minutes": 70.0,
+        "self_reported_usd": null,
+        "provider_reported_usd": null
+      },
+      "cost_scope": "cost_usd and span-based figures describe dispatched agents; coordinator cost is recorded separately: Arch self-reported 70 min, cost unknown (coordinator.self_reported; not added to cost_usd)"
+    },
+    "problems": [],
+    "solutions": [],
+    "confirmations": [
+      {
+        "category": "strict_fidelity",
+        "summary": "Holding instrumented files to the literal rule \"stock plus output only\" (restoring an arithmetically identical restructure) made the fidelity claim checkable by a plain diff.",
+        "evidence": "Richard's independent diff of ggl90_calc.F against stock shows 0 stock lines removed or changed; all 8 hunks are pure additions, verifiable without reasoning about arithmetic equivalence."
+      }
+    ],
+    "carry_forward": [],
+    "no_problem_reason": "One implementation turn plus one Arch-directed strictness change (restore the stock Langmuir block) and a single approving review; no dispatch, capture, receipt or orientation friction occurred, and the reviewer navigated last as carried forward."
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 2.2114009857177734,
+        "elapsed_seconds": 2.2114009857177734,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.19004487991333008,
+        "elapsed_seconds": 0.19004487991333008,
+        "events": 4
+      },
+      "verification": {
+        "effort_seconds": 336.80624508857727,
+        "elapsed_seconds": 336.80624508857727,
+        "events": 5
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 1,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      },
+      "richard": {
+        "dispatches": 1,
+        "reported_usd": 0.0,
+        "rounds": 1,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 1,
+        "unknown_tool_call_events": 1,
+        "usage": {}
+      }
+    },
+    "child_elapsed_seconds": 0,
+    "components": [
+      {
+        "event_id": "24dfaadb3118408a9448b04de683d889",
+        "kind": "unmetered_native",
+        "parent_event_id": "24dfaadb3118408a9448b04de683d889",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "30b2aaa5e0f94ee58b2d7724a2da0f43",
+        "kind": "unmetered_native",
+        "parent_event_id": "30b2aaa5e0f94ee58b2d7724a2da0f43",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "66f3cf8bba69436fa9f758072481fb7c",
+        "kind": "unmetered_native",
+        "parent_event_id": "66f3cf8bba69436fa9f758072481fb7c",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      }
+    ],
+    "coordinator": {
+      "coverage": "recorded",
+      "included_in_reported_usd": "no",
+      "provider_reported_usd": null,
+      "self_reported": {
+        "minutes": 70.0,
+        "records": [
+          {
+            "minutes": 70.0,
+            "phase": "coordination",
+            "record_id": "d23c6761726442898b47817620bf33a8",
+            "recorded_at": "2026-09-30T11:20:29.667926+00:00",
+            "source": "Arch estimate from session wall-clock 10:37-11:50 UTC; USD not observable",
+            "usd": null
+          }
+        ],
+        "records_without_usd": 1,
+        "usd": null
+      },
+      "tool_measured": {
+        "basis": "wall time of gate commands run as arch; excludes interactive session time",
+        "effort_seconds": 226.87455701828003,
+        "elapsed_seconds": 226.87455701828003,
+        "events": 5
+      }
+    },
+    "coordinator_coverage": "recorded",
+    "end": "2026-09-30T11:18:55.590453+00:00",
+    "issue_id": "1DMIX-069",
+    "missing_timing_event_ids": [
+      "24dfaadb3118408a9448b04de683d889",
+      "30b2aaa5e0f94ee58b2d7724a2da0f43",
+      "66f3cf8bba69436fa9f758072481fb7c"
+    ],
+    "outside_child_intervals_seconds": 2469.593352794647,
+    "phase_events": [
+      {
+        "event_id": "664dff565bd6421795834a252be59ae1",
+        "finished_at": "2026-09-30T10:37:59.371500+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.07604424099918106,
+        "started_at": "2026-09-30T10:37:59.295452+00:00"
+      },
+      {
+        "event_id": "5bdbc2c816aa405d91f146f3f869f182",
+        "finished_at": "2026-09-30T10:38:50.477685+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.037957631997414865,
+        "started_at": "2026-09-30T10:38:50.439725+00:00"
+      },
+      {
+        "event_id": "e41aef33f21041a5b265f56719a9cdd4",
+        "finished_at": "2026-09-30T10:53:09.407595+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "verification",
+        "reason": null,
+        "role": "bob-1DMIX-069",
+        "seconds": 36.83778200099914,
+        "started_at": "2026-09-30T10:52:32.569812+00:00"
+      },
+      {
+        "event_id": "6c56f744caf24b40947eea70a0767d83",
+        "finished_at": "2026-09-30T10:59:25.557661+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "verification",
+        "reason": null,
+        "role": "bob-1DMIX-069",
+        "seconds": 38.88700202800101,
+        "started_at": "2026-09-30T10:58:46.670657+00:00"
+      },
+      {
+        "event_id": "85e58ba2246549adb7738d2503a926f3",
+        "finished_at": "2026-09-30T11:00:39.532240+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.04065639300097246,
+        "started_at": "2026-09-30T11:00:39.491572+00:00"
+      },
+      {
+        "event_id": "c43760c5915341b680ef3a034622482c",
+        "finished_at": "2026-09-30T11:00:46.096110+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 4.374320317001548,
+        "started_at": "2026-09-30T11:00:41.721782+00:00"
+      },
+      {
+        "event_id": "de9d1d81db0d45ad976c21a44cdaa3a1",
+        "finished_at": "2026-09-30T11:08:57.241248+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "verification",
+        "reason": null,
+        "role": "af9ce24e72c7b002c",
+        "seconds": 36.489136845997564,
+        "started_at": "2026-09-30T11:08:20.706230+00:00"
+      },
+      {
+        "event_id": "361261c740614fb3a0fdb1238be657d1",
+        "finished_at": "2026-09-30T11:12:09.839484+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.035364685998501955,
+        "started_at": "2026-09-30T11:12:09.804115+00:00"
+      },
+      {
+        "event_id": "7ed8c91ceb5745e79541e8410c7274dd",
+        "finished_at": "2026-09-30T11:17:46.841015+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 220.1721171140016,
+        "started_at": "2026-09-30T11:14:06.668903+00:00"
+      },
+      {
+        "event_id": "0d9ce110bf5941dca80e69b43bbaa56c",
+        "finished_at": "2026-09-30T11:17:54.946176+00:00",
+        "issue_id": "1DMIX-069",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 2.211404470999696,
+        "started_at": "2026-09-30T11:17:52.734775+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 2469.593352794647,
+    "start": "2026-09-30T10:37:45.997100+00:00",
+    "unknown_cost_event_ids": [
+      "24dfaadb3118408a9448b04de683d889",
+      "30b2aaa5e0f94ee58b2d7724a2da0f43",
+      "66f3cf8bba69436fa9f758072481fb7c"
+    ]
+  }
+}
