@@ -1,0 +1,6 @@
+# GGL90 (Gaspar et al. 1990 TKE) parameters
+# 1DMIX-054 (CONSTRUCTED): all MITgcm defaults, deliberately no non-default
+# parameter (see README.md for why none of the tuned values in this project's
+# other GGL90 namelists is carried over to the lab_sea grid).
+ &GGL90_PARM01
+ &

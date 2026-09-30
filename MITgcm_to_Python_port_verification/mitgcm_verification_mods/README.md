@@ -79,6 +79,21 @@ recipes that regenerated every capture on the WSL checkout are recorded in
 
 **Documentation**: See `lab_sea/code_validation/README`
 
+### Cross-scheme trees (1DMIX-054): the second scheme on a grid that had only one
+
+Every grid below previously had captures of exactly one mixing scheme. Each new `<scheme>_code_validation/` tree
+is the grid's own stock `code/` directory with only the differences listed here (`diff -r <stock code> <tree>` is
+the check); `kpp_calc.F`/`kpp_routines.F` (or `ggl90_calc.F`) are symlinks to `kpp_mods/` (`ggl90_mods/`). The
+run-input namelists are CONSTRUCTED (no stock MITgcm experiment has them) and live next to each tree in
+`<scheme>_input_validation/` with their own README, a run-directory assembly script and the justification of every
+non-stock value; the recipes are R7/R8 (`KPP_port_validation/CAPTURES.md`) and G6/G7 (`GGL90_port_validation/CAPTURES.md`).
+
+| tree | differences from the grid's stock `code/` |
+|---|---|
+| `global_ocean_90x40x15/kpp_code_validation/` | + `kpp_calc.F`, `kpp_routines.F` (symlinks); `packages.conf`: stock line `-kpp` removed (so the `oceanic` group brings kpp in), `ggl90` still compiled (as in stock, run-time off); headers byte-identical; **no** `KPP_OPTIONS.h`, so MITgcm's default applies (`KPP_SMOOTH_SHSQ`, `KPP_SMOOTH_DBLOC`, `KPP_GHAT` defined). (An earlier scaffold carried the ECCO-adjoint `KPP_OPTIONS.h` of `global_oce_latlon/code_validation` with all three undefined, and lacked `GGL90_OPTIONS.h`; both were corrected under 1DMIX-054.) |
+| `global_ocean_cs32x15/kpp_code_validation/` | + `kpp_calc.F`, `kpp_routines.F` (symlinks); `packages.conf`: stock list + `kpp`; headers byte-identical; no `KPP_OPTIONS.h`. **Pressure-coordinate grid, KPP has no pressure-coordinate support: known-gap characterization only.** |
+| `lab_sea/ggl90_code_validation/` | + `ggl90_calc.F` (symlink); `packages.conf`: + `ggl90` (kpp stays compiled through `oceanic`, run-time off); `SIZE.h`: the single-tile 20x16 edit shared with `lab_sea/code_validation/` (`sNx=20, sNy=16, nSx=nSy=1`; the `MAX_OLy` line also differs from stock by letter case and one blank line, no code effect); other headers byte-identical; **no** `GGL90_OPTIONS.h`, so MITgcm's default applies (no Langmuir, no `GGL90_MISSING_HFAC_BUG`). (An earlier scaffold carried the vermix-era header with `ALLOW_GGL90_LANGMUIR` and `GGL90_MISSING_HFAC_BUG` defined, which differs from the current stock default; it was removed under 1DMIX-054. `1D_ocean_ice_column/ggl90_code_validation/` and `vermix/code_validation/` still carry that older header.) |
+
 ## Instrumented-file fidelity to stock MITgcm and print precision (1DMIX-069)
 
 Only three instrumented Fortran sources exist (`ggl90_mods/ggl90_calc.F`,

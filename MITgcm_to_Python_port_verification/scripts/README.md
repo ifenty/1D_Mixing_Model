@@ -39,6 +39,13 @@ port and the Python GGL90 port.
      matches the input file's own `uuid` attribute)
    - `run_kpp_from_netcdf_input.py`'s CLI additionally does a quick console
      comparison with MITgcm outputs if a matching file is found automatically
+   - `run_ggl90_from_netcdf_input.py` (1DMIX-054): `run(inputs_nc, output_nc, first_timestep=None,
+     last_timestep=None)` and CLI `--first N --last N` (0-indexed, inclusive) replay a contiguous
+     subset of a long capture, like the KPP script's arguments of the same name; the selected inputs
+     are `.load()`ed once (a multi-column capture is otherwise re-read per column, thousands of times
+     slower; results are numerically identical). Both replays feed the port the column-local
+     `uVel(i,j)`/`vVel(i,j)` of the capture, whereas MITgcm's tracer-point shear averages the
+     (i,i+1),(j,j+1) velocities (see the two `*_VALIDATION_RESULTS.md` documents).
 
 3. **`generate_kpp_validation_report.py`** (KPP) / **`generate_ggl90_validation_report.py`** (GGL90, 1DMIX-044)
    - Generate a comprehensive multi-page PDF validation report

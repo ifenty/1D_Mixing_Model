@@ -246,6 +246,56 @@ Standalone-driver outputs (`outputs_from_python_standalone/<scenario>/kpp_standa
 regenerated with the widened `kpp_standalone_main.F` FORMATs from the unchanged
 `kpp_standalone_input.txt`; see `CONVENTIONS_STANDALONE_DATA.md` ("Regenerated at 17 digits, 1DMIX-070").
 
+## Cross-scheme captures, 1DMIX-054 (2026-09-30): KPP on the two `global_ocean` grids
+
+Two KPP captures on grids that had only ever been captured with GGL90. **Both use CONSTRUCTED
+namelists**: no stock MITgcm experiment has a `data.kpp` (nor a KPP-enabled `data.pkg`) for
+`global_ocean.90x40x15` or `global_ocean.cs32x15`; the constructed files, and the justification of
+every value that differs from the donor GGL90 input directory, are in
+`mitgcm_verification_mods/global_ocean_{90x40x15,cs32x15}/kpp_input_validation/` (READMEs, `data*` files,
+run-directory assembly scripts). They are **not** stock MITgcm experiments and must not be described as such;
+the MITgcm reference values still come only from a real MITgcm run parsed by the streaming
+`parse_mitgcm_split.py`, and the Python files only from replaying the port. Same MITgcm commit
+(`d861cd501f21303825de860eb3caa0a8a7ae22f8`, tracked tree unmodified), image (`mitgcm:latest`, `6cc66b8957d8`),
+host and date as the 1DMIX-070 set; ES25.16 (17-digit) instrumentation. Compile trees: `global_ocean_90x40x15/
+kpp_code_validation/`, `global_ocean_cs32x15/kpp_code_validation/` (differences from the stock `code/`: see
+`mitgcm_verification_mods/README.md`, "Cross-scheme trees").
+
+| Id | Steps |
+|---|---|
+| **R7** `global_ocean_90x40x15_10` (10 steps, 36 tiles, 2,315 wet columns) | `MITGCM_ROOT=~/Projects/MITgcm <mods>/global_ocean_90x40x15/kpp_input_validation/assemble_run_dir.sh` (creates the untracked `verification/global_ocean.90x40x15/input_docker_kpp90`); cwd `~/Projects/MITgcm/verification`: `./experiment_compile.sh global_ocean.90x40x15 -mods <mods>/global_ocean_90x40x15/kpp_code_validation -build build_docker_kpp_054 -clean -j 8` (21 s); `./experiment_run_no_compile.sh global_ocean.90x40x15 input_docker_kpp90 -build build_docker_kpp_054 -output output_kpp_90x40_054` (7.4 s, `output.txt` 192,305,496 bytes, 360 validation blocks = 10 steps x 36 tiles); parse (repo root, `ulimit -v 8000000`): `python3 MITgcm_to_Python_port_verification/scripts/parse_mitgcm_split.py <run>/output.txt global_ocean.90x40x15` (5.6 s), then copy `mitgcm_kpp_inputs.nc`/`mitgcm_kpp_outputs.nc` to the names below. **CONSTRUCTED namelist**; header = MITgcm default `KPP_OPTIONS.h` (`smooth_shsq=smooth_dbloc=use_ghat=1`). The first attempt (`ivdc_kappa=1.` as in the GGL90 donor) stopped at `KPP_CHECK` and led to `ivdc_kappa=0.`. Duration 10 steps = the existing GGL90 capture of the same grid. |
+| **R8** `global_ocean_cs32x15_pcoords_1` (**1 step**, 12 tiles, 1,621 wet columns, **pressure coordinates**) | `MITGCM_ROOT=~/Projects/MITgcm <mods>/global_ocean_cs32x15/kpp_input_validation/assemble_run_dir.sh` (creates `verification/global_ocean.cs32x15/input.in_p_kpp`, layered on `input/` by the run script); `./experiment_compile.sh global_ocean.cs32x15 -mods <mods>/global_ocean_cs32x15/kpp_code_validation -build build_docker_kpp_054 -clean -j 8`; `./experiment_run_no_compile.sh global_ocean.cs32x15 input.in_p_kpp -build build_docker_kpp_054 -output output_kpp_cs32_054` (1.6 s; **exits 1: MITgcm stops itself** -- `MON_SOLUTION: STOPPING CALCULATION at Iter=1`, `tMin,tMax = -1.117E+13 -8.892E+12`, `STOP ABNORMAL END: S/R MON_SOLUTION`; `output.txt` 13,659,218 bytes, 12 validation blocks = 1 step x 12 tiles); parse as R7 with experiment name `global_ocean.cs32x15`. **CONSTRUCTED namelist.** The 1-step duration is not a choice: MITgcm's own KPP, applied in pressure coordinates with `KPP_GHAT` on (MITgcm default), blows the tracers up at iteration 1 (see below). |
+| **P6** / **P7** | cwd `MITgcm_to_Python_port_verification`: `python3 scripts/run_kpp_from_netcdf_input.py KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_<tag>.nc -o KPP_port_validation/outputs_from_python/python_kpp_outputs_<tag>.nc -j 4` for `<tag>` = `global_ocean_90x40x15_10` (P6), `global_ocean_cs32x15_pcoords_1` (P7). Not read by any test (the tests replay in-process). |
+
+Evidence-only reruns (kept under `devel-loop/loop_state/scratch/bob-1DMIX-054/`, **not declared, not tested**): (a)
+`global_ocean.90x40x15` with `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` `#undef`'d (`KPP_OPTIONS.h` = the pkg default with those two
+lines flipped; otherwise R7), to isolate the horizontal-smoothing effect on the comparison; (b) `global_ocean.cs32x15` with
+`KPP_GHAT` `#undef`'d, which completes 10 steps (120 blocks) and shows the same unit-confused KPP output as R8, proving that
+the abort is the application of `ghat` (6.3e10) to the tracers.
+
+**cs32x15 must not be read as validation.** MITgcm's `pkg/kpp` has no pressure-coordinate handling (`coordFac`,
+`usingPCoords`: zero occurrences, unlike `pkg/ggl90/ggl90_calc.F`). Measured on R8: MITgcm's own `hbl` is negative in
+all 1,621 columns (99.26% exactly the surface layer's Pa value), its interior mixing is the constant Pa-unit background
+(`viscAr = 1.0309e5`), `ghat` reaches 6.3e10 and the run aborts; the port's interior mixing coefficients are NaN in 91%
+of cells and its `hbl` differs by a median 1.2e6 (the silent NaN is tracked as 1DMIX-072); the only close field, `ghat`, agrees because both sides evaluate the same
+formula on the same Pa-as-metres geometry (maximum identical to the last digit, `6.3275154945147095e10`) -- a shared
+unit error, not fidelity. Details and the test that encodes each fact:
+`KPP_VALIDATION_RESULTS.md` ("`global_ocean_cs32x15` + KPP"),
+`tests/test_kpp_mitgcm_validation_extended.py::test_global_ocean_cs32x15_*`.
+
+| File | Recipe | Bytes | sha256 | Digits | raw `output.txt` bytes | raw `output.txt` sha256 |
+|---|---|---|---|---|---|---|
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_global_ocean_90x40x15_10.nc` | R7 | 8861852 | `3b806b2d73c22a848afc159498628aa69ccfebf20b23e4db08d2ff8fe37daa07` | 17 (ES25.16) | 192305496 | `29c42fdaa5d2d074b18b2d89d2fdc01e52a335f6039f0215ab5d5360531f50a8` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_global_ocean_90x40x15_10.nc` | R7 | 14431492 | `0ce4daa6f5e1fc1aeb44b4df7c7102a64174ecd0b35aaac4018848ed2e2f8f0f` | 17 (ES25.16) | 192305496 | `29c42fdaa5d2d074b18b2d89d2fdc01e52a335f6039f0215ab5d5360531f50a8` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_global_ocean_cs32x15_pcoords_1.nc` | R8 | 600081 | `188ecac26830b0c6cc4e7f8a4f30367785300975c4f87fc675b0ba6b2ffab51c` | 17 (ES25.16) | 13659218 | `2051902e6a7e4ac3ebf93f25be1876aa1d1b657443a53e57c0e990306a47105a` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_global_ocean_cs32x15_pcoords_1.nc` | R8 | 647338 | `c53e174c95c31642bc5194ca44326b77eb18035d956d8c22f416f3b8b0355c7e` | 17 (ES25.16) | 13659218 | `2051902e6a7e4ac3ebf93f25be1876aa1d1b657443a53e57c0e990306a47105a` |
+| `outputs_from_python/python_kpp_outputs_global_ocean_90x40x15_10.nc` | P6 | 2175285 | `90ef5ada85f1578befae6cb8ac8e6717b86cd48817e015f65d240e40ca113927` | - | - | - |
+| `outputs_from_python/python_kpp_outputs_global_ocean_cs32x15_pcoords_1.nc` | P7 | 211909 | `8dc7fd6a6d4f10feb6108e043f9a21952c54a695966c9aabca6613e51fa4cf61` | - | - | - |
+
+Raw `output.txt` files are kept under `~/Projects/MITgcm/verification/<exp>/output_kpp_*_054/` (untracked, outside the repo).
+`esx/project.json:external_inputs` now declares these four MITgcm-side pairs' 4 files (55 entries in total with the GGL90 captures of
+1DMIX-054).
+
 ## `global_oce_latlon_720` (720 timesteps, 4-tile 2×2 90×40×15, `global_oce_latlon` verification experiment)
 
 Single version — regenerated fresh 2026-09-27 (1DMIX-049) after the original

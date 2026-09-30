@@ -1,0 +1,7 @@
+# KPP parameters
+# 1DMIX-054 (CONSTRUCTED): all MITgcm defaults, deliberately no non-default
+# parameter. Same content as global_oce_latlon/input_validation/data.kpp (the
+# only other KPP run on this 90x40x15 domain). See README.md for why none of
+# the tuned values in other KPP namelists of this project is carried over.
+ &KPP_PARM01
+ &

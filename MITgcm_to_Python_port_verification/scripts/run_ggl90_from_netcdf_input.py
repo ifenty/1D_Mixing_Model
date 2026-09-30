@@ -8,7 +8,7 @@ the physics formula itself and avoids trajectory-drift confounds -- mirrors
 scripts/run_kpp_from_netcdf_input.py's role for KPP.
 
 Usage:
-  python run_ggl90_from_netcdf_input.py <inputs.nc> -o <output.nc>
+  python run_ggl90_from_netcdf_input.py <inputs.nc> -o <output.nc> [--first N] [--last N]
 """
 
 import sys
@@ -17,7 +17,7 @@ import numpy as np
 import xarray as xr
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple
+from typing import Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'Vertical_Mixing_Models'))
 
@@ -138,8 +138,28 @@ def build_params(inputs_ds: xr.Dataset) -> GGL90Parameters:
     return GGL90Parameters(**kwargs)
 
 
-def run(inputs_nc: Path, output_nc: Path) -> xr.Dataset:
+def run(inputs_nc: Path, output_nc: Path, first_timestep: Optional[int] = None,
+        last_timestep: Optional[int] = None) -> xr.Dataset:
+    """Replay the port on every (or a leading/contiguous subset of) captured timestep(s).
+
+    `first_timestep`/`last_timestep` (0-indexed, inclusive; default None = all) mirror
+    `run_kpp_from_netcdf_input.run_python_kpp_on_dataset`'s arguments of the same name
+    (1DMIX-054: the 999- and 4368-timestep 20x16 `lab_sea` captures are too long to replay in
+    full inside a regression test). The selected inputs are `.load()`ed once: the per-column
+    loop below reads `inputs_ds[...].values[t, i, j, :]` many times per column, and on a lazy
+    NetCDF-backed dataset each such call re-reads (and decompresses) the whole variable
+    (thousands of times slower for a multi-column capture; numerically identical results).
+    """
     inputs_ds = xr.open_dataset(inputs_nc)
+    if first_timestep is not None or last_timestep is not None:
+        lo = 0 if first_timestep is None else first_timestep
+        hi = inputs_ds.sizes['time'] - 1 if last_timestep is None else last_timestep
+        if lo < 0 or hi >= inputs_ds.sizes['time'] or lo > hi:
+            raise ValueError(
+                f"Invalid timestep range: first={first_timestep}, last={last_timestep} "
+                f"(capture has {inputs_ds.sizes['time']} timesteps)")
+        inputs_ds = inputs_ds.isel(time=slice(lo, hi + 1))
+    inputs_ds = inputs_ds.load()
     params = build_params(inputs_ds)
     driver = GGL90Driver(params=params)
 
@@ -295,8 +315,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file', type=str)
     parser.add_argument('-o', '--output', type=str, required=True)
+    parser.add_argument('--first', type=int, default=None,
+                        help='first timestep to replay (0-indexed, inclusive; default: 0)')
+    parser.add_argument('--last', type=int, default=None,
+                        help='last timestep to replay (0-indexed, inclusive; default: last)')
     args = parser.parse_args()
-    run(Path(args.input_file), Path(args.output))
+    run(Path(args.input_file), Path(args.output), first_timestep=args.first, last_timestep=args.last)
 
 
 if __name__ == '__main__':

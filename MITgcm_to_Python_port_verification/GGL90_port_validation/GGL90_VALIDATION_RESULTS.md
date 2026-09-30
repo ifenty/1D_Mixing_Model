@@ -358,6 +358,62 @@ above. It is deferred rather than implemented speculatively, since its only
 observed instance so far is in this now-out-of-scope, pressure-coordinate
 capture.
 
+## `lab_sea` (999 timesteps and 6-month) — GGL90 on the KPP-native multi-column grid (1DMIX-054)
+
+The first GGL90 capture of the grid whose existing captures are all KPP: `lab_sea`, 20x16 single
+tile, 23 levels (10-500 m), real land columns, sea ice (SEAICE + EXF), GMRedi, `useCDscheme`,
+JMD95Z, `deltaT=3600 s`. The run restarts from the stock `pickup.0000000001` exactly as the KPP
+captures do and has the same two durations: **999 timesteps** (5,764,230 wet cells; all replayed)
+and **4368 timesteps** (the 6-month run; steps 2000-2099 replayed, 577,000 wet cells -- its first
+999 steps are bitwise identical to the 999-step capture, measured). The namelist is **constructed**
+(no stock MITgcm experiment has a `data.ggl90` for this grid): **every GGL90 parameter is at the MITgcm
+default** (`GGL90alpha=1`, `mxlMaxFlag=0`, `GGL90TKEmin=1e-11`, ...), because none of this project's
+other GGL90 namelists (vermix / IDEMIX / ECCO-style) can be derived from `lab_sea`'s own geometry or
+forcing; a constructed `pickup_ggl90.0000000001` carrying the cold-start TKE (`GGL90TKEmin`)
+is needed because `nIter0=1` makes GGL90 require its own pickup. Details, justification and
+recipes (G6/G7): `mitgcm_verification_mods/lab_sea/ggl90_input_validation/README.md`, `CAPTURES.md`.
+The header is MITgcm's default `GGL90_OPTIONS.h` (an earlier scaffold's vermix-era header defining
+`GGL90_MISSING_HFAC_BUG` was removed).
+
+| Field | 999-step: median / max abs. diff | >1% rel. (cells) | 6-month (steps 2000-2099): max abs. diff | >1% rel. (cells) |
+|---|---|---|---|---|
+| `visc_az` | 0 / 1.3e-14 | 0 | 1.5e-14 | 0 |
+| `mixing_length` | 0 / 1.1e-11 (values to ~3,300 m) | 0 | 1.5e-11 | 0 |
+| `diff_kz` | 0 / 2.15 | 1,800 (0.031%) | 1.56 | 1,430 (0.248%) |
+| `tke_after` | 0 / 1.07e-3 | 32,862 (0.570%) | 3.6e-5 | 6,497 (1.126%) |
+
+`visc_az` and `mixing_length` are clean to roundoff on a multi-column, sea-ice-covered grid (same
+bounds as the `1D_ocean_ice_column` clean captures). `diff_kz` and `tke_after` are **not clean and
+exceed the clean-capture bounds of the test module, which are not widened**; they are asserted as labelled
+known gaps (replay-input mechanism, 1DMIX-071) with upper guards only (the mismatch fraction is season dependent). Four 100-step windows of the 6-month run gave `diff_kz` /
+`tke_after` fractions of 0.131% / 0.97% (steps 1500-1599), 0.248% / 1.13% (2000-2099), 0.057% / 0.90%
+(3000-3099) and 0.0175% / 0.36% (4268-4367): the mismatch fraction follows the season.
+
+**Measured mechanism (the replay feeds the port column-local velocities).** MITgcm's `verticalShear`
+at tracer point (i,j), level k is `((ubar(k-1)-ubar(k))^2 + (vbar(k-1)-vbar(k))^2)/drC^2` with
+`ubar=(uVel(i)+uVel(i+1))/2`, `vbar=(vVel(j)+vVel(j+1))/2` (`ggl90_calc.F`, the default
+`calcMeanVertShear=.FALSE.` branch), while the replay hands the port `uVel(i,j)`, `vVel(i,j)` only.
+Because the capture holds every column's velocities, `ubar`/`vbar` can be rebuilt from the neighbouring
+columns of the same capture: over the first 300 timesteps (458,013 cells, interior i<19, j<15) the rebuilt
+shear matches MITgcm's captured `vertical_shear` to a median relative error of 1.25e-16 (max 6.6e-16),
+while the column-local shear the replay effectively uses is off by a median 64% (99% of cells differ by
+more than 1%) -- asserted by `test_lab_sea_999_shear_is_four_point_average`. This fits the pattern of
+the two gaps: `tke_after` mismatches are 96.9% in levels 1-4 (centres 15-65 m), evenly spread over the
+run, and 91.9% in cells with `tke_before >= 1e-8` where shear production matters; `diff_kz` mismatches
+(through `Pr = f(Ri)`, `Ri = N^2/(shear^2 + GGL90eps)`) are 95.4% near-neutral cells with shear below 1e-6
+(where a tiny `N^2` amplifies any shear difference); with neighbour-averaged velocities the `diff_kz` mismatch
+goes to zero, i.e. it is entirely the shear, not an EOS effect (review measurement, steps 500-509: `diff_kz` and
+`tke_after` mismatches above 1% go to 0, max_abs to 3.4e-15 / 3.0e-19). `visc_az` and `mixing_length` do not
+depend on the shear and are exact. This is the replay-input effect **1DMIX-071**, not a port gap and not a defect in `GGL90Driver`; no port source or
+replay semantic was changed (the replay script gained optional `first_timestep`/`last_timestep` and loads the
+selected inputs once, numerically identical).
+
+**Consequence for the other multi-column GGL90 captures (1DMIX-071).** `isomip`, `global_ocean.90x40x15` and
+`global_ocean.cs32x15` are also replayed with column-local velocities; their `tke_after`/`diff_kz` residuals
+(attributed above to the kSrf floor, missing IDEMIX physics and pressure coordinates) may include
+this effect. It has not been separated there; a follow-up that rebuilds tracer-point velocities from the
+neighbouring columns for all multi-column replays would do so.
+
 ## The 6 idealized scenarios, standalone Fortran driver — isolating the physics from any capture noise
 
 This project's own 6 idealized forcing scenarios (calm baseline, arctic
@@ -424,10 +480,11 @@ exercise and this port, not open action items:
   permanently, not merely untested: every one of this project's own
   captures and idealized scenarios is a z-coordinate ocean configuration,
   which is the only configuration this validation exercise is designed to
-  say anything meaningful about. Unlike the equivalent KPP limitation, this
-  one produces a large, visible, fully-explained disagreement rather than a
-  silent one when a pressure-coordinate capture is fed through the port —
-  see `global_ocean.cs32x15` above for the measured size.
+  say anything meaningful about. The equivalent KPP limitation was expected
+  to produce a misleading close agreement; measured under 1DMIX-054 it does not (MITgcm's own KPP
+  aborts at iteration 1 and the port returns NaN in most interior cells; see
+  `KPP_VALIDATION_RESULTS.md`), so for both schemes a pressure-coordinate capture gives a large,
+  visible disagreement -- see `global_ocean.cs32x15` above for the measured size for GGL90.
 - **`calc_mean_vert_shear` is declared but not implemented.** This
   configuration flag (a real, alternate vertical-shear formula) has no
   consumer anywhere in the port, the same declared-but-dead pattern as
@@ -467,7 +524,7 @@ docstrings in
 `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`,
 which drive the same replay entry point
 (`scripts/run_ggl90_from_netcdf_input.py::run`). The `isomip`,
-`global_ocean.90x40x15`, and `global_ocean.cs32x15` statistics come from
+`global_ocean.90x40x15`, `global_ocean.cs32x15` and (1DMIX-054) `lab_sea` statistics come from
 that same test module's own fresh measurements.
 
 **Print precision (1DMIX-070).** All five captures above were recaptured on

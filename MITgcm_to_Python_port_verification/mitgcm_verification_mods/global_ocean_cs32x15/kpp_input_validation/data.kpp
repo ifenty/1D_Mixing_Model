@@ -1,0 +1,7 @@
+# KPP parameters
+# 1DMIX-054 (CONSTRUCTED): all MITgcm defaults, deliberately no non-default
+# parameter (see README.md). NOTE: this experiment runs in pressure coordinates
+# and pkg/kpp has no pressure-coordinate handling, so every length-like KPP
+# quantity (minKPPhbl = drF(1), hbl, zeta, ...) is computed with Pa as if metres.
+ &KPP_PARM01
+ &

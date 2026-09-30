@@ -1,0 +1,13 @@
+# Packages
+# 1DMIX-054 (CONSTRUCTED): lab_sea/input/data.pkg with useKPP=.FALSE. and useGGL90=.TRUE.
+# (GGL90 and KPP cannot both be on: pkg/ggl90/ggl90_check.F).
+ &PACKAGES
+  useGMRedi = .TRUE.,
+  useKPP    = .FALSE.,
+  useGGL90  = .TRUE.,
+  useEXF    = .TRUE.,
+  useCAL    = .TRUE.,
+  useSEAICE = .TRUE.,
+  useDiagnostics = .TRUE.,
+  useMNC    = .TRUE.,
+ &

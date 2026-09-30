@@ -1,0 +1,8 @@
+# Packages (lines beginning "#" are comments)
+# 1DMIX-054 (CONSTRUCTED): input.idemix/data.pkg with useGGL90 replaced by useKPP.
+ &PACKAGES
+ useGMRedi=.TRUE.,
+ useDiagnostics=.TRUE.,
+ useKPP=.TRUE.,
+#useMNC=.TRUE.,
+ &

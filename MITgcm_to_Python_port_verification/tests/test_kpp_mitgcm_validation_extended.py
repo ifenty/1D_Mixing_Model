@@ -80,6 +80,19 @@ the 2026-09-20 fix) showed 51.809% of all 11,000 timesteps affected; `lab_sea`
 affected fraction. `seaice_obcs_1dmix034` (generated 2026-09-26, already
 after the fix) was already confirmed clean and needed no refresh.
 
+**1DMIX-054 update (2026-09-30)**: two KPP captures on grids that had only ever
+been captured with GGL90 were added, `global_ocean_90x40x15` (10 timesteps, 36
+tiles, 2,315 wet columns, static z-coordinate geometry) and `global_ocean_cs32x15`
+(pressure coordinates, **1 timestep**: MITgcm's own run aborts after step 1). Both
+namelists are CONSTRUCTED (no stock MITgcm KPP input exists for these grids; see
+`mitgcm_verification_mods/global_ocean_*/kpp_input_validation/README.md` and
+`KPP_port_validation/CAPTURES.md` recipes R7/R8). The `cs32x15` tests below are a
+**known-gap characterization, not a validation**: MITgcm's `pkg/kpp` has no
+pressure-coordinate handling, so both MITgcm and the port evaluate KPP with
+pressures in Pa used as if they were metres; any agreement on that capture is
+shared unit-confused arithmetic and must not be read as port fidelity (see that
+section's docstrings for the measured mechanism).
+
 Given this, the tests below:
 - Always test `hbl` (unaffected by the truncation defect even before this
   refresh: `OUTPUT_HBL` is a separate, always-unconditional write path --
@@ -131,6 +144,13 @@ OUTPUTS_SEAICE_OBCS = _OUTPUTS / 'mitgcm_kpp_outputs_seaice_obcs_1dmix034.nc'
 
 DATA_GLOBAL_OCE_LATLON = _INPUTS / 'mitgcm_kpp_inputs_global_oce_latlon_720.nc'
 OUTPUTS_GLOBAL_OCE_LATLON = _OUTPUTS / 'mitgcm_kpp_outputs_global_oce_latlon_720.nc'
+
+# 1DMIX-054: geometry-matched KPP captures on the two global_ocean grids that had
+# only been captured with GGL90 (CONSTRUCTED namelists; CAPTURES.md R7/R8).
+DATA_GLOBAL_OCEAN_90X40X15 = _INPUTS / 'mitgcm_kpp_inputs_global_ocean_90x40x15_10.nc'
+OUTPUTS_GLOBAL_OCEAN_90X40X15 = _OUTPUTS / 'mitgcm_kpp_outputs_global_ocean_90x40x15_10.nc'
+DATA_GLOBAL_OCEAN_CS32X15 = _INPUTS / 'mitgcm_kpp_inputs_global_ocean_cs32x15_pcoords_1.nc'
+OUTPUTS_GLOBAL_OCEAN_CS32X15 = _OUTPUTS / 'mitgcm_kpp_outputs_global_ocean_cs32x15_pcoords_1.nc'
 
 # lab_sea_6mo: the original (Mac-era) capture was a 222 MB NetCDF file whose
 # on-disk chunking (chunksizes (2184, 7, 6, 8) -- half the time axis per
@@ -903,3 +923,384 @@ def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_
     max_abs = float(np.max(diff))
     assert median < 0.01, f"global_oce_latlon ghat: median abs diff {median:.4g} regressed"
     assert max_abs < 140.0, f"global_oce_latlon ghat: max abs diff {max_abs:.4g} regressed"
+
+
+# ========================================================================
+# global_ocean_90x40x15 + KPP (1DMIX-054): 10 timesteps, 36 tiles (10x10, 9x4),
+# 2,315 wet columns at every timestep, static z-coordinate geometry, JMD95P,
+# cold start (nIter0=0), CONSTRUCTED namelist (data.kpp = all MITgcm defaults;
+# viscAr/diffKr restored to the grid's own standard values, ivdc_kappa=0 as
+# KPP_CHECK requires; see kpp_input_validation/README.md and CAPTURES.md R7).
+# This is the KPP counterpart of the existing GGL90 IDEMIX capture of the SAME
+# grid/forcing/initial state. The header is MITgcm's default KPP_OPTIONS.h, so
+# KPP_SMOOTH_SHSQ/KPP_SMOOTH_DBLOC (horizontal 1-2-1 smoothing) are ON in the
+# MITgcm run while the single-column port cannot apply them -- the same
+# situation as the lab_sea captures (global_oce_latlon is the only multi-column
+# capture with them off). Bounds below are the existing multi-column bounds of
+# this file (the strictest one each measurement meets); where the measurement
+# exceeds every existing bound the excess is asserted as a labelled known gap,
+# never by widening a convention bound.
+# ========================================================================
+
+@pytest.fixture(scope='module')
+def result_global_ocean_90x40x15():
+    _require(DATA_GLOBAL_OCEAN_90X40X15)
+    _require(OUTPUTS_GLOBAL_OCEAN_90X40X15)
+    inputs_ds = xr.open_dataset(DATA_GLOBAL_OCEAN_90X40X15).load()
+    python_ds = run_python_kpp_on_dataset(inputs_ds, verbose=False)
+    mitgcm_ds = xr.open_dataset(OUTPUTS_GLOBAL_OCEAN_90X40X15).load()
+    return inputs_ds, python_ds, mitgcm_ds
+
+
+@pytest.fixture(scope='module')
+def ocean_mask_global_ocean_90x40x15(result_global_ocean_90x40x15):
+    inputs_ds, _python_ds, _mitgcm_ds = result_global_ocean_90x40x15
+    return _ocean_mask(inputs_ds['temperature'].values, inputs_ds['salinity'].values)
+
+
+def test_global_ocean_90x40x15_capture_configuration_and_wet_columns(
+        result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15):
+    """Structural sanity of the new capture, measured fresh (1DMIX-054): 10
+    timesteps x 2,315 wet columns (constant, time-invariant bathymetry -- same
+    count as global_oce_latlon: this is the same 90x40 domain), captured with
+    MITgcm's DEFAULT KPP_OPTIONS.h (smooth_shsq=smooth_dbloc=use_ghat=1) and
+    the constructed namelist's restored background mixing (viscAz=1e-3,
+    diffKzT=diffKzS=3e-5). A drift in any of these would mean the capture
+    was replaced by a different configuration.
+    """
+    inputs_ds, _python_ds, _mitgcm_ds = result_global_ocean_90x40x15
+    per_timestep = ocean_mask_global_ocean_90x40x15.sum(axis=(1, 2))
+    assert per_timestep.tolist() == [2315] * 10, per_timestep.tolist()
+    attrs = inputs_ds.attrs
+    assert (int(attrs['smooth_shsq']), int(attrs['smooth_dbloc']), int(attrs['use_ghat'])) == (1, 1, 1)
+    assert (attrs['viscAz'], attrs['diffKzT'], attrs['diffKzS']) == (1.0e-3, 3.0e-5, 3.0e-5)
+
+
+def test_global_ocean_90x40x15_capture_is_not_truncated(
+        result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15):
+    """Measured fresh (1DMIX-054): 0.0% of the 23,150 ocean column-timesteps
+    show the 1DMIX-035 all-zero-interior truncation signature (the capture
+    was built from the current, fixed `kpp_mods/`)."""
+    _inputs_ds, _python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    clean = _clean_mask(mitgcm_ds['visc_az'].values, ocean_mask_global_ocean_90x40x15)
+    frac_truncated = 1.0 - (float(clean.sum()) / float(ocean_mask_global_ocean_90x40x15.sum()))
+    assert frac_truncated < 0.02, (
+        f"global_ocean_90x40x15 KPP truncated-column fraction {frac_truncated:.4f} regressed "
+        "from the confirmed-clean 0.0%."
+    )
+
+
+def test_global_ocean_90x40x15_hbl(result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15):
+    """`hbl` over all 23,150 ocean column-timesteps, measured fresh
+    (1DMIX-054): median 3.39e-4 m, p95 0.0398 m, p99 0.316 m, 0.28% / 0.0086%
+    (65 / 2 columns) exceed 1 m / 5 m. The two robust statistics use the
+    stricter global_oce_latlon bounds of this file (same 90x40x15 domain;
+    median<0.005, fraction>5 m <0.001), which this measurement meets. The
+    MAXIMUM (90.04 m, one column-timestep) does NOT meet any existing
+    multi-column bound (8 m latlon, 50 m lab_sea_6mo, 30 m 11k) and is
+    handled by `test_global_ocean_90x40x15_hbl_max_known_gap` instead of a
+    widened bound.
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)[
+        ocean_mask_global_ocean_90x40x15]
+    assert float(np.median(diff)) < 0.005, f"90x40x15 hbl median diff {np.median(diff):.4g} m regressed"
+    assert float(np.mean(diff > 5.0)) < 0.001, (
+        f"90x40x15 hbl fraction >5m diff {np.mean(diff > 5.0):.4%} regressed")
+
+
+def test_global_ocean_90x40x15_hbl_max_known_gap(result_global_ocean_90x40x15,
+                                                  ocean_mask_global_ocean_90x40x15):
+    """KNOWN-GAP CHARACTERIZATION (1DMIX-054; replay-input mechanism 1DMIX-071),
+    not a fidelity claim and not a port defect. Measured fresh: max |hbl diff| =
+    90.04 m at ONE column-timestep (t=9, i=74, j=29: MITgcm 171.49 m, port 81.45
+    m); the next largest is 7.03 m, then 3.85 m. This exceeds every existing
+    multi-column max bound in this file (8 m global_oce_latlon, 50 m
+    lab_sea_6mo, 30 m 11k), which are NOT widened.
+
+    Mechanism. MITgcm's captured bulk Richardson number at the first interface
+    below the surface layer is 0.29941 against Ricr=0.3, so the diagnosed level
+    sits on a threshold and a small Rib difference flips it by one grid cell
+    (81 m -> 171 m). But the port's Rib there is NOT within roundoff of MITgcm's
+    (Richard's review measurement, 1DMIX-054 round 1: 0.31885 vs 0.29941 at
+    level 2, 6.5%): the difference is the replay-input effect of 1DMIX-071.
+    MITgcm's dVsq at a tracer point averages the squared differences of the four
+    surrounding velocity points (i,i+1),(j,j+1) (kpp_forcing_surf.F, default
+    branch; KPP_SMOOTH_DVSQ is undefined), the replay feeds the port only
+    uVel(i,j), vVel(i,j). At this column the column-local dVsq (du^2+dv^2, as the
+    port computes it) is 0.58/0.61/0.72 of the captured value at interface
+    indices 1-3 (0.98/1.19 at 4-5; measured), which changes Rib; the threshold
+    then amplifies it. `test_global_ocean_90x40x15_dvsq_is_four_point_average`
+    asserts the identity. So the likely source is 1DMIX-071 (replay-input
+    velocity averaging), amplified by the 1DMIX-019 threshold; the run with
+    horizontal smoothing off (evidence only) gives the same column (90.02 m),
+    so it is not the smoothing. The 7.03 m column (t=4, i=87, j=31) is not a
+    threshold case (MITgcm Rib 0.534 vs Ricr 0.3), consistent with the same
+    replay-input effect. Bound: < 120 m (1.33x the measured maximum), a
+    regression guard only.
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)[
+        ocean_mask_global_ocean_90x40x15]
+    max_diff = float(np.max(diff))
+    assert max_diff < 120.0, f"90x40x15 hbl max diff {max_diff:.4g} m exceeds the known-gap bound"
+    assert max_diff > 8.0, (
+        f"90x40x15 hbl max diff {max_diff:.4g} m now meets the global_oce_latlon 8 m bound: the "
+        "known gap has closed -- update this test and its docs instead of leaving a stale gap claim.")
+
+
+def test_global_ocean_90x40x15_dvsq_is_four_point_average(result_global_ocean_90x40x15):
+    """Oracle-side mechanism check (no port involved; replay-input effect,
+    1DMIX-071). MITgcm's `dVsq` at tracer point (i,j), level k is
+    0.5*[(u(i,1)-u(i,k))^2 + (u(i+1,1)-u(i+1,k))^2 + (v(j,1)-v(j,k))^2 +
+    (v(j+1,1)-v(j+1,k))^2] (kpp_forcing_surf.F, default branch with
+    KPP_ESTIMATE_UREF and KPP_SMOOTH_DVSQ undefined, both 0 in this capture's
+    attributes), so it is NOT smoothed and can be rebuilt from the neighbouring
+    columns of the same capture. Measured fresh (207,369 cells with dVsq > 0,
+    interior i<89, j<39, wet neighbours): the rebuilt value equals the captured
+    `dVsq` exactly (max relative difference 0.0), while the column-local value
+    the replay effectively uses (du^2+dv^2, no factor 0.5: that belongs to
+    MITgcm's four-term average) is off by a median 27% (97.6% of cells differ by
+    more than 1%). Asserted: rebuilt matches to 1e-12, column-local does not
+    (median > 0.1).
+    """
+    inputs_ds, _python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    assert int(inputs_ds.attrs['smooth_dvsq']) == 0 and int(inputs_ds.attrs['estimate_uref']) == 0
+    u = inputs_ds['u_velocity'].values
+    v = inputs_ds['v_velocity'].values
+    theta = inputs_ds['temperature'].values
+
+    def diff_to_top(a):
+        return a[..., :1] - a
+
+    rebuilt = 0.5 * (diff_to_top(u)[:, :-1, :-1] ** 2 + diff_to_top(u)[:, 1:, :-1] ** 2
+                     + diff_to_top(v)[:, :-1, :-1] ** 2 + diff_to_top(v)[:, :-1, 1:] ** 2)
+    local = (diff_to_top(u) ** 2 + diff_to_top(v) ** 2)[:, :-1, :-1]  # the port's dvsq = du**2 + dv**2
+    captured = mitgcm_ds['dVsq'].values[:, :-1, :-1]
+    wet = (theta[:, :-1, :-1] != 0) & (theta[:, 1:, :-1] != 0) & (theta[:, :-1, 1:] != 0)
+    sel = wet & (captured > 0)
+    assert int(sel.sum()) > 100000
+    rel_rebuilt = np.abs(rebuilt - captured)[sel] / captured[sel]
+    rel_local = np.abs(local - captured)[sel] / captured[sel]
+    assert float(np.max(rel_rebuilt)) < 1e-12, "four-point dVsq no longer reproduces the capture"
+    assert float(np.median(rel_local)) > 0.1, "column-local dVsq now matches MITgcm's: the known gap has closed"
+
+
+@pytest.mark.parametrize('field,median_bound,frac_gt1pct_bound', [
+    ('visc_az', 1e-5, 0.2),
+    ('diff_kz_s', 1e-5, 0.03),
+    ('diff_kz_t', 1e-5, 0.03),
+])
+def test_global_ocean_90x40x15_mixing(result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15,
+                                       field, median_bound, frac_gt1pct_bound):
+    """Mixing-coefficient agreement, 269,940 active interior cells, measured
+    fresh (1DMIX-054): `visc_az` median_abs 0 (exact), p99_abs 5.0e-3, 1.67%
+    of cells exceed 1% rel; `diff_kz_s`/`diff_kz_t` (identical here) median_abs
+    0, p99_abs 5.0e-3, 2.02% exceed 1% rel. The >1%-rel bounds are the strictest
+    existing bound each field meets: `visc_az` 0.2 (lab_sea_6mo; the 11k bound
+    0.005 and global_oce_latlon's 0.01 are exceeded by 1.67%), `diff_kz_s`/`_t`
+    0.03 (11k; measured 2.02% meets it; global_oce_latlon's 0.02 is exceeded by
+    a hair). (Correction, 1DMIX-054 round 1: the diffusivities first used 0.2,
+    looser than the strictest bound they meet.) The latlon bounds are exceeded
+    because this capture has KPP_SMOOTH_SHSQ/DBLOC on while the port has no
+    horizontal smoothing -- the controlled rerun with them off (evidence only, not
+    declared) gives 0.39% / 0.73% and p99_abs 3.6e-6 / 5.4e-6, meeting the
+    latlon bounds. max_abs is asserted separately (known gap).
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    diff, rel = _mixing_diff_rel(mitgcm_ds[field].values, python_ds[field].values,
+                                  ocean_mask_global_ocean_90x40x15, skip_surface=True)
+    assert float(np.median(diff)) < median_bound, (
+        f"90x40x15 {field}: median abs diff {np.median(diff):.4g} regressed")
+    assert float(np.mean(rel > 0.01)) < frac_gt1pct_bound, (
+        f"90x40x15 {field}: fraction >1% rel diff {np.mean(rel > 0.01):.4%} regressed")
+
+
+@pytest.mark.parametrize('field,convention_max_abs,known_gap_bound', [
+    ('visc_az', 0.06, 0.3),
+    ('diff_kz_s', 0.1, 0.6),
+    ('diff_kz_t', 0.1, 0.6),
+])
+def test_global_ocean_90x40x15_mixing_max_abs_known_gap(
+        result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15, field,
+        convention_max_abs, known_gap_bound):
+    """KNOWN-GAP CHARACTERIZATION (1DMIX-054). Measured fresh: max_abs 0.218
+    (`visc_az`) and 0.438 (`diff_kz_s`/`_t`) exceed every existing multi-column
+    max_abs bound in this file (0.15 latlon, 0.06/0.1 lab_sea_6mo), which are
+    NOT widened. Replay-input mechanism, not a port gap (1DMIX-071: the replay
+    feeds column-local velocities where MITgcm's dVsq/shsq average (i,i+1),(j,j+1)).
+    The excess is entirely the single hbl-misdiagnosed column of
+    `test_global_ocean_90x40x15_hbl_max_known_gap` (t=9, i=74, j=29,
+    MITgcm visc_az 0.269 vs port 0.051 at the first interface): exactly 2
+    cells of that one column exceed the lab_sea_6mo convention (0.06 / 0.1),
+    and this test asserts that EVERY cell above the convention lies in a
+    column whose hbl differs by more than 5 m -- i.e. the excess is the hbl
+    tail, not a separate mixing defect. The bound (`known_gap_bound`, 1.4x
+    the measured maximum) is a regression guard only.
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    ocean = ocean_mask_global_ocean_90x40x15
+    mit = mitgcm_ds[field].values
+    py = python_ds[field].values
+    diff = np.abs(py - mit)
+    diff[..., 0] = 0.0            # structurally-zero surface interface
+    diff[~ocean] = 0.0
+    active = mit > 1e-6
+    max_abs = float(np.max(diff[active]))
+    assert max_abs < known_gap_bound, f"90x40x15 {field}: max abs diff {max_abs:.4g} exceeds the known-gap bound"
+    hbl_diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)
+    exceed = (diff > convention_max_abs) & active
+    assert exceed.any(), (
+        f"90x40x15 {field}: no cell exceeds the {convention_max_abs} convention bound any more: the "
+        "known gap has closed -- update this test and its docs.")
+    t, i, j, _k = np.nonzero(exceed)
+    assert np.all(hbl_diff[t, i, j] > 5.0), (
+        f"90x40x15 {field}: a cell above the {convention_max_abs} convention bound lies in a column "
+        "whose hbl agrees within 5 m -- the excess is no longer explained by the hbl tail.")
+
+
+def test_global_ocean_90x40x15_ghat(result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15):
+    """`ghat`, 1,470 active cells, measured fresh (1DMIX-054): median_abs
+    6.0e-4, max_abs 18.0, 7.4% of active cells exceed 1% rel, 4 cells with
+    Python's `ghat` exactly 0.0 against a nonzero MITgcm value (the 1DMIX-058
+    exact-zero signature). Bounds are the global_oce_latlon ones (median<0.01,
+    max_abs<140), which this measurement meets; mechanisms of the tail are not
+    re-established here (same class as the other `ghat` tests of this file).
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    diff, _rel = _mixing_diff_rel(mitgcm_ds['ghat'].values, python_ds['ghat'].values,
+                                   ocean_mask_global_ocean_90x40x15, skip_surface=False)
+    assert float(np.median(diff)) < 0.01, f"90x40x15 ghat: median abs diff {np.median(diff):.4g} regressed"
+    assert float(np.max(diff)) < 140.0, f"90x40x15 ghat: max abs diff {np.max(diff):.4g} regressed"
+
+
+# ========================================================================
+# global_ocean_cs32x15 + KPP (1DMIX-054): pressure coordinates (OCEANICP,
+# TEOS10), 12 tiles, ONE timestep (MITgcm's own run aborts after step 1, see
+# below). KNOWN-GAP CHARACTERIZATION ONLY -- NOT a validation of the port.
+#
+# The issue's hypothesis (1DMIX-054) was that, because MITgcm's pkg/kpp has NO
+# coordFac/usingPCoords handling (grep-confirmed: no occurrence in pkg/kpp),
+# MITgcm's KPP would run without complaint on this grid with Pa treated as
+# metres, and a port with no p-coordinate handling either might then agree
+# closely -- a false pass built on a shared unit error. MEASURED, this is only
+# partly true:
+#  (1) MITgcm's own KPP is unit-confused (rC in Pa, decreasing with k, used as
+#      z): every column has hbl < 0 (-2.5e5, i.e. the surface layer's Pa value),
+#      the interior mixing is the constant Pa-unit background (visc_az = 103,090.5
+#      "m2/s"), and ghat = 6.3e10; applying that ghat (KPP_GHAT is on by MITgcm's
+#      default) drives the potential temperature to -1e13 at iteration 1 and
+#      MITgcm's own solution monitor STOPs the run (an abort, not a silent pass).
+#      With KPP_GHAT #undef'd (evidence-only rerun) the run completes 10 steps,
+#      still with hbl=-2.5e5 in 99.3% of columns and background-only mixing.
+#  (2) The port does NOT agree (its silent NaN output on unsupported input is
+#      tracked as 1DMIX-072): in every one of the 1,621 columns most of the
+#      interior interface cells of its visc_az/diff_kz are NaN (91.0% of the
+#      22,694 interior cells; the first floating-point error when one column is
+#      replayed under np.seterr(all='raise') is an overflow in `swfrac`'s
+#      exp(-z/d) with the Pa-valued depth -- whether that is the only source of
+#      the NaNs was not traced further), and its hbl differs from MITgcm's by a median
+#      1.2e6 (Pa-as-metres). Only `ghat` is close (median_abs 0, 87% of active
+#      cells within 1%; the largest value, 6.3275154945147095e10, is
+#      IDENTICAL to the last digit): that is the same unit-confused formula fed
+#      the same unit-confused inputs on both sides -- shared unit arithmetic,
+#      not port fidelity -- and MITgcm's own value there is 6.3e10, itself
+#      unphysical.
+# ========================================================================
+
+@pytest.fixture(scope='module')
+def result_global_ocean_cs32x15():
+    _require(DATA_GLOBAL_OCEAN_CS32X15)
+    _require(OUTPUTS_GLOBAL_OCEAN_CS32X15)
+    inputs_ds = xr.open_dataset(DATA_GLOBAL_OCEAN_CS32X15).load()
+    python_ds = run_python_kpp_on_dataset(inputs_ds, verbose=False)
+    mitgcm_ds = xr.open_dataset(OUTPUTS_GLOBAL_OCEAN_CS32X15).load()
+    return inputs_ds, python_ds, mitgcm_ds
+
+
+@pytest.fixture(scope='module')
+def ocean_mask_global_ocean_cs32x15(result_global_ocean_cs32x15):
+    inputs_ds, _python_ds, _mitgcm_ds = result_global_ocean_cs32x15
+    return _ocean_mask(inputs_ds['temperature'].values, inputs_ds['salinity'].values)
+
+
+def test_global_ocean_cs32x15_mitgcm_kpp_is_itself_unit_confused(
+        result_global_ocean_cs32x15, ocean_mask_global_ocean_cs32x15):
+    """ORACLE-SIDE facts about MITgcm's own KPP output on the pressure-
+    coordinate grid (no port involved), measured fresh (1DMIX-054) over the
+    1,621 wet columns of the single captured timestep:
+    - the capture is one timestep only (MITgcm aborted at iteration 1);
+    - MITgcm `hbl` is <= 0 in every column (a depth-like quantity computed
+      from rC in Pa) and equals -251,327.84 (the surface layer's Pa value)
+      in 99.26% of them;
+    - the interior `visc_az` is the constant Pa-unit background
+      (viscArNr = 1.030905162225e5, i.e. 1e-3 m2/s x (g*rhoConst)^2) plus at
+      most ~0.01 -- KPP contributed essentially no mixing;
+    - `ghat` reaches 6.3275e10 (a physical value is O(1e-3..1e3)), the number
+      that MITgcm's tracer transport then multiplies into a -1e13 K
+      potential temperature, stopping the run.
+    """
+    inputs_ds, _python_ds, mitgcm_ds = result_global_ocean_cs32x15
+    assert inputs_ds.sizes['time'] == 1, "the cs32x15 KPP capture is a single-timestep capture"
+    ocean = ocean_mask_global_ocean_cs32x15
+    assert int(ocean.sum()) == 1621
+    hbl = mitgcm_ds['hbl'].values[ocean]
+    assert np.all(hbl <= 0.0), "MITgcm cs32x15 KPP hbl is expected negative (rC in Pa used as z)"
+    assert float(np.mean(np.isclose(hbl, -251327.843323, rtol=1e-6))) > 0.98
+    visc = mitgcm_ds['visc_az'].values[ocean][:, 1:]
+    background = float(inputs_ds.attrs['viscAz'])
+    assert background == pytest.approx(1.030905162225e5, rel=1e-12)
+    assert float(np.max(np.abs(visc - background))) < 0.1, "KPP added mixing on top of the background"
+    assert float(np.max(mitgcm_ds['ghat'].values[ocean])) > 1e10
+
+
+def test_global_ocean_cs32x15_port_disagrees_known_gap(result_global_ocean_cs32x15,
+                                                        ocean_mask_global_ocean_cs32x15):
+    """KNOWN-GAP CHARACTERIZATION (1DMIX-054): the port does NOT reproduce
+    MITgcm on this pressure-coordinate capture, and no bound here is a
+    fidelity bound. Measured fresh over the 1,621 wet columns: 76.6% of
+    columns have |hbl diff| > 1 (Pa-as-metres), median |hbl diff| 1.24e6, max
+    4.9e7; the port's interior `visc_az`/`diff_kz_s`/`diff_kz_t` are NaN in
+    91.0% of the 22,694 interior cells (first floating-point error in a replayed column:
+    an overflow in `swfrac` exp(-z/d) with Pa-valued z; see the section comment). Asserted as bounds so that a change in either direction
+    (a silent 'improvement' without a documented pressure-coordinate scope
+    reversal, cf. 1DMIX-040, or a still worse behavior) is noticed. The silent
+    NaN output itself (no ValueError on unsupported input) is tracked as
+    1DMIX-072.
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_cs32x15
+    ocean = ocean_mask_global_ocean_cs32x15
+    hbl_diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)[ocean]
+    assert float(np.mean(hbl_diff > 1.0)) > 0.5, "port hbl now agrees with MITgcm on most p-coordinate columns"
+    assert float(np.median(hbl_diff)) > 1e5
+    assert float(np.max(hbl_diff)) < 1e9
+    for field in ('visc_az', 'diff_kz_s', 'diff_kz_t'):
+        nan_frac = float(np.mean(np.isnan(python_ds[field].values[ocean][:, 1:])))
+        assert nan_frac > 0.5, (
+            f"cs32x15 {field}: NaN fraction {nan_frac:.3f} fell below the known 0.91 -- the port's "
+            "behavior on pressure-coordinate input changed; update this test and its docs.")
+
+
+def test_global_ocean_cs32x15_ghat_agreement_is_shared_unit_arithmetic_not_fidelity(
+        result_global_ocean_cs32x15, ocean_mask_global_ocean_cs32x15):
+    """The ONE field on which the port and MITgcm do agree closely on this
+    capture, and why that agreement is not a validation. Measured fresh over
+    the 22,526 active `ghat` cells: median_abs 0, 87.3% within 1% rel, and the
+    maximum value -- 6.3275154945147095e10 on both sides, identical to the last
+    digit -- is a number MITgcm itself produces from Pa used as metres (a
+    physical value is O(1e-3..1e3)). Both sides evaluate the same formula on the
+    same unit-confused geometry, so they reproduce each other's unit error;
+    agreement here says nothing about the port being correct for pressure-
+    coordinate configurations. (Asserted: closeness on the agreeing subset AND
+    that the agreed value is itself unphysical.)
+    """
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_cs32x15
+    ocean = ocean_mask_global_ocean_cs32x15
+    mit = mitgcm_ds['ghat'].values[ocean]
+    py = python_ds['ghat'].values[ocean]
+    active = mit > 1e-6
+    rel = np.abs(py[active] - mit[active]) / mit[active]
+    assert float(np.median(np.abs(py[active] - mit[active]))) == 0.0
+    assert float(np.mean(rel < 0.01)) > 0.8
+    assert float(np.max(mit)) > 1e10
+    assert float(np.max(py)) == pytest.approx(float(np.max(mit)), rel=1e-12)

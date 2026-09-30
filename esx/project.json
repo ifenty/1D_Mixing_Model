@@ -35,7 +35,9 @@
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_oce_latlon/code_validation/kpp_calc.F",
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/lab_sea/code_validation/kpp_calc.F",
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/seaice_obcs/code_validation/kpp_calc.F",
-        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/kpp_code_validation/kpp_calc.F"
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/kpp_code_validation/kpp_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_90x40x15/kpp_code_validation/kpp_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_cs32x15/kpp_code_validation/kpp_calc.F"
       ]
     },
     {
@@ -45,7 +47,9 @@
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_oce_latlon/code_validation/kpp_routines.F",
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/lab_sea/code_validation/kpp_routines.F",
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/seaice_obcs/code_validation/kpp_routines.F",
-        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/kpp_code_validation/kpp_routines.F"
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/kpp_code_validation/kpp_routines.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_90x40x15/kpp_code_validation/kpp_routines.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_cs32x15/kpp_code_validation/kpp_routines.F"
       ]
     },
     {
@@ -56,7 +60,8 @@
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/code_validation/ggl90_calc.F",
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/isomip/code_validation/ggl90_calc.F",
         "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_90x40x15/code_validation/ggl90_calc.F",
-        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_cs32x15/code_validation/ggl90_calc.F"
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/global_ocean_cs32x15/code_validation/ggl90_calc.F",
+        "MITgcm_to_Python_port_verification/mitgcm_verification_mods/lab_sea/ggl90_code_validation/ggl90_calc.F"
       ]
     }
   ],
@@ -87,6 +92,14 @@
     "MITgcm_to_Python_port_verification/GGL90_port_validation/outputs_from_mitgcm/mitgcm_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc",
     "MITgcm_to_Python_port_verification/GGL90_port_validation/inputs_from_mitgcm/mitgcm_ggl90_inputs_1D_ocean_ice_column_11000.nc",
     "MITgcm_to_Python_port_verification/GGL90_port_validation/outputs_from_mitgcm/mitgcm_ggl90_outputs_1D_ocean_ice_column_11000.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_global_ocean_90x40x15_10.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_mitgcm/mitgcm_kpp_outputs_global_ocean_90x40x15_10.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_global_ocean_cs32x15_pcoords_1.nc",
+    "MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_mitgcm/mitgcm_kpp_outputs_global_ocean_cs32x15_pcoords_1.nc",
+    "MITgcm_to_Python_port_verification/GGL90_port_validation/inputs_from_mitgcm/mitgcm_ggl90_inputs_lab_sea_999.nc",
+    "MITgcm_to_Python_port_verification/GGL90_port_validation/outputs_from_mitgcm/mitgcm_ggl90_outputs_lab_sea_999.nc",
+    "MITgcm_to_Python_port_verification/GGL90_port_validation/inputs_from_mitgcm/mitgcm_ggl90_inputs_lab_sea_6mo.nc",
+    "MITgcm_to_Python_port_verification/GGL90_port_validation/outputs_from_mitgcm/mitgcm_ggl90_outputs_lab_sea_6mo.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_python_standalone/calm_baseline/kpp_experiment.npz",
     "MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_python_standalone/calm_baseline/kpp_standalone_output.txt",
     "MITgcm_to_Python_port_verification/KPP_port_validation/outputs_from_python_standalone/arctic_convection/kpp_experiment.npz",

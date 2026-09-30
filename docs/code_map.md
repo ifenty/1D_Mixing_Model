@@ -45,7 +45,7 @@ spatial resolution — a full 720-timestep replay across all 2,315 wet columns i
 ~1.5 h serially (measured directly at ~2.2 ms/column-timestep on this capture) and remains a
 separate, not-yet-scoped follow-up, not something this regression test attempts.
 The GGL90 equivalent captures (vermix, 1D_ocean_ice_column, isomip, global_ocean_90x40x15,
-global_ocean_cs32x15) live under `MITgcm_to_Python_port_verification/GGL90_port_validation/{inputs,outputs}_from_mitgcm/`
+global_ocean_cs32x15, and, from 1DMIX-054, lab_sea 999-step and 6-month) live under `MITgcm_to_Python_port_verification/GGL90_port_validation/{inputs,outputs}_from_mitgcm/`
 and are exercised by `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`
 (issue 1DMIX-042) via `MITgcm_to_Python_port_verification/scripts/run_ggl90_from_netcdf_input.py::run`.
 
@@ -65,40 +65,28 @@ and `MITgcm_to_Python_port_verification/KPP_port_validation/CAPTURES.md` ("Regen
 streaming GGL90 parser was proven byte-identical to the pre-1DMIX-065 parser on the 36-tile and 12-tile captures.
 Their 14 MITgcm-side files (inputs and outputs) and the three previously unlisted KPP `outputs_from_mitgcm` files
 (`11k_1D`, `lab_sea_1000_0820T0946`, `1D_10_kppmix_extend_rawflux_fix`) are declared in `esx/project.json:external_inputs`
-(now 47 entries), so their bytes are hashed into every verification receipt and their absence blocks instead of skipping;
+(47 entries then; 55 after 1DMIX-054), so their bytes are hashed into every verification receipt and their absence blocks instead of skipping;
 the Python replay files are not, because the tests regenerate them.
 
-**1DMIX-054 (bounded first step, no new permanent capture yet)**: built two new
-dual-scheme Docker `-mods` directories following the existing precedent
-(`vermix/kpp_code_validation`, `1D_ocean_ice_column/ggl90_code_validation`):
-`mitgcm_verification_mods/global_ocean_90x40x15/kpp_code_validation/` (KPP
-added to this GGL90-native experiment; canonical `kpp_calc.F`/`kpp_routines.F`
-symlinks confirmed byte-identical to `kpp_mods/`) and
-`mitgcm_verification_mods/lab_sea/ggl90_code_validation/` (GGL90 added to this
-KPP-native experiment; canonical `ggl90_calc.F` symlink confirmed
-byte-identical to `ggl90_mods/`). Both compiled cleanly via
-`experiment_compile.sh` (`-norun`, measured: lab_sea 20.6 s). A 10-timestep
-GGL90-only smoke run on `lab_sea` (KPP disabled at runtime per
-`pkg/ggl90/ggl90_check.F`'s "GGL90 and KPP cannot be turned on at the same
-time" guard — the same idiom `1D_ocean_ice_column/ggl90_code_validation`'s own
-`packages.conf` comment documents) measured 1.15 s run + 2.12 s parse via
-`parse_mitgcm_ggl90_split.py`, non-degenerate (real T/S/velocity/TKE/`visc_az`/
-`diff_kz`/`mixing_length` ranges, `idemix_gtke` correctly all-zero since
-IDEMIX isn't enabled for this variant). Linearly extrapolated from this
-sample: the full 999-timestep and 6-month/4368-timestep `lab_sea` GGL90
-captures are cheap (~5.4 min and ~24 min run+parse respectively) — see
-`devel-loop/loop_state/1dmix054-timing-measurement.md` for the arithmetic.
-`global_ocean_90x40x15/kpp_code_validation` compiled but was not run this
-turn (its 90x40x15, multi-tile grid is not the cheapest target; lab_sea was
-chosen for the required short-run measurement per the issue brief).
-**No `global_ocean_cs32x15/kpp_code_validation/` directory was created**:
-direct read of the real MITgcm checkout confirmed `pkg/kpp/*.F` has zero
-`coordFac`/`usingPCoords` handling (unlike `pkg/ggl90`) and no runtime guard
-in `kpp_check.F` rejects a pressure-coordinate configuration — a KPP capture
-on `cs32x15` would compare two sides sharing the identical missing
-coordinate-conversion defect, a "misleading clean pass" rather than real
-validation evidence. Recommended dropping this target from the issue; see
-`devel-loop/loop_state/1dmix054-pressure-coordinate-determination.md`.
+**1DMIX-054 (cross-scheme captures, geometry-matched)**: the second mixing scheme was captured on three grids that
+had only ever had one, with new `-mods` trees `mitgcm_verification_mods/global_ocean_90x40x15/kpp_code_validation/`,
+`global_ocean_cs32x15/kpp_code_validation/` and `lab_sea/ggl90_code_validation/` (stock `code/` headers unmodified
+except the listed package swap and, for lab_sea, its single-tile `SIZE.h`; instrumented `.F` files symlinked to
+`kpp_mods/`/`ggl90_mods/` and declared in `esx/project.json:mirrored_paths`; every header/package difference is in
+`mitgcm_verification_mods/README.md`). The run-input namelists are **constructed** (no stock MITgcm experiment has them;
+`<scheme>_input_validation/` next to each tree, every non-stock value justified in its README; recipes R7/R8 in
+`KPP_port_validation/CAPTURES.md`, G6/G7 in `GGL90_port_validation/CAPTURES.md`). Four permanent captures (8 MITgcm-side
+files, `external_inputs` now 55 entries): KPP `global_ocean_90x40x15_10` (10 steps, 36 tiles, tested in
+`MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`), KPP `global_ocean_cs32x15_pcoords_1`, GGL90 `lab_sea_999` and `lab_sea_6mo`
+(tested in `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`;
+`MITgcm_to_Python_port_verification/scripts/run_ggl90_from_netcdf_input.py::run` gained optional
+`first_timestep`/`last_timestep` and now `.load()`s the selected inputs once). **The `cs32x15` KPP capture is a known-gap
+characterization, not a validation** (pressure coordinates: MITgcm's `pkg/kpp` has no `coordFac`/`usingPCoords` handling,
+its own run aborts at iteration 1, and the port returns NaN in 91% of interior cells (silent NaN tracked as 1DMIX-072), so the "shared unit error gives a
+close, misleading agreement" scenario anticipated by the issue occurs only for `ghat`; measured details in
+`KPP_VALIDATION_RESULTS.md`). One replay-harness limitation found on the multi-column captures (1DMIX-071; not a model defect, not
+changed here): the replays feed the port `uVel(i,j)`/`vVel(i,j)` only, whereas MITgcm's KPP and GGL90 shear at a tracer
+point averages the `(i,i+1)`/`(j,j+1)` velocities; see the GGL90 and KPP results documents.
 
 Both schemes also have a second, symmetric validation direction ("Direction B",
 vs. "Direction A" for the MITgcm-capture comparisons above): a Python-port-driven

@@ -260,6 +260,39 @@ Standalone-driver Fortran outputs (`outputs_from_python_standalone/<scenario>/gg
 were regenerated with the widened `ggl90_calc.F` prints from the unchanged
 `ggl90_standalone_input.txt`; see `CONVENTIONS_STANDALONE_DATA.md` ("Regenerated at 17 digits, 1DMIX-070").
 
+## Cross-scheme captures, 1DMIX-054 (2026-09-30): GGL90 on `lab_sea`
+
+The first GGL90 captures of `lab_sea` (all its existing captures are KPP), at the two durations of the existing KPP
+captures. **The namelist is CONSTRUCTED**: no stock MITgcm experiment has a `data.ggl90` for `lab_sea`. `data.ggl90` is
+`&GGL90_PARM01 &` (every parameter at the MITgcm default: none of this project's other GGL90 namelists can be derived from
+this grid's own geometry/forcing, see the README), `data.pkg` switches `useKPP` off and `useGGL90` on, and a constructed
+`pickup_ggl90.0000000001` holds the cold-start TKE (`GGL90TKEmin=1e-11`; `nIter0=1` makes GGL90 require its own pickup, which
+the stock KPP-only input never had). All in `mitgcm_verification_mods/lab_sea/ggl90_input_validation/` (README, files,
+`assemble_run_dir.sh`, `make_pickup_ggl90.py`); compile tree `lab_sea/ggl90_code_validation/` (stock headers, the single-tile
+20x16 `SIZE.h` shared with `lab_sea/code_validation/`, `ggl90` added, default `GGL90_OPTIONS.h`; differences in
+`mitgcm_verification_mods/README.md`). Provenance rules, MITgcm commit, image and instrumentation as the 1DMIX-070 set
+(`d861cd501`, `mitgcm:latest` `6cc66b8957d8`, ES25.16); MITgcm files only from an MITgcm run parsed by the streaming
+`parse_mitgcm_ggl90_split.py`, Python files only from replaying the port.
+
+| Id | Steps |
+|---|---|
+| **G6** `lab_sea_999` (999 steps, 1 tile 20x16x23, 5,764,230 wet cells) | `MITGCM_ROOT=~/Projects/MITgcm <mods>/lab_sea/ggl90_input_validation/assemble_run_dir.sh 999` (creates `verification/lab_sea/input.ggl90_999`: `data` = stock `input/data` with the single `endTime=36000.` -> `3600000.` edit of KPP recipe R3, plus `data.pkg`, `data.ggl90`, `data.diagnostics`, `pickup_ggl90.0000000001.{data,meta}`; the run script layers it on the stock `input/`); cwd `~/Projects/MITgcm/verification`: `./experiment_compile.sh lab_sea -mods <mods>/lab_sea/ggl90_code_validation -build build_docker_ggl90_054 -clean -j 8`; `./experiment_run_no_compile.sh lab_sea input.ggl90_999 -build build_docker_ggl90_054 -output output_ggl90_999_054` (64.6 s, `output.txt` 1,898,240,036 bytes, 999 validation blocks); parse (repo root, `ulimit -v 8000000`): `python3 MITgcm_to_Python_port_verification/scripts/parse_mitgcm_ggl90_split.py <run>/output.txt lab_sea` (46 s). **CONSTRUCTED namelist.** Files named `lab_sea_999` (the true step count; the KPP counterpart is `lab_sea_1000_0820T0946`, also 999 steps). |
+| **G7** `lab_sea_6mo` (4368 steps, **INFERRED** end time as R5) | same as G6 with `assemble_run_dir.sh 6mo` (`endTime=15728400.`, the edit of KPP recipe R5, itself INFERRED) and `-output output_ggl90_6mo_054` (about 5 min run, `output.txt` 8,299,126,949 bytes, 4368 validation blocks, `Execution ended Normally`); parse as G6 (about 4 min, output files written by the streaming parser, peak memory not separately recorded). **CONSTRUCTED namelist.** Its first 999 steps are bitwise identical to G6 (every input and output variable; asserted for the first 20 steps in `test_lab_sea_6mo_first_999_steps_identical_to_999_capture`). |
+| **P8** | cwd `MITgcm_to_Python_port_verification`: `python3 scripts/run_ggl90_from_netcdf_input.py GGL90_port_validation/inputs_from_mitgcm/mitgcm_ggl90_inputs_lab_sea_999.nc -o GGL90_port_validation/outputs_from_python/python_ggl90_outputs_lab_sea_999.nc` (`ulimit -v 8000000`, 55 s; `run_ggl90_from_netcdf_input.py` gained optional `--first`/`--last` and loads the selected inputs once, 1DMIX-054; without that the 999-step capture cannot be replayed in practice). No Python file exists for `lab_sea_6mo` (tests replay steps 2000-2099 in-process). |
+
+| File | Recipe | Bytes | sha256 | Digits | raw `output.txt` bytes | raw `output.txt` sha256 |
+|---|---|---|---|---|---|---|
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_lab_sea_999.nc` | G6 | 85252860 | `b38746a9fb0be5266f2b953f1bf2ef909590582dc489c1952dd714cd85d5e2cc` | 17 (ES25.16) | 1898240036 | `7f17047e2c729f76b27f111cb03299959ceec6c1ce9f73dedf7a68eee705467b` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_lab_sea_999.nc` | G6 | 67675896 | `be3d190bb402da6c1cec039ee826a0012a78768fee15d9c0eb952fca4f7b8361` | 17 (ES25.16) | 1898240036 | `7f17047e2c729f76b27f111cb03299959ceec6c1ce9f73dedf7a68eee705467b` |
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_lab_sea_6mo.nc` | G7 (INFERRED end time) | 366268537 | `90400b03aa1d23515a6e9d16988b4a45e4c6fb8423b9aaa0243778f372c9c19d` | 17 (ES25.16) | 8299126949 | `fa3f94de2e521b57c1f2feaa514334ece04717780b4201344138b85b2ae34a4b` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_lab_sea_6mo.nc` | G7 (INFERRED end time) | 283434338 | `eb1e34b921bf6929ff6cfda03218b3d3a5cae70f206bfac6b3bd768d6fb0be9c` | 17 (ES25.16) | 8299126949 | `fa3f94de2e521b57c1f2feaa514334ece04717780b4201344138b85b2ae34a4b` |
+| `outputs_from_python/python_ggl90_outputs_lab_sea_999.nc` | P8 | 235307953 | `d6fc4b2cb64801743a8e300d29c3d05da676bcd4dcfc77387e051dfa94cd15b8` | - | - | - |
+
+Raw `output.txt` files are kept under `~/Projects/MITgcm/verification/lab_sea/output_ggl90_*_054/` (untracked, outside the repo).
+Results: `GGL90_VALIDATION_RESULTS.md` ("`lab_sea` (999 timesteps and 6-month)"). In short: `visc_az`/`mixing_length` are clean to
+roundoff; `diff_kz`/`tke_after` are known gaps traced (by a measured identity) to the replay feeding the port column-local
+velocities where MITgcm averages (i,i+1),(j,j+1) (replay-input effect 1DMIX-071, not a port gap).
+
 ## `vermix` (20 timesteps, single column)
 
 `GGL90` was iterated on this experiment across several closed issues (1DMIX-015,

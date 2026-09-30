@@ -72,7 +72,12 @@ explicitly justified in a code comment and, if uncertain, opened as an issue
   (confirmed: a real `mixing_length` of `1277m` vs. this port's `14493km` for
   the same cell, `global_ocean.cs32x15/input.in_p`) rather than an error —
   a silent-incorrect-result risk for any future p-coordinate MITgcm
-  configuration, not merely a coverage gap. **Resolved (1DMIX-040)**: Arch
+  configuration, not merely a coverage gap. (KPP, measured under 1DMIX-054 on
+  the same experiment: MITgcm's own `pkg/kpp` has no `coordFac`/`usingPCoords`
+  handling either and its run aborts at iteration 1 with `ghat`=6.3e10; the port
+  replay of that capture returns NaN in 91% of interior `visc_az`/`diff_kz`
+  cells without raising (tracked as 1DMIX-072), and only `ghat` agrees closely -- through shared
+  Pa-as-metres arithmetic, not fidelity. See `KPP_VALIDATION_RESULTS.md`.) **Resolved (1DMIX-040)**: Arch
   decided pressure-coordinate support is permanently out of scope rather than
   implementing real `coordFac`-equivalent support — this project's own
   Primary Goal and every one of its own captures/scenarios are z-coordinate

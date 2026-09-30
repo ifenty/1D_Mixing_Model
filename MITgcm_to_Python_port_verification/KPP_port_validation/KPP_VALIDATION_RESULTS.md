@@ -98,15 +98,22 @@ this capture's active-mixing cells apparently never sit close enough to
 No pressure-coordinate (`usingPCoords`) MITgcm configuration is validated
 against, and none can meaningfully be: the real MITgcm `pkg/kpp` source has
 **zero** `coordFac`/pressure-coordinate handling anywhere in it (confirmed by
-direct read of `kpp_calc.F`/`kpp_routines.F`), and `kpp_check.F` contains no
-runtime guard that rejects a pressure-coordinate configuration either. A
-genuine pressure-coordinate KPP capture would therefore not exercise a real
-coordinate-conversion difference between MITgcm and this port at all — both
-sides would be equally unaware of the unit mismatch, so a clean-looking
-comparison would agree for the wrong reason rather than fail visibly. This
-project's own captures and idealized scenarios are all z-coordinate ocean
-configurations, which is the only configuration this validation exercise is
-designed to say anything meaningful about.
+direct read of `kpp_calc.F`/`kpp_routines.F`, and re-confirmed under 1DMIX-054 by
+`grep -rn 'coordFac\|usingPCoords\|usingZCoords\|buoyancyRelation\|OCEANICP' pkg/kpp/`
+returning nothing), and `kpp_check.F` contains no runtime guard that rejects a
+pressure-coordinate configuration either. This project's own captures and
+idealized scenarios are all z-coordinate ocean configurations, which is the only
+configuration this validation exercise is designed to say anything meaningful
+about. **1DMIX-054 nevertheless captured one, on purpose, to measure what
+happens** (`global_ocean.cs32x15` + KPP; section "`global_ocean_cs32x15` + KPP"
+below), because the prior expectation recorded here -- that both sides would be
+"equally unaware of the unit mismatch, so a clean-looking comparison would agree
+for the wrong reason rather than fail visibly" -- turned out to be only partly
+true: MITgcm's own KPP run *does* fail visibly (it aborts at iteration 1), the
+port does **not** agree with it (NaN in 91% of interior cells), and the only
+field that agrees closely (`ghat`) does so because both sides evaluate the same
+formula on the same unit-confused geometry. That capture is a known-gap
+characterization, never a validation.
 
 ## Two mechanisms that explain most of the tail below
 
@@ -486,6 +493,113 @@ the measured driver at that cell; the deeper reason the two implementations'
 tiny, near-zero `bfsfc` values land on opposite sides of zero is not
 root-caused further here.
 
+## `global_ocean_90x40x15` + KPP — the first geometry-matched cross-scheme capture (1DMIX-054)
+
+The KPP counterpart of the existing GGL90/IDEMIX capture of the same grid:
+`global_ocean.90x40x15`, 36 tiles, 15 levels (50-690 m), JMD95P, static
+z-coordinate geometry, cold start, `deltaTtracer=86400 s`, **10 timesteps**,
+2,315 wet columns at every timestep (23,150 ocean column-timesteps, 269,940
+active interior cells; 0.0% truncated). The namelist is **constructed** (no
+stock MITgcm experiment has one; nothing about it should be read as "the MITgcm
+KPP verification of this grid"): `data.kpp` is all MITgcm defaults, the
+grid's own standard `viscAr`/`diffKrT`/`diffKrS` are restored (the IDEMIX input
+had switched them off), and `ivdc_kappa=0` because `kpp_check.F` stops the run
+otherwise (measured: the first attempt died there). Every non-stock value is
+justified in `mitgcm_verification_mods/global_ocean_90x40x15/kpp_input_validation/README.md`;
+the recipe is R7 in `CAPTURES.md`. The header is MITgcm's default
+`KPP_OPTIONS.h`, so `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` (horizontal 1-2-1
+smoothing) are on in the MITgcm run while the single-column port has no
+horizontal smoothing -- as for the `lab_sea` captures; `global_oce_latlon` is the
+only multi-column capture with them off.
+
+**`hbl`** (absolute difference, N=23,150): median `3.39e-4 m`, p95 `0.0398 m`,
+p99 `0.316 m`, max `90.04 m`; 0.28% / 0.0086% (65 / 2 column-timesteps) exceed
+1 m / 5 m. **Mixing coefficients** (active cells, N=269,940):
+
+| Field | Median abs. diff | p99 abs. diff | Max abs. diff | Fraction >1% rel. err. |
+|---|---|---|---|---|
+| `visc_az` | 0 (exact) | 5.0e-3 | 0.218 | 1.67% |
+| `diff_kz_s` / `diff_kz_t` | 0 (exact) | 5.0e-3 | 0.438 | 2.02% |
+
+**`ghat`** (1,470 active cells): median abs. diff `6.0e-4`, max `18.0`, 7.4% above
+1% relative error, 4 cells with the port's `ghat` exactly `0.0` (the 1DMIX-058
+signature).
+
+How this measures against the existing conventions (the tests take the bounds
+from the existing multi-column bounds, never tune to this result): `hbl` median
+and fraction above 5 m, the `visc_az`/`diff_kz` medians and the `ghat` statistics meet
+the `global_oce_latlon` bounds; the `visc_az`/`diff_kz` fraction above 1% (1.7% / 2.0%)
+meets the `lab_sea` bound (0.2) for `visc_az` and the `11k` bound (0.03) for `diff_kz_s/_t` (the tests use those, the strictest each meets) but not `global_oce_latlon`'s (0.01 / 0.02); the `hbl`
+maximum (90.04 m) and the `visc_az`/`diff_kz` max_abs (0.218 / 0.438) exceed **every**
+existing multi-column bound (8 m / 0.15 latlon, 50 m / 0.06-0.1 lab_sea_6mo) and are
+asserted as labelled known gaps (replay-input mechanism, 1DMIX-071) instead of widening any bound. Measured mechanisms:
+
+* **The maximum is one column-timestep** (t=9, i=74, j=29: MITgcm `hbl` 171.49 m,
+  port 81.45 m; next largest 7.03 m, then 3.85 m), and it carries the entire excess of
+  `visc_az`/`diff_kz`: exactly 2 cells of that one column exceed the lab_sea convention
+  (0.06 / 0.1), and the test asserts every such cell lies in a column whose `hbl` differs
+  by more than 5 m. MITgcm's own captured bulk Richardson number at the first interface
+  below the surface layer is 0.29941 against `Ricr=0.3` (0.2% margin), so the diagnosed
+  level sits on a threshold -- **but this is not just the 1DMIX-019 float-threshold tail**:
+  the port's Rib at that column is not within roundoff of MITgcm's (review measurement,
+  1DMIX-054 round 1: 0.31885 against 0.29941 at level 2, 6.5%). The likely source is the
+  replay-input velocity averaging **1DMIX-071** (next bullet), amplified by the threshold;
+  at this column the column-local `dVsq` (`du^2+dv^2`, as the port computes it) is 0.58/0.61/0.72 of the captured value at interface indices 1-3. The
+  7.03 m column is not a threshold case (MITgcm Rib 0.534) and is consistent with the same
+  effect. A replay-input mechanism, not a port gap.
+* **Horizontal smoothing** is the main source of the >1% mixing tail, measured by a
+  controlled rerun (same namelist, `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` `#undef`'d;
+  evidence only, not a declared capture): `hbl` statistics unchanged (max 90.02 m, same
+  column) but the fraction above 1% falls to 0.39% (`visc_az`) / 0.73% (`diff_kz`), p99
+  abs. diff to 3.6e-6 / 5.4e-6, meeting the `global_oce_latlon` bounds.
+* **Column-local velocities in the replay (1DMIX-071).** MITgcm's `shsq`/`dVsq` at a tracer
+  point average the squared differences of the four surrounding velocity points ((i,i+1),
+  (j,j+1); `kpp_calc.F`, `kpp_forcing_surf.F`); the replay feeds the port only `uVel(i,j)`,
+  `vVel(i,j)`. **`dVsq` is not smoothed** (`KPP_SMOOTH_DVSQ` undefined), so the identity is
+  asserted on the declared capture (`test_global_ocean_90x40x15_dvsq_is_four_point_average`):
+  over 207,369 cells the four-point formula reproduces MITgcm's captured `dVsq` exactly (max
+  relative difference 0), while the column-local value (`du^2+dv^2`, without MITgcm's 0.5, as the port computes it) is off by a median 27% (97.6% of
+  cells >1%). `shear_sq` is smoothed in the declared capture; in the no-smoothing rerun the
+  four-point formula also reproduces it exactly (median relative difference 0) and the
+  column-local value (same convention) is off by a median 51% (98.8% of cells >1%). This is consistent with the small persistent
+  `hbl` differences (39% of columns differ by more than 1 mm) and the two large columns above.
+
+## `global_ocean_cs32x15` + KPP — pressure coordinates: a known-gap characterization, NOT a validation (1DMIX-054)
+
+`global_ocean.cs32x15/input.in_p` (`buoyancyRelation='OCEANICP'`, `delR` in Pa, TEOS10,
+12 tiles), KPP compiled in, constructed namelist (`kpp_input_validation/README.md`: all-default
+`data.kpp`, the experiment's own pressure-unit `viscAr`/`diffKr`, `ivdc_kappa=0`), recipe R8.
+The issue that requested this capture predicted a *misleading clean-looking pass* (both sides
+share the same missing pressure-coordinate handling). Measured, the situation is different and
+each part is stated here so that no number on this capture is mistaken for port fidelity:
+
+1. **MITgcm's own KPP is unit-confused and the run aborts.** `pkg/kpp` treats `rC`/`rF`/`drF`
+   (Pa; in this experiment `rC` *decreases* with the level index, level 1 at the sea floor) as `z`.
+   In every one of the 1,621 wet columns MITgcm's `hbl` is negative (99.26% exactly `-251,327.84`,
+   the surface layer's Pa value), the interior mixing is the constant Pa-unit background
+   (`visc_az` = 103,090.5, i.e. 1e-3 m2/s x (g rhoConst)^2, plus at most ~0.01), and
+   `ghat` reaches 6.3e10. Applying that `ghat` (`KPP_GHAT` is on in MITgcm's default
+   `KPP_OPTIONS.h`) drives the potential temperature to -1.1e13 at iteration 1 and MITgcm's own
+   solution monitor stops the run (`MON_SOLUTION: STOPPING CALCULATION at Iter=1`). The capture
+   therefore holds **one** timestep (the KPP computation before the abort). A rerun with
+   `KPP_GHAT` `#undef`'d (evidence only) completes 10 steps with the same unit-confused KPP
+   output.
+2. **The port does not agree.** In every column the port's interior `visc_az`/`diff_kz_s`/`diff_kz_t`
+   are NaN in most cells (91.0% of the 22,694 interior cells; the first floating-point error when
+   one column is replayed under `np.seterr(all='raise')` is an overflow in `swfrac`'s `exp(-z/d)`
+   with the Pa-valued depth; whether that is the only NaN source was not traced further), and its
+   `hbl` differs from MITgcm's by a median 1.2e6 with 76.6% of columns differing by more than 1
+   (Pa-as-metres). The port replay produces NaN silently rather than raising the `ValueError` the
+   project profile asks for on unsupported input -- tracked as 1DMIX-072, not changed here.
+3. **Only `ghat` is close, and that is shared unit arithmetic.** Median absolute difference 0,
+   87.3% of the 22,526 active cells within 1%, and the maximum `6.3275154945147095e10` is identical
+   on both sides to the last digit: the same formula on the same unit-confused geometry reproduces
+   the same number. That value is itself unphysical (physical `ghat` is O(1e-3..1e3)), so this
+   agreement says nothing about the port being correct for pressure coordinates.
+
+The three tests on this capture (`test_global_ocean_cs32x15_*`) assert exactly these facts as a
+bounded known-gap characterization and their docstrings repeat the mechanism.
+
 ## The 6 idealized scenarios, standalone Fortran driver — isolating the physics from any capture noise
 
 This project's own 6 idealized forcing scenarios (calm baseline, arctic
@@ -550,10 +664,12 @@ exercise and this port, not open action items:
   infrastructure" above, real MITgcm's own `pkg/kpp` has zero
   `coordFac`/pressure-coordinate handling, and this port has none either. A
   pressure-coordinate KPP configuration is out of scope for this project
-  entirely — not merely untested — because a comparison run under one would
-  not exercise any real coordinate-conversion difference between the two
-  sides; it would agree for the wrong reason rather than fail visibly. Every
-  capture and idealized scenario validated here is a z-coordinate ocean
+  entirely -- not merely untested. 1DMIX-054 measured what one looks like
+  (section "`global_ocean_cs32x15` + KPP"): MITgcm's own KPP is unit-confused and
+  its run aborts at iteration 1, the port returns NaN in most interior cells, and
+  the one field that agrees closely (`ghat`) does so through shared unit-confused
+  arithmetic, so no agreement on such a capture can be read as fidelity. Every
+  capture and idealized scenario validated here is otherwise a z-coordinate ocean
   configuration.
 - **Double-diffusion (`KPP_DOUBLEDIFF`) is not implemented.** Real MITgcm
   optionally adds a double-diffusive contribution to the interior salt and
@@ -589,6 +705,19 @@ exercise and this port, not open action items:
   underlying physics computation is correct at every level. This is a
   property of the diagnostic itself, not a bound this port could tighten by
   further debugging.
+- **Multi-column replays are column-local.** MITgcm's `shsq`/`dVsq` (KPP) and
+  `verticalShear` (GGL90) at a tracer point average the velocities at (i,i+1) and
+  (j,j+1), and `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` (on in MITgcm's default header)
+  smooth horizontally; the replay gives the port `uVel(i,j)`/`vVel(i,j)` of one column only
+  and the port has no horizontal smoothing. Measured under 1DMIX-054 (sections above and the
+  GGL90 document): the four-point averaged shear reproduces MITgcm's captured shear to
+  roundoff, the column-local one is off by a median 50-64%. Every shear-dependent
+  multi-column KPP/GGL90 residual in this project (Ri, TKE production, `hbl` through `dVsq`) therefore
+  contains this replay effect, and attributions to other
+  mechanisms on those captures (including the earlier Rib/Ricr-only reading of `lab_sea`'s
+  `hbl` tail) have not been re-separated from it. A replay that rebuilds tracer-point
+  velocities from the neighbouring columns of the same capture would remove it (a
+  semantic change to the comparison, not made here).
 - **The largest, multi-tile, seasonally-complete capture is validated on a
   timestep subsample, not the full run.** `global_oce_latlon`'s full
   720-timestep×2,315-column Python-port replay is estimated at roughly 1.5
@@ -604,8 +733,8 @@ come from the PDF validation reports generated by
 `scripts/generate_kpp_validation_report.py::compute_hbl_statistics`/
 `compute_mixing_statistics`, run against the paired NetCDF captures under
 `KPP_port_validation/{inputs,outputs}_from_mitgcm/`. The `1D_ocean_ice_column`
-(11,000-step), `lab_sea` (6-month), `seaice_obcs`, and `global_oce_latlon`
-statistics come from the regression assertions and docstrings in
+(11,000-step), `lab_sea` (6-month), `seaice_obcs`, `global_oce_latlon`,
+`global_ocean_90x40x15` and `global_ocean_cs32x15` (1DMIX-054) statistics come from the regression assertions and docstrings in
 `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`,
 which drive the same replay entry point
 (`scripts/run_kpp_from_netcdf_input.py::run_python_kpp_on_dataset`) against

@@ -1,0 +1,103 @@
+# ====================
+# | Model parameters |
+# ====================
+#
+# Continuous equation parameters
+ &PARM01
+ tRef = 15*20.,
+ sRef = 15*35.,
+# 1DMIX-054 (CONSTRUCTED; input.idemix/data with the edits marked 1DMIX-054):
+# input.idemix/data turns the background viscosity/diffusivities off because
+# IDEMIX takes care of background dissipation. KPP has no such term and adds
+# its own interior mixing on top of the background viscArNr(1)/diffKrNr
+# (kpp_routines.F: diffus = viscArNr(1) + ...), so the experiment's own
+# standard (input/data) background values are restored:
+ viscAr=1.E-3,
+ viscAh=5.E5,
+#diffKhT=0.,
+ diffKrT=3.E-5,
+#diffKhS=0.,
+ diffKrS=3.E-5,
+ no_slip_sides =.FALSE.,
+ no_slip_bottom=.FALSE.,
+ rhoConst=1035.,
+ rhoConstFresh=1000.,
+ eosType='JMD95P',
+# 1DMIX-054: input.idemix/data has ivdc_kappa=1. ("should use this with ggl90 for
+# avoiding local instabilities"). KPP_CHECK (pkg/kpp/kpp_check.F:128-133) STOPs
+# unless convective adjustment is off (cAdjFreq=0 and ivdc_kappa=0), so it is
+# switched off here (verified: with ivdc_kappa=1. the run stops at KPP_CHECK).
+ ivdc_kappa = 0.,
+ implicitViscosity=.TRUE.,
+ implicitDiffusion=.TRUE.,
+ allowFreezing=.TRUE.,
+ exactConserv=.TRUE.,
+ useRealFreshWaterFlux=.TRUE.,
+ useCDscheme=.TRUE.,
+# turn on looped cells
+ hFacMin=.05,
+ hFacMindr=50.,
+# set precision of data files
+ readBinaryPrec=32,
+# 1DMIX-025 (same edit as the existing GGL90 capture's input_docker_idemix90/data):
+# 36-tile domain reads flat .bin fields only with useSingleCpuIO
+ useSingleCpuIO=.TRUE.,
+#writeBinaryPrec=64,
+ &
+
+# Elliptic solver parameters
+ &PARM02
+ cg2dMaxIters=500,
+ cg2dTargetResidual=1.E-13,
+ &
+
+# Time stepping parameters
+ &PARM03
+ nIter0=0,
+ nTimeSteps=10,
+# 100 years of integration will yield a reasonable flow field
+# startTime =          0.,
+# endTime   = 3110400000.,
+ deltaTmom = 1800.,
+ tauCD =     321428.,
+ deltaTtracer= 86400.,
+ deltaTClock = 86400.,
+ deltaTfreesurf= 86400.,
+ abEps = 0.1,
+ pChkPtFreq= 311040000.,
+ dumpFreq=   311040000.,
+ dumpFreq=   864000.,
+#monitorFreq=31104000.,
+ monitorFreq=1.,
+# 2 months restoring timescale for temperature
+ tauThetaClimRelax=  5184000.,
+# 6 months restoring timescale for salinity
+ tauSaltClimRelax = 15552000.,
+ periodicExternalForcing=.TRUE.,
+ externForcingPeriod=2592000.,
+ externForcingCycle=31104000.,
+ &
+
+# Gridding parameters
+ &PARM04
+ usingSphericalPolarGrid=.TRUE.,
+ delR= 50.,  70., 100., 140., 190.,
+      240., 290., 340., 390., 440.,
+      490., 540., 590., 640., 690.,
+ ygOrigin=-80.,
+ dySpacing=4.,
+ dxSpacing=4.,
+ &
+
+# Input datasets
+ &PARM05
+ bathyFile=      'bathymetry.bin',
+ hydrogThetaFile='lev_t.bin',
+ hydrogSaltFile= 'lev_s.bin',
+ zonalWindFile=  'trenberth_taux.bin',
+ meridWindFile=  'trenberth_tauy.bin',
+ thetaClimFile=  'lev_sst.bin',
+ saltClimFile=   'lev_sss.bin',
+ surfQnetFile=   'ncep_qnet.bin',
+ the_run_name=   'kpp_90x40x15',
+ &
