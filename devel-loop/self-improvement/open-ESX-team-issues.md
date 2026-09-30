@@ -858,3 +858,33 @@ A scientific closeout reaches --check-done without a manual rebind.
 
 ### Expected Effect
 Zero manual receipt rebinds.
+
+---
+
+## 🔴 PROPOSED: notifications.py accepts a Slack receipt whose message_link does not match its channel and timestamp
+
+**Date Identified**: 2026-09-30  11:00
+**Status**: Proposed
+**UUID**: TEAM-RECEIPT-LINK-VALIDATION-001
+**Category**: communication_receipt
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/notifications.py:record
+
+### Issue
+`notifications.py record` validates channel and message_ts but ignores message_link, so a receipt file with a placeholder link (Arch wrote "x" via a shell shortcut for two 1DMIX-068 receipts) was accepted as the provider response.
+
+### Evidence
+Events 0338793db03c061216944713 and d7d3af226dc6aaf379570d94 were recorded with message_link "x"; corrected by Arch to the provider-returned links with a correction note on each attempt.
+
+### Potential Impact
+Receipts could silently diverge from what the provider returned, weakening the "no fabricated delivery" guarantee.
+
+### Proposed Fix
+When a Slack message_context is present and message_link is supplied, require the link to end with the channel id and the p-form of message_ts; reject otherwise.
+
+### Acceptance Criteria
+Recording a receipt whose message_link disagrees with channel/ts fails with a clear error.
+
+### Expected Effect
+Receipt files always equal the provider response in every field.
