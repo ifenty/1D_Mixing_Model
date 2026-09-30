@@ -244,8 +244,75 @@ invariant:
   two that this file's other three tests, `test_momentum_solve_never_
   receives_ghat` included, do not catch.
 
-Neither witness alone covers every route; together they are the
-currently-registered witnesses for this boundary.
+Neither of the first two witnesses alone covers every route; the
+real-pipeline witness below adds the adapter boundary.
+
+**Real-pipeline witness (1DMIX-064).** Both witnesses above hand-build a
+`MixingOutput` and call `_apply_vertical_diffusion` directly, so they guard
+the driver function they call, not the pipeline that feeds it: a
+`ghat`-dependent term added to `MixingOutput.visc_az` inside
+`KPPAdapter.compute_mixing` (measured: `visc_az[0]` 0.0 -> 5.837e-3) escaped
+both and the whole 69-test focused suite. A third witness now drives the real
+path:
+
+- `test_real_pipeline_momentum_invariant_to_ghat` — real-pipeline: runs
+  `KPPAdapter.compute_mixing` -> `UnifiedColumnDriver._apply_vertical_
+  diffusion` with no hand-built `MixingOutput`; only `ghat` is varied, by
+  wrapping the `KPPDriver.compute_mixing` instance attribute at the
+  driver->adapter boundary (adapter and driver code run unmodified). Variants
+  (each compared to the unmodified run; `nz = 20` faces, index 0 = surface):
+  x4 and x0 of the real `ghat`; "interior" (real `ghat` + 50 at face 3 and +20
+  at face 8); "allfaces" (real `ghat` + `10*(1..nz)` at every face: strictly
+  positive at faces 1..nz-1, maximum > 100); "signed" (same magnitudes with
+  alternating sign, so about half the faces are negative). Asserts, with exact
+  equality (no tolerance), that the adapter's `visc_az` (the only adapter
+  field feeding the u/v solve) and the stepped `u_vel`/`v_vel` are
+  bit-identical across variants, and asserts non-vacuity (nonzero `ghat`
+  differing across runs, "allfaces" nonzero at every interior face and > 100,
+  "signed" containing both signs, tracers responding to every variant, nonzero
+  `tau`, momentum evolving). The interior, allfaces and signed variants are
+  needed because real KPP `ghat` on the fixture is nonzero only at index 0 (the
+  surface face, ignored by the implicit solve), so scaling it alone cannot make
+  an interior leak visible. Correction round 1 (1DMIX-064): the first version
+  (x4, x0, interior at faces 3 and 8 only, positive only) let leaks confined to
+  faces >= 10, the last face, faces 1-2, negative `ghat`, or `ghat.max() > 100`
+  pass; the allfaces and signed variants close those.
+
+Coverage map (what a passing test establishes; per scratch mutant, 1DMIX-064
+correction round 1, each mutated in a copy of the tree and run against
+`test_kpp_ghat_gate.py`; additional scratch mutants also caught by the
+real-pipeline witness: a one-face-shifted `visc_az` term, a face-0 `ghat` term
+into `visc_az[1]`, an adapter write to `state.u_vel`, and `ghat[0]` added to
+the u surface flux):
+
+- Adapter -> `visc_az` boundary (`visc_az += c*ghat` in
+  `KPPAdapter.compute_mixing`): real-pipeline witness only. Caught: all faces;
+  faces >= 10 only; last face only; faces 1-2 only; negative-`ghat`-only;
+  leak only when `ghat.max() > 100`.
+- `ghat=` keyword into the momentum solve: all three witnesses.
+- Contaminated `k_interface` inside `_apply_vertical_diffusion` (u, or v only,
+  all faces): quantity-level and real-pipeline witnesses (call-level spy
+  misses). Same contamination confined to faces >= 10: real-pipeline witness
+  only.
+- Post-hoc momentum correction (`u_vel += c*ghat`, all faces): quantity-level
+  and real-pipeline witnesses. Confined to the last face, or `v_vel` from
+  negative `ghat` only: real-pipeline witness only.
+
+Still uncovered (the guarantee is per-boundary, per-variant, not absolute):
+
+- a leak that depends on `ghat` only outside the tested values: a magnitude
+  window not reached by the variants (for example active only for
+  `0 < |ghat| < 1` at a face where the variants put no such value, or only
+  above the allfaces maximum of about 200); the variants are a finite sample of
+  `ghat` space, not a proof of independence;
+- a leak gated on a quantity other than `ghat` (state, forcing, `dt`, step
+  count) that is not exercised by this single-step fixture, or a `ghat`-like
+  quantity recomputed inside the adapter from `state` (the wrapper varies only
+  the `KPPOutput.ghat` array);
+- a leak that appears only after several steps (the fixture is a single
+  step);
+- leaks in `run_experiment`'s own loop outside these two functions;
+- GGL90's adapter (which has no `ghat`).
 
 Salt-plume haline buoyancy forcing (`ALLOW_SALT_PLUME`/`useSALT_PLUME`, e.g.
 `seaice_obcs`'s brine-rejection-driven plumes) adds a term to `bfsfc` at each of

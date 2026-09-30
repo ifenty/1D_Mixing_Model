@@ -49,27 +49,6 @@ Every currently-tested grid/scheme combination in this project is confounded wit
 ### Proposed action and acceptance
 For each of the 3 new (grid, scheme) pairs: (1) create a new sibling `code_validation` variant directory following the already-established `<scheme>_code_validation/` naming convention (`global_ocean_90x40x15/kpp_code_validation/`, `global_ocean_cs32x15/kpp_code_validation/`, `lab_sea/ggl90_code_validation/`), symlinking the target scheme's Fortran source from the canonical `kpp_mods/`/`ggl90_mods/` (never copying, per this project's own established convention), copying the grid's own real headers/`packages.conf` unmodified except for the scheme package swap. (2) Hand-construct the missing namelist (`data.kpp` for the two `global_ocean` grids, `data.ggl90` for `lab_sea`) by adapting the closest existing working example in this project (e.g. `global_oce_latlon/input_validation/data.kpp` for the KPP namelists; `vermix`'s or `1D_ocean_ice_column/ggl90_code_validation`'s own real `GGL90_OPTIONS.h`/namelist values for the GGL90 one) — verify every adapted parameter against the target grid's own real forcing/geometry, don't blindly copy defaults tuned for a different grid. (3) Build+run+capture via the same Docker pipeline used throughout this project (budget real wall-clock time per grid size — the two `global_ocean` grids are comparable in size to `global_oce_latlon`'s own ~15-minute run per 1DMIX-049's measured precedent; `lab_sea` at 999 and 6-month/4368 timesteps should reuse the existing capture durations exactly, for direct comparability against the existing KPP captures at those same durations). (4) Permanentize into `KPP_port_validation/`/`GGL90_port_validation/` with clear, scheme-disambiguating filenames, add regression tests mirroring the existing per-experiment test-class conventions (bounded/subsampled where a full replay would be impractical, per this project's own established `lab_sea_6mo`/`global_oce_latlon` precedent). Acceptance: 4 new real MITgcm captures exist (90x40x15-KPP, cs32x15-KPP, lab_sea-GGL90-999, lab_sea-GGL90-6mo), each permanently stored and declared in `esx/project.json:external_inputs`, each with at least one numeric-tolerance regression test measured fresh against the actual new capture; `cs32x15-KPP`'s own report/test explicitly states the mechanism above (MITgcm's own real KPP has no `coordFac`-equivalent conversion either, so close port-vs-MITgcm agreement here would reflect a shared unit error, not genuine port fidelity) rather than presenting any resulting close agreement as a clean validation pass; full pytest suite passes.
 
-## UNRESOLVED: neither momentum-boundary witness exercises the real adapter-to-driver pipeline, so a leak injected in `KPPAdapter.compute_mixing` escapes the entire suite
-
-**Date Identified**: 2026-09-29T01:55:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-064
-**Anchors**: `Vertical_Mixing_Models/main/mixing_adapter.py::KPPAdapter.compute_mixing`; `Vertical_Mixing_Models/tests/test_kpp_ghat_gate.py::test_momentum_invariant_to_ghat_value`; `Vertical_Mixing_Models/tests/test_kpp_ghat_gate.py::test_momentum_solve_never_receives_ghat`; `Vertical_Mixing_Models/main/unified_driver.py::UnifiedColumnDriver._apply_vertical_diffusion`
-
-### Issue or research question
-Third generation of one thread, each layer found by the review of the previous fix. 1DMIX-058's review found the momentum boundary of KPP's `ghat` unguarded; 1DMIX-061 added a call-level witness; its review found that witness guarded only the `ghat=`-keyword route; 1DMIX-063 added a quantity-level guard asserting momentum is bit-identical when only `ghat` varies, which does catch every leak implemented **inside** `_apply_vertical_diffusion`. This issue is the next layer: both witnesses hand-build a `MixingOutput` and call `_apply_vertical_diffusion` directly, so neither exercises the real path from `KPPAdapter.compute_mixing` into the driver. A leak injected upstream of the driver body is therefore invisible to both, and to everything else.
-
-### Evidence
-Unblocked 2026-09-30: 1DMIX-065 restored every external_inputs capture, so verification evidence can be produced again. The implementation candidate (Bob, 2026-09-29) is still uncommitted in the working tree and awaits independent review.
-
-The 1DMIX-063 reviewer built a fourth route in a scratch copy (since deleted): contaminating `MixingOutput.visc_az` with a `ghat`-dependent term inside `KPPAdapter.compute_mixing`, upstream of `_apply_vertical_diffusion`'s body. It genuinely contaminates the viscosity — `visc_az` moves from `0.0` to `5.837e-3` under nonzero `ghat` — yet it escapes `test_momentum_solve_never_receives_ghat`, escapes `test_momentum_invariant_to_ghat_value`, and escapes the **entire 69-test focused suite**, which reports `69 passed, 3 skipped`, unchanged from clean bytes. The mechanism is structural rather than a tolerance problem: both witnesses construct `MixingOutput` themselves, so no test ever observes what the real adapter hands the driver.
-
-### Scientific or engineering impact
-Latent, and narrower than it first appears: the invariant holds on current bytes, and the adapter has no reason to touch `ghat` at all, so this is a coverage boundary rather than a live defect. But it is the boundary that matters most for the next edit, because it is the one place a `ghat`-to-momentum leak could be introduced while every existing guard reports success — and this project now has three consecutive demonstrations that a guard believed sufficient was narrower than it looked. The general lesson is worth recording alongside the specific gap: a hand-built witness guards the function it calls, not the pipeline that calls it.
-
-### Proposed action and acceptance
-Decide first whether the right answer is another witness or an end-to-end one. A guard that drives a real scenario through `KPPAdapter.compute_mixing` into `_apply_vertical_diffusion` and asserts the same momentum-invariance property would close this layer and would be the first test in this thread to exercise the real pipeline; that is preferable to a fourth hand-built witness, which would only move the boundary again. Consider also whether the property belongs in the adapter's own contract — that `compute_mixing` never returns a `visc_az` depending on `ghat` — which is checkable without a driver at all. Acceptance: whichever guard is chosen fails under the reviewer's adapter-contamination mutant, rebuilt and demonstrated rather than asserted; the three previously demonstrated routes remain caught; no tolerance is widened; and `docs/model_contract.md`'s coverage statement is updated to say which witness covers which boundary, including any boundary still uncovered, so the record does not overstate the guarantee again.
-
 ## UNRESOLVED: MITgcm captures loaded by the test suite but not listed in `external_inputs` are absent on the WSL checkout, so their comparison tests skip silently
 
 **Date Identified**: 2026-09-30T04:36:30Z
@@ -88,3 +67,22 @@ The GGL90 MITgcm comparison is entirely unexercised on this checkout, as are two
 
 ### Proposed action and acceptance
 After 1DMIX-065, regenerate these captures with the same provenance rules via Docker and the repo's instrumented mods, and decide (recording the reason) whether they should join `external_inputs` so their bytes are fingerprinted and their absence blocks verification instead of skipping. Acceptance: the named tests run and pass at existing tolerances (none widened; failures investigated and reported); provenance recorded in the GGL90/KPP CAPTURES.md; independent review.
+
+## UNRESOLVED: the real-pipeline ghat witness never makes face 0 negative or larger than 100, and face 0 is where real KPP ghat lives
+
+**Date Identified**: 2026-09-30T07:18:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-067
+**Anchors**: `Vertical_Mixing_Models/tests/test_kpp_ghat_gate.py::test_real_pipeline_momentum_invariant_to_ghat`; `docs/model_contract.md` (KPP ghat coverage map)
+
+### Issue or research question
+Richard's 1DMIX-064 round-1 review (APPROVE_WITH_FIXES, optional suggestion) found that the five variants give face 0 only the values 0, 5.8, 15.8 and 23. So a leak keyed to negative ghat at face 0, or to ghat[0] > 100, escapes, e.g. `visc_az[1] += 1e-3*min(ghat[0], 0)` (N1) and a face-0-only leak when ghat[0] > 100 (N5). The coverage map's generic "outside the tested values" bullet covers this in substance but does not name face 0.
+
+### Evidence
+Richard, 1DMIX-064 correction round 1, dispatch event 7395bad8f6d6457caed7a488bd00442e: scratch mutants N1 and N5 pass 6/6; N3/N4 (magnitude windows elsewhere) also escape and are named in the still-uncovered list.
+
+### Scientific or engineering impact
+Low: real KPP ghat at the surface face is nonnegative and bounded, so these leaks are contrived. But face 0 is the only face with real nonzero ghat on the fixture, so it is the one place a plausible surface-specific leak would sit.
+
+### Proposed action and acceptance
+Either add a variant that makes face 0 negative and above 100 (e.g. `-g - 10*(1+arange(nz))`) and show N1 and N5 fail while clean bytes pass, or name "sign or magnitude at face 0" explicitly in the still-uncovered list. Exact equality kept; no tolerance widened.

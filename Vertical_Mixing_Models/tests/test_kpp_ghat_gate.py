@@ -45,6 +45,7 @@ application site at all -- see
      specific boundary.
 """
 
+import dataclasses
 import sys
 from pathlib import Path
 from unittest import mock
@@ -407,9 +408,150 @@ def test_momentum_invariant_to_ghat_value():
     print("PASS test_momentum_invariant_to_ghat_value")
 
 
+def _real_pipeline_step(ghat_fn):
+    """Drive the REAL path `KPPAdapter.compute_mixing` ->
+    `UnifiedColumnDriver._apply_vertical_diffusion` for one step.
+
+    ghat is varied at the KPPDriver->KPPAdapter boundary only: the
+    `KPPDriver.compute_mixing` instance attribute is wrapped so the adapter
+    receives a `KPPOutput` identical to the real one except for
+    `ghat_fn(ghat)`. The adapter's own code (and the driver body) run
+    unmodified, so any ghat-dependent term the adapter or driver adds to a
+    momentum-relevant field is exercised. Returns (state, mix_out, ghat_seen).
+    """
+    kpp_driver = KPPDriver(KPPParameters(use_ghat=True))
+    real_compute = kpp_driver.compute_mixing
+    seen = {}
+
+    def wrapped(*args, **kwargs):
+        out = real_compute(*args, **kwargs)
+        out = dataclasses.replace(out, ghat=ghat_fn(out.ghat))
+        seen['ghat'] = out.ghat.copy()
+        return out
+
+    kpp_driver.compute_mixing = wrapped
+    adapter = KPPAdapter(kpp_driver)
+    grid = ColumnGrid(depth=_DEPTH, cell_thickness=_DZ)
+    state = ColumnState(theta=_THETA.copy(), salt=_SALT.copy(),
+                        u_vel=_U.copy(), v_vel=_V.copy())
+    forcing = {'tau_x': _TAU_X, 'tau_y': _TAU_Y, 'q_net': _Q_NET,
+               'q_sw': _Q_SW, 'fw_flux': _FW_FLUX, 'coriol': _CORIOL}
+    mix_out = adapter.compute_mixing(state, grid, forcing, dt=3600.0)
+    driver = UnifiedColumnDriver(
+        mixing_adapter=adapter, config_manager=None,
+        physical_params={'gravity': 9.81, 'rho_const': 1029.0,
+                         'heat_capacity_cp': 3994.0},
+    )
+    # Nonzero kinematic momentum stress (tau/rho_const) and tracer fluxes.
+    kinematic_fluxes = {'heat_flux': 1.0e-4, 'salt_flux': 1.0e-5,
+                        'tau_x': _TAU_X / 1029.0, 'tau_y': 0.03 / 1029.0}
+    driver._apply_vertical_diffusion(state, grid, mix_out,
+                                     kinematic_fluxes=kinematic_fluxes,
+                                     dt=3600.0)
+    return state, mix_out, seen['ghat'], kinematic_fluxes
+
+
+def test_real_pipeline_momentum_invariant_to_ghat():
+    """(1DMIX-064) End-to-end guard: the REAL `KPPAdapter.compute_mixing` ->
+    `UnifiedColumnDriver._apply_vertical_diffusion` path, with only `ghat`
+    varied (at the KPPDriver->adapter boundary; no hand-built MixingOutput),
+    must leave `u_vel`/`v_vel` EXACTLY bit-identical, and the
+    momentum-relevant adapter output `visc_az` (the only adapter field feeding
+    the u/v solve besides depth/thickness) exactly identical too. This
+    catches a ghat-dependent term injected anywhere between the KPP driver's
+    output and the momentum solve, including inside the adapter -- the
+    boundary 1DMIX-061/063's hand-built witnesses could not see.
+
+    ghat variants (all compared to the unmodified run): x4, x0, "interior"
+    (+50 @ face 3, +20 @ face 8), "allfaces" (+10*(1..nz) at every face,
+    strictly positive, max > 100) and "signed" (same magnitudes with
+    alternating sign). Covers leaks localised by face, by sign, or gated on a
+    large ghat value; see docs/model_contract.md for what remains uncovered.
+
+    Non-vacuity is asserted: ghat is genuinely nonzero and differs across the
+    runs, the tracers respond to it, and momentum has nonzero forcing and
+    actually evolves.
+    """
+    # Real KPP ghat on this fixture is nonzero ONLY at index 0 (the surface
+    # face, which the implicit solve ignores for k_interface), so scaling it
+    # alone would leave a momentum-side leak at any interior face numerically
+    # invisible (measured, 1DMIX-064). The added variants therefore perturb
+    # ghat at interior faces too: "interior" (+50 @3, +20 @8), "allfaces"
+    # (every face, strictly positive, up to > 100 so a large-value threshold
+    # leak is exercised) and "signed" (same magnitudes, alternating sign, so a
+    # leak confined to negative ghat is exercised). Face location, sign and a
+    # large-value threshold are what a leak could hide behind (1DMIX-064
+    # correction round 1: leaks at faces >= 10, the last face, faces 1-2,
+    # negative-only ghat and ghat.max() > 100 all escaped the first version).
+    def _interior(g):
+        g = g.copy()
+        g[3] += 50.0
+        g[8] += 20.0
+        return g
+
+    def _allfaces(g):
+        return g + 10.0 * (1.0 + np.arange(g.size))
+
+    def _signed(g):
+        return g + 10.0 * (1.0 + np.arange(g.size)) * (-1.0) ** np.arange(g.size)
+
+    st_base, mo_base, g_base, kin = _real_pipeline_step(lambda g: g)
+    variants = {
+        "4x": _real_pipeline_step(lambda g: g * 4.0),
+        "0x": _real_pipeline_step(lambda g: g * 0.0),
+        "interior": _real_pipeline_step(_interior),
+        "allfaces": _real_pipeline_step(_allfaces),
+        "signed": _real_pipeline_step(_signed),
+    }
+    st_zero = variants["0x"][0]
+    st_big = variants["4x"][0]
+    st_int = variants["interior"][0]
+    st_all = variants["allfaces"][0]
+    st_sgn = variants["signed"][0]
+    g_big, g_zero, g_int = (variants[k][2] for k in ("4x", "0x", "interior"))
+    g_all, g_sgn = variants["allfaces"][2], variants["signed"][2]
+
+    # Non-vacuity of the varied quantity and of the momentum problem.
+    assert np.count_nonzero(g_base) > 0
+    assert not np.array_equal(g_base, g_big)
+    assert not np.array_equal(g_base, g_zero)
+    assert np.count_nonzero(g_int[1:]) > 0 and not np.array_equal(g_base, g_int)
+    assert kin['tau_x'] != 0.0 and kin['tau_y'] != 0.0
+    assert np.count_nonzero(mo_base.visc_az) > 0
+    assert float(np.max(np.abs(st_base.u_vel - _U))) > 0.0
+    assert float(np.max(np.abs(st_base.v_vel - _V))) > 0.0
+    # allfaces: nonzero at every face incl. the last, and beyond 100.
+    assert np.all(g_all[1:] > 0.0) and float(np.max(g_all)) > 100.0
+    # signed: genuinely contains negative values (and positive ones).
+    assert float(np.min(g_sgn)) < 0.0 < float(np.max(g_sgn))
+    assert np.count_nonzero(g_sgn[1:]) == g_sgn.size - 1
+    # Tracers must genuinely respond to ghat in the same runs.
+    assert float(np.max(np.abs(st_base.theta - st_zero.theta))) > 1.0e-6
+    assert float(np.max(np.abs(st_base.theta - st_big.theta))) > 1.0e-6
+    assert float(np.max(np.abs(st_base.theta - st_int.theta))) > 1.0e-6
+    assert float(np.max(np.abs(st_base.theta - st_all.theta))) > 1.0e-6
+    assert float(np.max(np.abs(st_base.theta - st_sgn.theta))) > 1.0e-6
+
+    for label, (st, mo, _g, _k) in variants.items():
+        # Adapter contract: momentum-relevant outputs independent of ghat.
+        np.testing.assert_array_equal(
+            mo_base.visc_az, mo.visc_az,
+            err_msg=f"KPPAdapter.compute_mixing visc_az depends on ghat "
+                    f"(ghat x1 vs {label})")
+        # Pipeline invariant: stepped momentum independent of ghat.
+        np.testing.assert_array_equal(
+            st_base.u_vel, st.u_vel,
+            err_msg=f"real-pipeline u_vel changed with ghat (x1 vs {label})")
+        np.testing.assert_array_equal(
+            st_base.v_vel, st.v_vel,
+            err_msg=f"real-pipeline v_vel changed with ghat (x1 vs {label})")
+    print("PASS test_real_pipeline_momentum_invariant_to_ghat")
+
+
 if __name__ == "__main__":
     test_ghat_computed_unconditionally()
     test_kpp_adapter_apply_ghat_flag()
     test_apply_ghat_gate_changes_tracer_evolution()
     test_momentum_solve_never_receives_ghat()
     test_momentum_invariant_to_ghat_value()
+    test_real_pipeline_momentum_invariant_to_ghat()
