@@ -838,8 +838,8 @@ C     *==========================================================*
 C     | SUBROUTINE KPP_OUTPUT_VALIDATION                         |
 C     | o Output KPP inputs and outputs for Python validation    |
 C     *==========================================================*
-C     | Outputs CSV-formatted data to STDOUT with E25.16         |
-C     | precision to enable rtol=1e-12 validation testing        |
+C     | Outputs CSV-formatted data to STDOUT with ES25.16       |
+C     | (17 significant digits, 1DMIX-069) for rtol=1e-12 tests |
 C     *==========================================================*
 C \ev
 
@@ -1457,19 +1457,19 @@ C     Output footer for this timestep
       WRITE(standardMessageUnit,'(A)')
      &  '===== KPP_VALIDATION_END ====='
 
-C     Format specifications (E25.16 for high precision)
- 101  FORMAT(A,',',I3,3(',',E25.16))
- 200  FORMAT(A,3(',',I3),4(',',E25.16))
- 202  FORMAT(A,2(',',I3),9(',',E25.16))
- 203  FORMAT(A,2(',',I3),',',E25.16)
- 204  FORMAT(A,3(',',I3),4(',',E25.16))
- 205  FORMAT(A,2(',',I3),',',E25.16)
+C     Format specifications (ES25.16 = 17 significant digits, exact for a double; 1DMIX-069)
+ 101  FORMAT(A,',',I3,3(',',ES25.16))
+ 200  FORMAT(A,3(',',I3),4(',',ES25.16))
+ 202  FORMAT(A,2(',',I3),9(',',ES25.16))
+ 203  FORMAT(A,2(',',I3),',',ES25.16)
+ 204  FORMAT(A,3(',',I3),4(',',ES25.16))
+ 205  FORMAT(A,2(',',I3),',',ES25.16)
  206  FORMAT(A,2(',',I3),',',I3)
- 207  FORMAT(A,3(',',I3),5(',',E25.16))
- 208  FORMAT(A,3(',',I3),',',E25.16)
- 209  FORMAT(A,3(',',I3),',',E25.16)
- 210  FORMAT(A,2(',',I3),',',E25.16)
- 211  FORMAT(A,2(',',I3),2(',',E25.16))
+ 207  FORMAT(A,3(',',I3),5(',',ES25.16))
+ 208  FORMAT(A,3(',',I3),',',ES25.16)
+ 209  FORMAT(A,3(',',I3),',',ES25.16)
+ 210  FORMAT(A,2(',',I3),',',ES25.16)
+ 211  FORMAT(A,2(',',I3),2(',',ES25.16))
 
       RETURN
       END

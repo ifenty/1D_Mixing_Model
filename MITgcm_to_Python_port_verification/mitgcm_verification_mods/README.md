@@ -73,11 +73,43 @@ recipes that regenerated every capture on the WSL checkout are recorded in
 **Modified Files**:
 - `SIZE.h` - Single-processor configuration (nPx=1, nPy=1)
 - `kpp_calc.F` - Instrumented to call validation output routine
-- `kpp_output_validation.F` - NEW: Outputs KPP I/O data in CSV format (E25.16 precision)
+- `kpp_output_validation.F` - NEW: Outputs KPP I/O data in CSV format (E25.16 precision when this was written; the current `kpp_mods/kpp_calc.F` prints ES25.16, 17 significant digits, see "Instrumented-file fidelity" below)
 - `packages.conf` - Minimal package set for validation
 - `FFIELDS.h` included for surface forcing variables
 
 **Documentation**: See `lab_sea/code_validation/README`
+
+## Instrumented-file fidelity to stock MITgcm and print precision (1DMIX-069)
+
+Only three instrumented Fortran sources exist (`ggl90_mods/ggl90_calc.F`,
+`kpp_mods/kpp_calc.F`, `kpp_mods/kpp_routines.F`); every per-experiment
+`code_validation/`/`kpp_code_validation/`/`ggl90_code_validation/` copy of them is a
+symlink, except `1D_ocean_ice_column/code_validation/kpp_routines.F` (a byte-identical
+copy of the `kpp_mods` file). They are meant to differ from stock (`pkg/ggl90/`,
+`pkg/kpp/` of the MITgcm checkout, audited at d861cd501) only by output
+instrumentation: capture arrays, the `GGL90_OUTPUT_VALIDATION` /
+`KPP_OUTPUT_VALIDATION` subroutines and their calls, and KPPMIX's existing
+`Rib, bfsfc` locals exposed as output arguments. Audit result (1DMIX-069): the only hunk that touched computed values was
+`ggl90_calc.F`'s SHELFICE u* block looping `DO i=jMin,jMax` instead of stock's
+`DO i=iMin,iMax` -- a transcription error, fixed; the instrumented files now differ
+from stock only by output instrumentation (the Langmuir u*/v* arrays are stock's
+2-D arrays). To re-audit after any edit:
+`diff ~/Projects/MITgcm/pkg/ggl90/ggl90_calc.F ggl90_mods/ggl90_calc.F` (and the two
+KPP files) and classify each hunk as output-only or physics; every physics hunk must be
+identical to stock or documented here. Headers (`*_OPTIONS.h`, `SIZE.h`, ...) are
+build configuration copied from the stock experiment `code/` directories (no
+`#define/#undef` differences wherever a stock copy exists).
+
+Print format: every captured field is written with `ES25.16` (17 significant digits,
+23 characters including sign and a 3-digit exponent, so it always fits the 25-column
+field). Before 1DMIX-069 it was `E25.16` (16 digits), which is not bit-exact for a
+double; the captures declared under `../KPP_port_validation/` and
+`../GGL90_port_validation/` were all made with `E25.16` and remain valid (see the
+`CAPTURES.md` files). The streaming parsers read both formats unchanged (a 3-digit
+exponent prints without the letter E, e.g. `5.6403554411026415-106`;
+`scripts/capture_stream.py::ffloat` handles it). The two standalone drivers'
+own result files (`*_standalone_main.F`, `E25.16`) are separate programs and are
+unchanged.
 
 ## MITgcm Convention
 

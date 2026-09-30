@@ -142,6 +142,30 @@ files of its seven captures plus the three `outputs_from_mitgcm` files of `11k_1
 `1D_10_kppmix_extend_rawflux_fix` that the tests load but the list omitted): 47 in total, all present, no Python
 replay files.
 
+## Print precision and instrumentation fidelity, 1DMIX-069 (2026-09-30)
+
+Every KPP capture declared in this manifest (and in `esx/project.json:external_inputs`)
+was produced with `kpp_calc.F`'s `FORMAT E25.16` (16 significant digits) and stays
+valid under that limit; none was replaced by 1DMIX-069. `kpp_mods/kpp_calc.F` now
+prints `ES25.16` (17 significant digits); captures regenerated from these mods from
+1DMIX-069 on are bit-exact in T, S, u, v and every diagnostic. Check run (kept under
+`devel-loop/loop_state/scratch/bob-1DMIX-069/`, not declared): recipe R1 (`1D_10`, 10
+steps) rebuilt with the new mods parses cleanly with the unchanged streaming parser
+(`parse_mitgcm_split.py`; peak RSS 0.11 GB) and every input (17) and output (12)
+variable agrees with the declared `1D_10_kppmix_extend_rawflux_fix` capture to
+<= 5.0e-16 relative (the E25.16 print quantisation), i.e. physics unchanged;
+`tests/test_kpp_mitgcm_validation.py -k 1d` (2 tests) passes when pointed at the new
+files.
+
+Fidelity audit versus stock MITgcm (d861cd501): `kpp_mods/kpp_routines.F` differs
+from `pkg/kpp/kpp_routines.F` only by KPPMIX exposing its existing `Rib, bfsfc`
+locals as output arguments (plus comments); `kpp_mods/kpp_calc.F` differs from
+`pkg/kpp/kpp_calc.F` only by the `kppRib`/`kppBfsfc` declarations, the extra KPPMIX
+arguments, the call to `KPP_OUTPUT_VALIDATION` and that write-only subroutine. No
+hunk can change computed physics; no KPP source correction was needed. Details:
+`devel-loop/loop_state/bob-1DMIX-069-evidence.md` and the GGL90 manifest
+(`../GGL90_port_validation/CAPTURES.md`, same-titled section) for the GGL90 file.
+
 ## `global_oce_latlon_720` (720 timesteps, 4-tile 2×2 90×40×15, `global_oce_latlon` verification experiment)
 
 Single version — regenerated fresh 2026-09-27 (1DMIX-049) after the original

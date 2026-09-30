@@ -1852,3 +1852,29 @@ Investigate whether MITgcm and the port compute N² at the face from the same qu
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-09-30T10:35:32.512704+00:00 for iteration 2026-09-30T09:30:42.495951+00:00. Fixed a real port-vs-MITgcm mismatch: the port's GGL90 face N2 used MITgcm's formula but not its floating-point operation order, shifting density by about 1 ulp in half of all cells and flipping the Ri=0.2 Prandtl branch in near-neutral cells at the TKE floor. eos.py now follows find_rho.F / grad_sigma.F exactly (rhoP0 salt terms summed first, bulkMod fresh+salt+pressure, drC from delR, recip_drC*rkSign form, g*gravitySign*recip_rhoConst prefactor, MITgcm pressure rounding); GGL90Driver passes cell_thickness. Bit-identical to an independent MITgcm-order restatement on 242,000 attempt-A faces (Bob and, independently, Richard); 9 new regression tests with captured MITgcm witnesses. The shared jmd95_eos change is MITgcm's order for KPP too (same FIND_RHO_2D); KPP aggregates unchanged or improved. Residual 9 bottom-face cells traced to E25.16 capture print precision (exact when captured sigma_r is replayed), filed with an instrumentation loop-bound defect as 1DMIX-069. Richard: APPROVE_WITH_FIXES then APPROVE after doc corrections. Final verification EXECUTED PASS: 137 passed, 3 skipped, 0 failed.
+
+## 🟢 RESOLVED: instrumented GGL90/KPP Fortran diverges from stock MITgcm in a SHELFICE loop bound, and prints captures at 16 significant digits
+
+**Date Identified**: 2026-09-30T10:45:00Z
+**Date Resolved**: 2026-09-30T11:18:55.590453+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-069
+**Anchors**: `MITgcm_to_Python_port_verification/mitgcm_verification_mods/ggl90_mods/ggl90_calc.F`; `MITgcm_to_Python_port_verification/mitgcm_verification_mods/kpp_mods/kpp_calc.F`; `MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md`
+
+### Issue or research question
+Two instrumentation-fidelity defects, found by Richard reviewing 1DMIX-068:
+1. The repo's instrumented `ggl90_calc.F` (~line 915, the SHELFICE u* block) loops `DO i=jMin,jMax` where stock MITgcm `pkg/ggl90/ggl90_calc.F` (d861cd501, file commit 09a9aa1d4, ~line 852) has `DO i=iMin,iMax`. This is a physics divergence, not only an output one.
+2. Both instrumented files print captured fields with `FORMAT E25.16` (16 significant digits); a double needs 17, so captured T,S and sigma_r are not bit-exact MITgcm values. This is why 9 bottom-face mixing_length cells of the 1DMIX-066 attempt-A capture still disagree after 1DMIX-068 (they vanish when the captured sigma_r is replayed).
+
+### Evidence
+`sed -n 900,940p` of the repo file vs `grep -n "DO i=" ~/Projects/MITgcm/pkg/ggl90/ggl90_calc.F`; 1DMIX-068 evidence (devel-loop/loop_state/bob-1DMIX-068-evidence.md) and Richard's scratch (devel-loop/loop_state/scratch/a78f0f7a5898aa12f/): 4341/4341 residual sigma_r faces reproduced by T,S inside the E25.16 print interval, 0 by a +3-quantum control.
+
+### Scientific or engineering impact
+(1) affects only SHELFICE runs with non-square tiles (sNx != sNy or OLx != OLy); current captures (isomip 25x25 tiles, others without SHELFICE) are unaffected, but any future such capture would come from a modified MITgcm. (2) limits bit-level comparisons in near-threshold regimes.
+
+### Proposed action and acceptance
+Fix the loop bound to match stock MITgcm and diff every instrumented file against its stock counterpart to confirm only instrumentation (output) differences remain; widen the capture print format to 17 significant digits (e.g. ES25.17) in both files and in the parsers if needed; recapture a small case to confirm parsing, and recapture 1DMIX-066's attempt-A configuration to show the 9 residual cells pass with no tolerance widened. Existing captures stay valid (document which were produced with E25.16).
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-09-30T11:18:55.590453+00:00 for iteration 2026-09-30T10:37:45.997100+00:00. The instrumented MITgcm Fortran (ggl90_calc.F, kpp_calc.F, kpp_routines.F; per-experiment entries are symlinks) now differs from stock MITgcm d861cd501 only by pure-addition output code: the SHELFICE u* loop bound (DO i=jMin,jMax) is restored to stock DO i=iMin,iMax and the Langmuir uStar/vStar block to stock 2-D form (no declared capture used Langmuir). Capture print format widened E25.16 -> ES25.16 (17 significant digits); streaming parsers unchanged (they already read bare 3-digit exponents). On real Docker runs the 17-digit 1DMIX-066 attempt-A configuration passes all 4 GGL90 bounds with no tolerance widened (mixing_length 0.194 -> 2.2e-13), closing the 1DMIX-068 residual as print quantization; isomip at 17 digits equals the declared capture to print quantization (loop fix is a no-op on square tiles). Richard: APPROVE_WITH_FIXES (independent stock diff, 3M-double round-trip, own attempt-A replay with a 16-digit contrast). Declared captures stay 16-digit; recapture, known-gap test bounds and PARAM/standalone precision are 1DMIX-070. Final verification EXECUTED PASS.

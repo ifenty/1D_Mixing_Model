@@ -686,7 +686,7 @@ All files use NetCDF4 with:
 ### Precision
 
 - **Floating-point data**: 64-bit (double precision)
-- **Output format from MITgcm**: E25.16 (16 significant digits) when high-precision debug output is used
+- **Output format from MITgcm**: E25.16 (16 significant digits) for all captures declared before 1DMIX-069; the instrumented `kpp_calc.F` now prints ES25.16 (17 significant digits, exact for a double). The parsers read both
 - **Validation tolerance**: rtol=1e-12 (achievable with double precision)
 
 ### Variable Attributes

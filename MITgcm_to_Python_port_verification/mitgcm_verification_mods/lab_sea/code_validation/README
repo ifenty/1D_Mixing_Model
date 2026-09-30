@@ -30,7 +30,7 @@ for KPP validation. The -mods mechanism requires a complete code directory.
 
 3. kpp_output_validation.F (NEW FILE - not in original MITgcm)
    - Outputs KPP inputs/outputs in CSV format
-   - Precision: E25.16 (16 significant digits)
+   - Precision: E25.16 (16 significant digits) when this README was written; the shared kpp_mods/kpp_calc.F now prints ES25.16 (17 significant digits, 1DMIX-069)
    - Called once per timestep for all grid points
    - Includes FFIELDS.h for surface forcing variables
 

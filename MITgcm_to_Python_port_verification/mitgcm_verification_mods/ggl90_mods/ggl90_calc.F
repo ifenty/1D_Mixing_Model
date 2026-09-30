@@ -166,12 +166,14 @@ C                    of TKE and mixing (output of S/R GGL90_IDEMIX)
 #endif /* ALLOW_GGL90_IDEMIX */
 #ifdef ALLOW_GGL90_LANGMUIR
 C   uStar, vStar :: frictional velocity component
-      _RL uStar, vStar, depthFac
+      _RL depthFac
       _RL recip_Lasq, recip_LD
       _RL LCmixingLength(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
       _RL stokesterm(1-OLx:sNx+OLx,1-OLy:sNy+OLy)
       _RL dstokesUdR(1-OLx:sNx+OLx,1-OLy:sNy+OLy)
       _RL dstokesVdR(1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL uStar     (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL vStar     (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
 #endif /* ALLOW_GGL90_LANGMUIR */
       _RL recip_hFacI      (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
       _RL hFac
@@ -374,6 +376,10 @@ c       rMixingLength(i,j,1)  = 0. _d 0
          stokesterm(i,j) = 0. _d 0
          dstokesUdR(i,j) = 0. _d 0
          dstokesVdR(i,j) = 0. _d 0
+         uStar(i,j) = SIGN( SQRT(ABS(surfaceForcingU(i,j,bi,bj))),
+     &                               surfaceForcingU(i,j,bi,bj)   )
+         vStar(i,j) = SIGN( SQRT(ABS(surfaceForcingV(i,j,bi,bj))),
+     &                               surfaceForcingV(i,j,bi,bj)   )
         ENDDO
        ENDDO
       ENDIF
@@ -559,12 +565,8 @@ C       compute (dStokesU/dz) and (dStokesV/dz)
         depthFac = recip_Lasq*EXP( recip_LD*rF(k) )
         DO j=1-OLy,sNy+OLy
          DO i=1-OLx,sNx+OLx
-          uStar = SIGN( SQRT(ABS(surfaceForcingU(i,j,bi,bj))),
-     &                  surfaceForcingU(i,j,bi,bj) )
-          dstokesUdR(i,j) = recip_LD * uStar * depthFac
-          vStar = SIGN( SQRT(ABS(surfaceForcingV(i,j,bi,bj))),
-     &                  surfaceForcingV(i,j,bi,bj) )
-          dstokesVdR(i,j) = recip_LD * vStar * depthFac
+          dstokesUdR(i,j) = recip_LD * uStar(i,j) * depthFac
+          dstokesVdR(i,j) = recip_LD * vStar(i,j) * depthFac
          ENDDO
         ENDDO
 
@@ -912,7 +914,7 @@ C-     compute explicit stress
        ENDDO
 C
        DO j=jMin,jMax
-        DO i=jMin,jMax
+        DO i=iMin,iMax
          IF ( kTopC(i,j,bi,bj) .GT. 0 ) THEN
           uStarSquare(i,j) =
      &         ( stressU(i,j)*stressU(i,j)+stressU(i+1,j)*stressU(i+1,j)
@@ -1269,8 +1271,9 @@ C     | SUBROUTINE GGL90_OUTPUT_VALIDATION                       |
 C     | o Output GGL90 inputs and outputs for Python validation |
 C     *==========================================================*
 C     | Mirrors kpp_calc.F's KPP_OUTPUT_VALIDATION: CSV-formatted|
-C     | STDOUT at E25.16 precision, single-step-replay layout    |
-C     | (tkeBefore = TKE(t), input; GGL90TKE (post-call) =       |
+C     | STDOUT at ES25.16 (17 sig. digits, 1DMIX-069),           |
+C     | single-step-replay layout (tkeBefore = TKE(t), input;   |
+C     | GGL90TKE (post-call) =                                   |
 C     | TKE(t+1), output).                                       |
 C     | sigmaRArg (1DMIX-024): GGL90_CALC's own dummy argument   |
 C     | sigmaR, plumbed through unmodified -- the one genuinely  |
@@ -1502,11 +1505,11 @@ C       above (1DMIX-025) for why this checks every level, not just k=1.
       WRITE(standardMessageUnit,'(A)')
      &  '===== GGL90_VALIDATION_END ====='
 
- 101  FORMAT(A,',',I3,3(',',E25.16))
- 200  FORMAT(A,3(',',I3),4(',',E25.16))
- 201  FORMAT(A,3(',',I3),',',E25.16)
- 202  FORMAT(A,2(',',I3),3(',',E25.16))
- 203  FORMAT(A,3(',',I3),3(',',E25.16))
+ 101  FORMAT(A,',',I3,3(',',ES25.16))
+ 200  FORMAT(A,3(',',I3),4(',',ES25.16))
+ 201  FORMAT(A,3(',',I3),',',ES25.16)
+ 202  FORMAT(A,2(',',I3),3(',',ES25.16))
+ 203  FORMAT(A,3(',',I3),3(',',ES25.16))
 
       RETURN
       END

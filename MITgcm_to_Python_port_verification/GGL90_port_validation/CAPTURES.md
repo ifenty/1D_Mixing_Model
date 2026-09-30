@@ -115,6 +115,62 @@ failed under the 8 GB bound on the full 951 MB `output.txt` (`MemoryError` at
 blocks, 159 MB): old 0.89 GB, new 0.14 GB, **identical**; the new parser handles
 the full file at 0.16 GB.
 
+## Print precision and instrumentation fidelity, 1DMIX-069 (2026-09-30)
+
+**Which captures are 16-digit and which are 17-digit.** Every capture declared
+above (all five GGL90 sets, and every KPP capture in
+`../KPP_port_validation/CAPTURES.md`) was produced with the instrumented
+`FORMAT E25.16` (16 significant digits) and remains valid under that limit; none
+was replaced by 1DMIX-069. The instrumented files now print `ES25.16` (17
+significant digits, exact for a double); any capture regenerated from these mods
+from 1DMIX-069 on carries bit-exact MITgcm T, S, sigma_r etc. The 17-digit
+verification runs of 1DMIX-069 (vermix 20 steps, KPP `1D_10`, the 1DMIX-066
+attempt-A `1D_ocean_ice_column` 11,000 steps, `isomip_12`) were kept only under
+`devel-loop/loop_state/scratch/bob-1DMIX-069/`, not declared. The streaming parsers
+needed no change: `capture_stream.ffloat` already reads the E-less 3-digit exponent
+(`5.64e-106` prints as `5.6403554411026415-106`), which occurs in the 11,000-step
+capture (273 lines).
+
+**What the 17-digit format shows.** Re-running the 1DMIX-066 attempt-A
+configuration (`1D_ocean_ice_column`, minimal `data.ggl90` with only
+`mxlMaxFlag=3`, 11,000 steps, 253,000 wet cells) with the widened format and the
+1DMIX-068 MITgcm-order N² in the port, and no tolerance changed, passes all four
+`test_1d_ocean_ice_column_clean` bounds: `visc_az` max abs 2.1e-17, `diff_kz`
+1.2e-17 (0 cells above 1% relative; 19 at 16 digits), `mixing_length` 2.2e-13
+(1.9e-1 at 16 digits), `tke_after` 5.4e-20. So the attempt-A residual was print
+quantisation, not a port, EOS or harness defect. (The declared
+`1D_ocean_ice_column_11000` capture stays the vermix-namelist attempt B of
+1DMIX-066, unchanged.) For `isomip_12` the widened capture gives identical physics
+fields (all variables within 5.9e-16 relative of the declared capture, i.e. print
+quantisation only), confirming the SHELFICE loop-bound fix is a no-op on square
+tiles. Its port replay changes only the ulp-scale rows: `mixing_length` max abs
+3.25e-4 -> 1.07e-13 and `visc_az` 1.1e-10 -> 9.5e-18 (the 1DMIX-038 kSrf `diff_kz`
+(1075 vs 1102 cells above 1%) and `tke_after` (17934 cells, 9.08e-6) gaps are
+unchanged, so they are not print artifacts). Consequently
+`test_isomip_mixing_length_ksrf_plus_1`, which asserts `1e-4 < max_abs < 0.01`,
+would fail on a 17-digit isomip capture; it passes on the declared capture, and its
+bound was left untouched (follow-up when the declared isomip capture is recaptured).
+
+**Fidelity audit against stock MITgcm (d861cd501).** Only three distinct
+instrumented Fortran files exist: `mitgcm_verification_mods/ggl90_mods/ggl90_calc.F`,
+`kpp_mods/kpp_calc.F` and `kpp_mods/kpp_routines.F` (all per-experiment
+`code_validation/*.F` entries are symlinks to them, except
+`1D_ocean_ice_column/code_validation/kpp_routines.F`, a byte-identical copy).
+Every hunk versus stock is output-only (capture buffers, the
+`*_OUTPUT_VALIDATION` subroutines and their calls, KPPMIX's `Rib, bfsfc` exposed
+as output arguments) except one: the `ggl90_calc.F` SHELFICE u* block looped
+`DO i=jMin,jMax` where stock has `DO i=iMin,iMax` (a transcription defect;
+**fixed**, it affected only SHELFICE runs with non-square tiles or halos,
+sNx != sNy or OLx != OLy; all current captures use 25x25 tiles or have no
+SHELFICE). Until 1DMIX-069 the file also had the Langmuir u*/v* arrays as per-point
+scalars (arithmetically identical); they are now restored to stock's 2-D arrays so
+that the file now differs from stock only by output instrumentation. No declared
+capture ran with `useLANGMUIR` on (`data.ggl90` of every declared run has no
+`useLANGMUIR`; stock default `.FALSE.`). The headers copied into the mods
+directories have no `#define/#undef` differences from the stock experiment's own
+`code/` copies wherever one exists. Full hunk table:
+`devel-loop/loop_state/bob-1DMIX-069-evidence.md`.
+
 ## `vermix` (20 timesteps, single column)
 
 `GGL90` was iterated on this experiment across several closed issues (1DMIX-015,

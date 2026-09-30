@@ -169,7 +169,18 @@ by some T,S that prints identically to the captured values (a control target 3
 quanta away is reproduced by none). Feeding MITgcm's captured sigma_r instead
 of recomputed N² makes the whole replay agree with MITgcm to ~1e-15 relative,
 so nothing downstream of N² is limited. A bit-for-bit N² check needs the capture
-format widened to 17 significant digits (e.g. `ES25.17`) and the capture redone.
+format widened to 17 significant digits and the capture redone.
+
+**Resolved for new captures (1DMIX-069)**: the instrumented files now print `ES25.16`
+(17 significant digits). Re-running the same attempt-A configuration (11,000 steps,
+253,000 wet cells) with that format and no tolerance widened passes all four
+`test_1d_ocean_ice_column_clean` bounds (`mixing_length` max abs 2.2e-13 versus
+1.9e-1 at 16 digits; `diff_kz` 0 cells above 1% versus 19), so the residual was
+print quantisation. The captures declared in `esx/project.json:external_inputs`
+were all produced at 16 digits and stay valid but carry this limit. Instrumented
+Fortran fidelity (only output-only hunks versus stock MITgcm d861cd501, after
+fixing the `ggl90_calc.F` SHELFICE `DO i=jMin,jMax` transcription error): see
+`MITgcm_to_Python_port_verification/mitgcm_verification_mods/README.md`.
 
 ## GGL90 (prognostic TKE closure)
 
