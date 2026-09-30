@@ -12,6 +12,25 @@ port and the Python GGL90 port.
    - Input: MITgcm `output.txt` with validation data
    - Output: `mitgcm_kpp_inputs.nc`/`mitgcm_ggl90_inputs.nc` and the matching
      `..._outputs.nc`
+   - **Streaming (1DMIX-065)**: both parsers share the engine in
+     `capture_stream.py`. `output.txt` is read line by line (two passes: a
+     counters-only scan for the grid extent, timesteps and which optional
+     variables occur, then a write pass) and each completed timestep, all tiles,
+     is appended to the NetCDF files and dropped. Peak memory is one timestep of
+     arrays plus fixed metadata, independent of file length. This replaced a
+     parser that kept every value of every timestep in Python dicts until the
+     end: the 13.8 GB `global_oce_latlon_720` capture exhausted 27 GB of RAM
+     and never finished, while the streaming parser handles it in a fraction of
+     a GB (measured peak RSS is recorded in
+     `KPP_port_validation/CAPTURES.md`). Output files are identical in
+     variables, dimensions, attributes, dtypes and values to the old parser's
+     (checked variable by variable); the one on-disk difference is that
+     `time` is an unlimited dimension. The parsers require each timestep's
+     blocks to be contiguous and timesteps ascending (as MITgcm writes them) and
+     raise `ValueError` otherwise. `parse_mitgcm_ggl90_split.parse_mitgcm_ggl90_split`
+     still returns in-memory Datasets for small captures (used by
+     `compare_scenario_ggl90_standalone.py`); large ones should use
+     `parse_mitgcm_ggl90_split_to_files` or the command line.
 
 2. **`run_kpp_from_netcdf_input.py`** (KPP) / **`run_ggl90_from_netcdf_input.py`** (GGL90)
    - Run the Python port from NetCDF inputs

@@ -15,7 +15,10 @@
 set -e
 
 DRIVER_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-MITGCM_ROOT="/Users/ifenty/git_repo_others/MITgcm"
+# Override with the MITGCM_ROOT environment variable on any host whose MITgcm
+# checkout is not at the original macOS path (1DMIX-065: WSL uses
+# ~/Projects/MITgcm). The default is unchanged.
+MITGCM_ROOT="${MITGCM_ROOT:-/Users/ifenty/git_repo_others/MITgcm}"
 PKGCONFIG_DIR="$MITGCM_ROOT/verification/1D_ocean_ice_column/build_docker_kppmix_extend"
 CPPOPTS_DIR="$( cd "$DRIVER_DIR/../1D_ocean_ice_column/code_validation" && pwd )"
 

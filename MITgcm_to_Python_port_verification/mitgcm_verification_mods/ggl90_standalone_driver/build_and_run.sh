@@ -14,7 +14,10 @@
 set -e
 
 DRIVER_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-MITGCM_ROOT="/Users/ifenty/git_repo_others/MITgcm"
+# Override with the MITGCM_ROOT environment variable on any host whose MITgcm
+# checkout is not at the original macOS path (1DMIX-065: WSL uses
+# ~/Projects/MITgcm). The default is unchanged.
+MITGCM_ROOT="${MITGCM_ROOT:-/Users/ifenty/git_repo_others/MITgcm}"
 VERMIX_DIR="$MITGCM_ROOT/verification/vermix"
 # PACKAGES_CONFIG.h / CPP_OPTIONS.h: reuse the real, genmake2-generated
 # build directory created for 1DMIX-024's sigmaR-capture rebuild (see

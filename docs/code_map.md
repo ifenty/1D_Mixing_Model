@@ -49,6 +49,16 @@ global_ocean_cs32x15) live under `MITgcm_to_Python_port_verification/GGL90_port_
 and are exercised by `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`
 (issue 1DMIX-042) via `MITgcm_to_Python_port_verification/scripts/run_ggl90_from_netcdf_input.py::run`.
 
+**Capture route (1DMIX-065)**: an MITgcm `output.txt` becomes the `inputs_from_mitgcm/`/`outputs_from_mitgcm/`
+NetCDF pair through `MITgcm_to_Python_port_verification/scripts/parse_mitgcm_split.py::parse_mitgcm_split` (KPP) or
+`MITgcm_to_Python_port_verification/scripts/parse_mitgcm_ggl90_split.py::parse_mitgcm_ggl90_split_to_files` (GGL90); both are
+thin specs on the shared streaming engine `MITgcm_to_Python_port_verification/scripts/capture_stream.py::stream_convert`,
+which holds one timestep in memory (the previous whole-file parsers exhausted 27 GB on the 13.8 GB
+`global_oce_latlon_720` capture); nearest test `MITgcm_to_Python_port_verification/tests/test_capture_stream_parsers.py`
+(synthetic multi-tile files, never skips). Regenerating the gitignored captures/standalone sets on a new host is documented in
+`MITgcm_to_Python_port_verification/KPP_port_validation/CAPTURES.md` ("Regenerated on WSL, 1DMIX-065") and the two
+`CONVENTIONS_STANDALONE_DATA.md`; the standalone-driver `build_and_run.sh` scripts take `MITGCM_ROOT` from the environment.
+
 **1DMIX-054 (bounded first step, no new permanent capture yet)**: built two new
 dual-scheme Docker `-mods` directories following the existing precedent
 (`vermix/kpp_code_validation`, `1D_ocean_ice_column/ggl90_code_validation`):

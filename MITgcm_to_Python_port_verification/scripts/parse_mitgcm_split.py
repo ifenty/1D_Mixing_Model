@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Parse MITgcm KPP validation output to separate input and output xarray files.
+Parse MITgcm KPP validation output to separate input and output NetCDF files.
 
 Creates two files:
   - mitgcm_kpp_inputs.nc:  State, forcing, grid, parameters (UUID-tagged)
@@ -10,64 +10,40 @@ This allows:
   - Reusing inputs with different Python versions
   - Comparing outputs from multiple runs
   - Clear provenance tracking
+
+Streaming (1DMIX-065): ``output.txt`` is read line by line and each completed
+timestep (all tiles) is appended to the NetCDF files and then dropped, so peak
+memory is one timestep of arrays plus the fixed metadata, independent of file
+length. The old implementation accumulated every value of every timestep in
+Python dicts and built the arrays at the end; a 13.8 GB ``global_oce_latlon``
+capture (720 timesteps x 4 tiles) then exhausted 27 GB of RAM. The engine
+(two passes, ordering requirements, what is guaranteed identical to the old
+output) is documented in ``capture_stream.py``; this file supplies the KPP
+line grammar, variable tables, parameter/grid blocks and global attributes.
 """
 
-import re
 import sys
-import uuid
+from pathlib import Path
+from typing import Dict, List, Optional
+
 import numpy as np
 import xarray as xr
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, Tuple
 
-# Fortran's fixed-width E-format (e.g. E16.8/E20.12, used throughout this
-# project's KPP validation WRITE statements) drops the "E" when the exponent
-# needs 3 digits to fit the field width, e.g. '0.105188567206-104' instead of
-# '0.105188567206E-104'. This silently breaks for vanishingly tiny (but
-# physically real) values like shsq at quiescent deep levels -- Python's
-# float() raises ValueError on the "E"-less form, which every call site here
-# was catching via a blanket except-continue, silently dropping the entire
-# line (including otherwise-valid sibling fields like dbloc/Ritop) and
-# leaving pre-initialized zeros in their place (1DMIX-012).
-_FORTRAN_BARE_EXPONENT = re.compile(r'^([+-]?\d*\.\d+)([+-]\d+)$')
-
-# kpp_calc.F's TIMESTEP header (format '(A,I10,A,I3,A,I3)') always carries the
-# tile indices BI=/BJ=, even for single-tile (nSx=nSy=1) experiments (where
-# they're always 1,1). Every dict key parsed below is tile-local (i,j)
-# -- for a real multi-tile domain (e.g. global_oce_latlon's nSx=2,nSy=2),
-# distinct tiles reuse the same local index range, so tile-local keys alone
-# collide across tiles and silently overwrite each other. This regex lets
-# parse_mitgcm_split remap tile-local (i,j) to global (x,y) using the
-# tile size inferred from the data itself (see _remap_tiles_to_global).
-_TIMESTEP_HEADER = re.compile(r'^TIMESTEP=\s*(-?\d+),BI=\s*(\d+),BJ=\s*(\d+)$')
+from capture_stream import (ParserSpec, VarDef, ffloat, now_iso,
+                            stream_convert)
 
 
-def _ffloat(s: str) -> float:
-    """float() that also accepts Fortran's E-less bare-exponent form."""
-    try:
-        return float(s)
-    except ValueError:
-        m = _FORTRAN_BARE_EXPONENT.match(s.strip())
-        if m:
-            return float(m.group(1) + 'E' + m.group(2))
-        raise
+def parse_mitgcm_split(output_file: Path, inputs_path: Path,
+                       outputs_path: Path,
+                       experiment_name: str = None) -> str:
+    """Stream ``output_file`` into ``inputs_path`` / ``outputs_path``.
 
-
-def parse_mitgcm_split(output_file: Path,
-                       experiment_name: str = None) -> Tuple[xr.Dataset, xr.Dataset]:
+    Memory is bounded by one timestep (see module docstring). Returns the run
+    UUID recorded as ``uuid`` in the inputs file and ``input_uuid`` in the
+    outputs file.
     """
-    Parse MITgcm output to separate input and output Datasets.
-
-    Returns
-    -------
-    inputs_ds, outputs_ds : tuple of xr.Dataset
-        Input dataset with UUID, output dataset with linked UUID
-    """
+    output_file = Path(output_file)
     print(f"Parsing MITgcm KPP validation output: {output_file}")
-
-    # Generate UUID for this run
-    run_uuid = str(uuid.uuid4())
 
     # Auto-detect experiment name from path if not provided
     if experiment_name is None:
@@ -80,259 +56,117 @@ def parse_mitgcm_split(output_file: Path,
         if experiment_name is None:
             experiment_name = "unknown_experiment"
 
-    print(f"  Experiment: {experiment_name}")
-    print(f"  UUID: {run_uuid}")
-
-    # Parse data
-    params = {}
-    grid_info = {}
-    timestep_data = {}
-    nx_max, ny_max, nz_max = 0, 0, 0
-    timesteps = set()
-
-    # Tile-local index bookkeeping for the BI/BJ -> global (x,y) remap
-    # (see _TIMESTEP_HEADER / _remap_tiles_to_global).
-    local_i_max, local_j_max = 0, 0
-    bi_max, bj_max = 1, 1
-
-    with open(output_file, 'r') as f:
-        in_validation_block = False
-        current_timestep = None
-        current_bi, current_bj = 1, 1
-
-        for line in f:
-            line = line.strip()
-
-            # Parse parameters
-            if line == '===== KPP_MODEL_PARAMETERS =====':
-                params = _parse_parameters(f)
-                continue
-
-            # Parse grid
-            if line == '===== KPP_GRID_GEOMETRY =====':
-                grid_info = _parse_grid(f)
-                nz_max = grid_info['nr']
-                continue
-
-            # Skip headers
-            if line == '===== KPP_DATA_HEADERS =====':
-                _skip_until(f, '===== KPP_DATA_HEADERS_END =====')
-                continue
-
-            # Validation block
-            if line == '===== KPP_VALIDATION_START =====':
-                in_validation_block = True
-                continue
-
-            if in_validation_block and line.startswith('TIMESTEP='):
-                m = _TIMESTEP_HEADER.match(line)
-                if m:
-                    current_timestep = int(m.group(1))
-                    current_bi, current_bj = int(m.group(2)), int(m.group(3))
-                else:
-                    # Older/malformed header without BI=/BJ= -- treat as
-                    # the single-tile case (kpp_calc.F always emits BI/BJ
-                    # in current captures, so this should not trigger).
-                    current_timestep = int(line.split(',')[0].split('=')[1].strip())
-                    current_bi, current_bj = 1, 1
-                bi_max = max(bi_max, current_bi)
-                bj_max = max(bj_max, current_bj)
-                timesteps.add(current_timestep)
-
-                if current_timestep not in timestep_data:
-                    timestep_data[current_timestep] = {
-                        'state': {}, 'forcing': {}, 'coriolis': {},
-                        'mixing': {}, 'hbl': {}, 'diagnostics': {},
-                        'swatt': {}, 'bulk_ri': {}, 'bfsfc_final': {},
-                        'saltplume': {}
-                    }
-                continue
-
-            if line == '===== KPP_VALIDATION_END =====':
-                in_validation_block = False
-                current_timestep = None
-                continue
-
-            # Parse data
-            if not in_validation_block or not line or current_timestep is None:
-                continue
-
-            parts = line.split(',')
-            if len(parts) < 2:
-                continue
-
-            tag = parts[0]
-
-            try:
-                # Every dict below is keyed by (bi, bj, i, j[, k]) -- i,j
-                # are tile-local (0-based). local_i_max/local_j_max/bi_max/
-                # bj_max let _remap_tiles_to_global convert these to global
-                # (x,y) after the full file has been parsed (see module
-                # docstring on _TIMESTEP_HEADER for why this is needed).
-                if tag in ('INPUT_STATE', 'OUTPUT_MIXING', 'OUTPUT_HBL',
-                           'OUTPUT_RIB', 'OUTPUT_BFSFC'):
-                    i, j = int(parts[1])-1, int(parts[2])-1
-                    local_i_max, local_j_max = max(local_i_max, i), max(local_j_max, j)
-
-                if tag == 'INPUT_STATE':
-                    i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    timestep_data[current_timestep]['state'][(current_bi,current_bj,i,j,k)] = {
-                        'theta': _ffloat(parts[4]), 'salt': _ffloat(parts[5]),
-                        'u': _ffloat(parts[6]), 'v': _ffloat(parts[7])
-                    }
-
-                elif tag == 'INPUT_FORCING':
-                    i, j = int(parts[1])-1, int(parts[2])-1
-                    forcing_dict = {
-                        'ustar': _ffloat(parts[3]), 'bo': _ffloat(parts[4]),
-                        'bosol': _ffloat(parts[5]), 'tau_x': _ffloat(parts[6]),
-                        'tau_y': _ffloat(parts[7])
-                    }
-                    # Optional: raw surface fluxes for forcing validation (backwards compatible)
-                    # Legacy extended format (pre-1DMIX-013 fix; still emitted by
-                    # some older captures -- q_net/fw_flux there are actually
-                    # MITgcm's surfaceForcingT/surfaceForcingS, NOT true raw
-                    # Qnet/EmPmR, see 1DMIX-013):
-                    #   INPUT_FORCING,i,j,ustar,bo,bosol,tau_x,tau_y,q_net,q_sw,fw_flux
-                    # 1DMIX-013 fix: new format emits genuinely raw MITgcm
-                    # state (Qnet, Qsw, EmPmR, saltFlux -- all FFIELDS.h
-                    # COMMON-block fields, upward-positive convention) instead
-                    # of the pre-converted surfaceForcingT/S. Distinct *_raw
-                    # keys so this never collides with the legacy (buggy)
-                    # q_net/fw_flux semantics below. Mutually exclusive with
-                    # the legacy branch (exact part-count dispatch) since a
-                    # 12-part new-format line also satisfies ">= 11".
-                    #   INPUT_FORCING,i,j,ustar,bo,bosol,tau_x,tau_y,
-                    #     Qnet_raw,Qsw_raw,EmPmR_raw,saltFlux_raw
-                    if len(parts) == 12:
-                        forcing_dict['qnet_raw'] = _ffloat(parts[8])
-                        forcing_dict['qsw_raw'] = _ffloat(parts[9])
-                        forcing_dict['empmr_raw'] = _ffloat(parts[10])
-                        forcing_dict['saltflux_raw'] = _ffloat(parts[11])
-                    elif len(parts) >= 11:
-                        forcing_dict['q_net'] = _ffloat(parts[8])
-                        forcing_dict['q_sw'] = _ffloat(parts[9])
-                        forcing_dict['fw_flux'] = _ffloat(parts[10])
-                    timestep_data[current_timestep]['forcing'][(current_bi,current_bj,i,j)] = forcing_dict
-
-                elif tag == 'INPUT_CORIOLIS':
-                    i, j = int(parts[1])-1, int(parts[2])-1
-                    timestep_data[current_timestep]['coriolis'][(current_bi,current_bj,i,j)] = _ffloat(parts[3])
-
-                elif tag == 'INPUT_SALTPLUME':
-                    # 1DMIX-034 part 2: boplume(i,j,1) and SaltPlumeDepth(i,j),
-                    # both already computed locally by KPP_FORCING_SURF/salt
-                    # plume depth diagnosis -- new, purely additive capture
-                    # (kpp_calc.F INPUT_FORCING dump, guarded #ifdef
-                    # ALLOW_SALT_PLUME exactly like INPUT_SWATT, emitting
-                    # 0.0/0.0 when compiled out). Needed to port the
-                    # salt-plume term in diagnose_bl_depth's bfsfc.
-                    i, j = int(parts[1])-1, int(parts[2])-1
-                    timestep_data[current_timestep]['saltplume'][(current_bi,current_bj,i,j)] = {
-                        'boplume': _ffloat(parts[3]), 'sp_depth': _ffloat(parts[4])
-                    }
-
-                elif tag == 'INPUT_SWATT':
-                    # KPPMIX direct "I" argument (bldepth) whenever
-                    # SHORTWAVE_HEATING is active; k runs 1..Nr+1 (one
-                    # more level than shsq/dbloc/dVsq/Ritop).
-                    i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    timestep_data[current_timestep]['swatt'][(current_bi,current_bj,i,j,k)] = _ffloat(parts[4])
-
-                elif tag == 'OUTPUT_MIXING':
-                    i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    timestep_data[current_timestep]['mixing'][(current_bi,current_bj,i,j,k)] = {
-                        'visc_az': _ffloat(parts[4]), 'diff_kz_s': _ffloat(parts[5]),
-                        'diff_kz_t': _ffloat(parts[6]), 'ghat': _ffloat(parts[7])
-                    }
-
-                elif tag == 'OUTPUT_HBL':
-                    i, j = int(parts[1])-1, int(parts[2])-1
-                    timestep_data[current_timestep]['hbl'][(current_bi,current_bj,i,j)] = _ffloat(parts[3])
-
-                elif tag == 'OUTPUT_DIAGNOSTICS':
-                    i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    diag = {
-                        'shear_sq': _ffloat(parts[4]),
-                        'buoy_freq_sq': _ffloat(parts[5]),
-                        'richardson': _ffloat(parts[6])
-                    }
-                    # dVsq/Ritop: KPPMIX's direct "I"-only arguments, dumped
-                    # verbatim (unmodified by KPPMIX) so the standalone
-                    # KPPMIX-only harness can replay it without STATEKPP/
-                    # KPP_FORCING_SURF. Older captures predate these columns.
-                    if len(parts) >= 9:
-                        diag['dVsq'] = _ffloat(parts[7])
-                        diag['Ritop'] = _ffloat(parts[8])
-                    timestep_data[current_timestep]['diagnostics'][(current_bi,current_bj,i,j,k)] = diag
-
-                elif tag == 'OUTPUT_RIB':
-                    # 1DMIX-025: bldepth's own real bulk Richardson number
-                    # (kpp_routines.F), exposed via KPPMIX's new output
-                    # argument -- ground truth for the Python port's own
-                    # Rib profile, distinct from 'richardson' above (which
-                    # is dbloc/shsq, the *local* Ri used by Ri_iwmix, not
-                    # bldepth's bulk Rib).
-                    i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
-                    timestep_data[current_timestep]['bulk_ri'][(current_bi,current_bj,i,j,k)] = _ffloat(parts[4])
-
-                elif tag == 'OUTPUT_BFSFC':
-                    # 1DMIX-025: bldepth's final (post-LimitHblStable-clamp)
-                    # surface buoyancy forcing, exposed via KPPMIX's new
-                    # kppBfsfc output argument.
-                    i, j = int(parts[1])-1, int(parts[2])-1
-                    timestep_data[current_timestep]['bfsfc_final'][(current_bi,current_bj,i,j)] = _ffloat(parts[3])
-
-            except (ValueError, IndexError):
-                continue
-
-    # sNx/sNy (uniform per-tile size) inferred from the tile-local index
-    # range actually observed -- MITgcm's decomposition is exact (every
-    # tile is exactly sNx x sNy, no partial edge tiles), so the maximum
-    # local index seen over ALL tiles equals sNx-1/sNy-1.
-    sNx, sNy = local_i_max + 1, local_j_max + 1
-    nx_max, ny_max = bi_max * sNx, bj_max * sNy
-    timestep_data = _remap_tiles_to_global(timestep_data, sNx, sNy)
-
-    print(f"  Parsed: {len(timesteps)} timesteps, grid {nx_max}×{ny_max}×{nz_max}"
-          f" ({bi_max}×{bj_max} tiles of {sNx}×{sNy})")
-
-    # Create datasets
-    inputs_ds = _create_inputs_dataset(
-        timestep_data, grid_info, params,
-        nx_max, ny_max, nz_max, sorted(timesteps),
-        run_uuid, experiment_name, output_file
-    )
-
-    outputs_ds = _create_outputs_dataset(
-        timestep_data, grid_info,
-        nx_max, ny_max, nz_max, sorted(timesteps),
-        run_uuid, experiment_name
-    )
-
-    return inputs_ds, outputs_ds
+    return stream_convert(output_file, experiment_name, SPEC,
+                          inputs_path, outputs_path)
 
 
-def _remap_tiles_to_global(timestep_data: Dict, sNx: int, sNy: int) -> Dict:
-    """Replace tile-local (bi,bj,i,j[,k]) dict keys with global (x,y[,k]).
+def _parse_line(tag: str, parts: List[str]) -> Optional[List[tuple]]:
+    """One KPP data line -> [(variable, i, j, k, value), ...] (tile-local,
+    zero-based i/j/k; k=None for horizontal variables), or None for an
+    unrecognised tag. A malformed field raises ValueError/IndexError and the
+    caller drops the whole line, as the old parser did."""
+    if tag == 'INPUT_STATE':
+        i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
+        return [('temperature', i, j, k, ffloat(parts[4])),
+                ('salinity', i, j, k, ffloat(parts[5])),
+                ('u_velocity', i, j, k, ffloat(parts[6])),
+                ('v_velocity', i, j, k, ffloat(parts[7]))]
 
-    x = (bi-1)*sNx + i, y = (bj-1)*sNy + j. For single-tile captures
-    (bi=bj=1 always) this is the identity map.
-    """
-    def remap(d: Dict) -> Dict:
-        out = {}
-        for key, value in d.items():
-            bi, bj = key[0], key[1]
-            rest = key[2:]
-            x = (bi - 1) * sNx + rest[0]
-            y = (bj - 1) * sNy + rest[1]
-            out[(x, y) + rest[2:]] = value
-        return out
+    if tag == 'INPUT_FORCING':
+        i, j = int(parts[1])-1, int(parts[2])-1
+        updates = [('ustar', i, j, None, ffloat(parts[3])),
+                   ('bo', i, j, None, ffloat(parts[4])),
+                   ('bosol', i, j, None, ffloat(parts[5])),
+                   ('tau_x', i, j, None, ffloat(parts[6])),
+                   ('tau_y', i, j, None, ffloat(parts[7]))]
+        # Optional: raw surface fluxes for forcing validation (backwards
+        # compatible). Legacy extended format (pre-1DMIX-013 fix; still
+        # emitted by some older captures -- q_net/fw_flux there are actually
+        # MITgcm's surfaceForcingT/surfaceForcingS, NOT true raw Qnet/EmPmR,
+        # see 1DMIX-013):
+        #   INPUT_FORCING,i,j,ustar,bo,bosol,tau_x,tau_y,q_net,q_sw,fw_flux
+        # 1DMIX-013 fix: new format emits genuinely raw MITgcm state (Qnet,
+        # Qsw, EmPmR, saltFlux -- all FFIELDS.h COMMON-block fields,
+        # upward-positive convention) instead of the pre-converted
+        # surfaceForcingT/S. Distinct *_raw keys so this never collides with
+        # the legacy (buggy) q_net/fw_flux semantics. Mutually exclusive with
+        # the legacy branch (exact part-count dispatch) since a 12-part
+        # new-format line also satisfies ">= 11".
+        #   INPUT_FORCING,i,j,ustar,bo,bosol,tau_x,tau_y,
+        #     Qnet_raw,Qsw_raw,EmPmR_raw,saltFlux_raw
+        if len(parts) == 12:
+            updates += [('qnet_raw', i, j, None, ffloat(parts[8])),
+                        ('qsw_raw', i, j, None, ffloat(parts[9])),
+                        ('empmr_raw', i, j, None, ffloat(parts[10])),
+                        ('saltflux_raw', i, j, None, ffloat(parts[11]))]
+        elif len(parts) >= 11:
+            updates += [('q_net', i, j, None, ffloat(parts[8])),
+                        ('q_sw', i, j, None, ffloat(parts[9])),
+                        ('fw_flux', i, j, None, ffloat(parts[10]))]
+        return updates
 
-    return {
-        ts: {category: remap(d) for category, d in categories.items()}
-        for ts, categories in timestep_data.items()
-    }
+    if tag == 'INPUT_CORIOLIS':
+        i, j = int(parts[1])-1, int(parts[2])-1
+        return [('f_coriolis', i, j, None, ffloat(parts[3]))]
+
+    if tag == 'INPUT_SALTPLUME':
+        # 1DMIX-034 part 2: boplume(i,j,1) and SaltPlumeDepth(i,j), both
+        # already computed locally by KPP_FORCING_SURF/salt plume depth
+        # diagnosis -- new, purely additive capture (kpp_calc.F INPUT_FORCING
+        # dump, guarded #ifdef ALLOW_SALT_PLUME exactly like INPUT_SWATT,
+        # emitting 0.0/0.0 when compiled out). Needed to port the salt-plume
+        # term in diagnose_bl_depth's bfsfc.
+        i, j = int(parts[1])-1, int(parts[2])-1
+        return [('boplume', i, j, None, ffloat(parts[3])),
+                ('sp_depth', i, j, None, ffloat(parts[4]))]
+
+    if tag == 'INPUT_SWATT':
+        # KPPMIX direct "I" argument (bldepth) whenever SHORTWAVE_HEATING is
+        # active; k runs 1..Nr+1 (one more level than shsq/dbloc/dVsq/Ritop).
+        i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
+        return [('swatt', i, j, k, ffloat(parts[4]))]
+
+    if tag == 'OUTPUT_MIXING':
+        i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
+        return [('visc_az', i, j, k, ffloat(parts[4])),
+                ('diff_kz_s', i, j, k, ffloat(parts[5])),
+                ('diff_kz_t', i, j, k, ffloat(parts[6])),
+                ('ghat', i, j, k, ffloat(parts[7]))]
+
+    if tag == 'OUTPUT_HBL':
+        i, j = int(parts[1])-1, int(parts[2])-1
+        return [('hbl', i, j, None, ffloat(parts[3]))]
+
+    if tag == 'OUTPUT_DIAGNOSTICS':
+        i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
+        updates = [('shear_sq', i, j, k, ffloat(parts[4])),
+                   ('buoy_freq_sq', i, j, k, ffloat(parts[5])),
+                   ('richardson', i, j, k, ffloat(parts[6]))]
+        # dVsq/Ritop: KPPMIX's direct "I"-only arguments, dumped verbatim
+        # (unmodified by KPPMIX) so the standalone KPPMIX-only harness can
+        # replay it without STATEKPP/KPP_FORCING_SURF. Older captures predate
+        # these columns.
+        if len(parts) >= 9:
+            updates += [('dVsq', i, j, k, ffloat(parts[7])),
+                        ('Ritop', i, j, k, ffloat(parts[8]))]
+        return updates
+
+    if tag == 'OUTPUT_RIB':
+        # 1DMIX-025: bldepth's own real bulk Richardson number
+        # (kpp_routines.F), exposed via KPPMIX's new output argument --
+        # ground truth for the Python port's own Rib profile, distinct from
+        # 'richardson' above (which is dbloc/shsq, the *local* Ri used by
+        # Ri_iwmix, not bldepth's bulk Rib).
+        i, j, k = int(parts[1])-1, int(parts[2])-1, int(parts[3])-1
+        return [('bulk_ri', i, j, k, ffloat(parts[4]))]
+
+    if tag == 'OUTPUT_BFSFC':
+        # 1DMIX-025: bldepth's final (post-LimitHblStable-clamp) surface
+        # buoyancy forcing, exposed via KPPMIX's new kppBfsfc output argument.
+        i, j = int(parts[1])-1, int(parts[2])-1
+        return [('bfsfc_final', i, j, None, ffloat(parts[3]))]
+
+    return None
 
 
 def _parse_parameters(f) -> Dict:
@@ -390,494 +224,10 @@ def _parse_grid(f) -> Dict:
             break
         if line.startswith('GRID_GEOM,'):
             parts = line.split(',')
-            drF.append(_ffloat(parts[2]))
-            rF.append(_ffloat(parts[3]))
-            rC.append(_ffloat(parts[4]))
+            drF.append(ffloat(parts[2]))
+            rF.append(ffloat(parts[3]))
+            rC.append(ffloat(parts[4]))
     return {'nr': len(drF), 'drF': np.array(drF), 'rF': np.array(rF), 'rC': np.array(rC)}
-
-
-def _skip_until(f, marker):
-    for line in f:
-        if line.strip() == marker:
-            break
-
-
-def _create_inputs_dataset(timestep_data, grid_info, params,
-                           nx, ny, nz, timesteps, run_uuid,
-                           experiment_name, output_path):
-    """Create inputs Dataset with UUID, parameters, and metadata."""
-
-    n_time = len(timesteps)
-
-    # Allocate arrays (use zeros instead of NaN for truncated data)
-    temperature = np.zeros((n_time, nx, ny, nz))
-    salinity = np.zeros((n_time, nx, ny, nz))
-    u_velocity = np.zeros((n_time, nx, ny, nz))
-    v_velocity = np.zeros((n_time, nx, ny, nz))
-
-    ustar = np.zeros((n_time, nx, ny))
-    bo = np.zeros((n_time, nx, ny))
-    bosol = np.zeros((n_time, nx, ny))
-    tau_x = np.zeros((n_time, nx, ny))
-    tau_y = np.zeros((n_time, nx, ny))
-    f_coriolis = np.zeros((n_time, nx, ny))
-
-    # Optional: raw surface fluxes for forcing validation (legacy format;
-    # see 1DMIX-013 -- q_net/fw_flux here are actually surfaceForcingT/S)
-    q_net = np.zeros((n_time, nx, ny))
-    q_sw = np.zeros((n_time, nx, ny))
-    fw_flux = np.zeros((n_time, nx, ny))
-    has_raw_fluxes = False
-
-    # 1DMIX-013 fix: genuinely raw MITgcm state (Qnet, Qsw, EmPmR,
-    # saltFlux -- FFIELDS.h COMMON-block fields, upward-positive
-    # convention). See kpp_calc.F::KPP_OUTPUT_VALIDATION's INPUT_FORCING
-    # comment and run_kpp_from_netcdf_input.py's forcing-derivation for
-    # the exact citation of how these combine into the raw-flux
-    # convention _compute_surface_forcing's q_net/q_sw/fw_flux expect.
-    qnet_raw = np.zeros((n_time, nx, ny))
-    qsw_raw = np.zeros((n_time, nx, ny))
-    empmr_raw = np.zeros((n_time, nx, ny))
-    saltflux_raw = np.zeros((n_time, nx, ny))
-    has_raw_mitgcm_fields = False
-
-    # Optional: shortwave attenuation profile (KPPMIX direct "I" input
-    # when SHORTWAVE_HEATING is active). One more level than shsq/dbloc.
-    swatt = np.zeros((n_time, nx, ny, nz + 1))
-    has_swatt = False
-
-    # Optional: salt-plume surface haline buoyancy forcing and its
-    # penetration depth (1DMIX-034 part 2). Scalar per column, like bo/
-    # bosol. Absent (all-zero, has_saltplume=False) for every capture
-    # that predates this fix or never compiled ALLOW_SALT_PLUME in.
-    boplume = np.zeros((n_time, nx, ny))
-    sp_depth = np.zeros((n_time, nx, ny))
-    has_saltplume = False
-
-    # Fill arrays
-    for t_idx, ts in enumerate(timesteps):
-        ts_data = timestep_data[ts]
-
-        for (i,j,k), vals in ts_data['state'].items():
-            temperature[t_idx, i, j, k] = vals['theta']
-            salinity[t_idx, i, j, k] = vals['salt']
-            u_velocity[t_idx, i, j, k] = vals['u']
-            v_velocity[t_idx, i, j, k] = vals['v']
-
-        for (i,j), vals in ts_data['forcing'].items():
-            ustar[t_idx, i, j] = vals['ustar']
-            bo[t_idx, i, j] = vals['bo']
-            bosol[t_idx, i, j] = vals['bosol']
-            tau_x[t_idx, i, j] = vals['tau_x']
-            tau_y[t_idx, i, j] = vals['tau_y']
-            # Optional: raw fluxes for forcing validation (legacy format)
-            if 'q_net' in vals:
-                q_net[t_idx, i, j] = vals['q_net']
-                q_sw[t_idx, i, j] = vals['q_sw']
-                fw_flux[t_idx, i, j] = vals['fw_flux']
-                has_raw_fluxes = True
-            # 1DMIX-013 fix: genuinely raw MITgcm state
-            if 'qnet_raw' in vals:
-                qnet_raw[t_idx, i, j] = vals['qnet_raw']
-                qsw_raw[t_idx, i, j] = vals['qsw_raw']
-                empmr_raw[t_idx, i, j] = vals['empmr_raw']
-                saltflux_raw[t_idx, i, j] = vals['saltflux_raw']
-                has_raw_mitgcm_fields = True
-
-        for (i,j), val in ts_data['coriolis'].items():
-            f_coriolis[t_idx, i, j] = val
-
-        for (i,j,k), val in ts_data.get('swatt', {}).items():
-            swatt[t_idx, i, j, k] = val
-            has_swatt = True
-
-        for (i,j), vals in ts_data.get('saltplume', {}).items():
-            boplume[t_idx, i, j] = vals['boplume']
-            sp_depth[t_idx, i, j] = vals['sp_depth']
-            has_saltplume = True
-
-    # Coordinates
-    coords = {
-        'time': timesteps,
-        'x': np.arange(nx),
-        'y': np.arange(ny),
-        'depth': (['z'], grid_info['rC'], {
-            'long_name': 'Cell center depth', 'units': 'm', 'positive': 'up', 'axis': 'Z'
-        }),
-        'depth_iface': (['z_iface'], grid_info['rF'], {
-            'long_name': 'Interface depth', 'units': 'm', 'positive': 'up', 'axis': 'Z'
-        }),
-        'cell_thickness': (['z'], grid_info['drF'], {
-            'long_name': 'Cell thickness', 'units': 'm'
-        }),
-    }
-
-    # Data variables
-    data_vars = {
-        'temperature': (['time', 'x', 'y', 'z'], temperature, {
-            'long_name': 'Potential temperature', 'units': 'degC',
-            'standard_name': 'sea_water_potential_temperature'
-        }),
-        'salinity': (['time', 'x', 'y', 'z'], salinity, {
-            'long_name': 'Salinity', 'units': 'psu',
-            'standard_name': 'sea_water_salinity'
-        }),
-        'u_velocity': (['time', 'x', 'y', 'z'], u_velocity, {
-            'long_name': 'Zonal velocity', 'units': 'm/s',
-            'standard_name': 'eastward_sea_water_velocity'
-        }),
-        'v_velocity': (['time', 'x', 'y', 'z'], v_velocity, {
-            'long_name': 'Meridional velocity', 'units': 'm/s',
-            'standard_name': 'northward_sea_water_velocity'
-        }),
-        'ustar': (['time', 'x', 'y'], ustar, {
-            'long_name': 'Friction velocity', 'units': 'm/s',
-            'description': 'Surface friction velocity from wind stress'
-        }),
-        'bo': (['time', 'x', 'y'], bo, {
-            'long_name': 'Turbulent buoyancy forcing', 'units': 'm^2/s^3',
-            'description': 'Non-penetrating buoyancy forcing at surface'
-        }),
-        'bosol': (['time', 'x', 'y'], bosol, {
-            'long_name': 'Radiative buoyancy forcing', 'units': 'm^2/s^3',
-            'description': 'Penetrating shortwave buoyancy forcing'
-        }),
-        'tau_x': (['time', 'x', 'y'], tau_x, {
-            'long_name': 'Zonal wind stress per unit density', 'units': 'm^2/s^2'
-        }),
-        'tau_y': (['time', 'x', 'y'], tau_y, {
-            'long_name': 'Meridional wind stress per unit density', 'units': 'm^2/s^2'
-        }),
-        'f_coriolis': (['time', 'x', 'y'], f_coriolis, {
-            'long_name': 'Coriolis parameter', 'units': '1/s',
-            'standard_name': 'coriolis_parameter'
-        }),
-    }
-
-    # Add optional raw surface fluxes if present (for forcing validation)
-    if has_raw_fluxes:
-        data_vars['q_net'] = (['time', 'x', 'y'], q_net, {
-            'long_name': 'Net surface heat flux (excluding shortwave)',
-            'units': 'W/m^2',
-            'standard_name': 'surface_net_heat_flux',
-            'description': 'Positive into ocean (warming)',
-            'comment': 'Used to compute bo; for forcing validation only'
-        })
-        data_vars['q_sw'] = (['time', 'x', 'y'], q_sw, {
-            'long_name': 'Surface shortwave radiation',
-            'units': 'W/m^2',
-            'standard_name': 'surface_shortwave_flux',
-            'description': 'Positive into ocean (heating)',
-            'comment': 'Used to compute bosol; for forcing validation only'
-        })
-        data_vars['fw_flux'] = (['time', 'x', 'y'], fw_flux, {
-            'long_name': 'Freshwater flux (E-P-R)',
-            'units': 'kg/m^2/s',
-            'standard_name': 'freshwater_flux',
-            'description': 'Positive into ocean (freshening)',
-            'comment': 'Used to compute bo; for forcing validation only'
-        })
-
-    # 1DMIX-013 fix: genuinely raw MITgcm state (distinct *_raw names from
-    # the legacy q_net/q_sw/fw_flux above, which are actually MITgcm's
-    # already-converted surfaceForcingT/surfaceForcingS -- see kpp_calc.F
-    # ::KPP_OUTPUT_VALIDATION and model/src/external_forcing_surf.F:
-    # 217-234,296-320). All four are plain FFIELDS.h COMMON-block fields,
-    # MITgcm's own "upward positive" sign convention (model/inc/FFIELDS.h:
-    # 17-38,44-53) -- NOT yet converted to the "positive into ocean"
-    # convention _compute_surface_forcing's raw-flux parameters expect.
-    # scripts/run_kpp_from_netcdf_input.py's forcing-derivation applies
-    # the exact (derived-and-verified, see 1DMIX-013 evidence) combination
-    # before calling KPPDriver.compute_mixing.
-    if has_raw_mitgcm_fields:
-        data_vars['qnet_raw'] = (['time', 'x', 'y'], qnet_raw, {
-            'long_name': 'Net upward surface heat flux (incl. shortwave)',
-            'units': 'W/m^2',
-            'standard_name': 'surface_upward_heat_flux_in_air',
-            'description': (
-                'MITgcm FFIELDS.h Qnet, verbatim: latent+sensible+'
-                'net longwave+net shortwave, UPWARD positive '
-                '(typical range -250..600). NOT the sign convention '
-                '_compute_surface_forcing documents for its own q_net '
-                'parameter -- see run_kpp_from_netcdf_input.py.'
-            ),
-            'comment': '1DMIX-013: raw capture, replaces mislabeled legacy q_net'
-        })
-        data_vars['qsw_raw'] = (['time', 'x', 'y'], qsw_raw, {
-            'long_name': 'Net upward shortwave radiation',
-            'units': 'W/m^2',
-            'standard_name': 'surface_upward_shortwave_flux_in_air',
-            'description': (
-                'MITgcm FFIELDS.h Qsw, verbatim: upward positive '
-                '(typical range -350..0). Was already raw before '
-                '1DMIX-013; renamed for consistency with the other '
-                '*_raw fields.'
-            ),
-            'comment': '1DMIX-013: raw capture'
-        })
-        data_vars['empmr_raw'] = (['time', 'x', 'y'], empmr_raw, {
-            'long_name': 'Net upward freshwater flux (Evap-Precip-Runoff)',
-            'units': 'kg/m^2/s',
-            'standard_name': 'water_evaporation_flux',
-            'description': (
-                'MITgcm FFIELDS.h EmPmR, verbatim: upward positive '
-                '(typical range -1e-4..1e-4).'
-            ),
-            'comment': '1DMIX-013: raw capture, replaces mislabeled legacy fw_flux'
-        })
-        data_vars['saltflux_raw'] = (['time', 'x', 'y'], saltflux_raw, {
-            'long_name': 'Net upward salt flux',
-            'units': 'g/m^2/s',
-            'description': (
-                'MITgcm FFIELDS.h saltFlux, verbatim: upward positive; '
-                'g/kg * kg/m^2/s = g/m^2/s (FFIELDS.h:38). For this '
-                'sea-ice column experiment this is set by '
-                'pkg/seaice/seaice_growth.F (brine rejection/freshening '
-                'during ice growth/melt) and combines with empmr_raw '
-                'inside external_forcing_surf.F:233-234,314-317 to form '
-                'surfaceForcingS -- omitting it under-represents the true '
-                'salt forcing for ice-covered columns.'
-            ),
-            'comment': '1DMIX-013: raw capture, no legacy equivalent (new term)'
-        })
-
-    if has_swatt:
-        data_vars['swatt'] = (['time', 'x', 'y', 'z_swatt'], swatt, {
-            'long_name': 'Shortwave attenuation fraction (KPPMIX direct input)',
-            'units': 'dimensionless',
-            'description': (
-                'Fraction of solar shortwave flux penetrating to each '
-                'level (SWFrac3D); Nr+1 levels. Direct KPPMIX "I" '
-                'argument, needed whenever SHORTWAVE_HEATING is active.'
-            )
-        })
-
-    if has_saltplume:
-        data_vars['boplume'] = (['time', 'x', 'y'], boplume, {
-            'long_name': 'Surface haline buoyancy forcing from salt plumes',
-            'units': 'm^2/s^3',
-            'description': (
-                '1DMIX-034: boplume(i,j,1), KPP_FORCING_SURF\'s surface-'
-                'level (SALT_PLUME_VOLUME-undef branch) haline buoyancy '
-                'forcing from rejected brine (kpp_forcing_surf.F:262-273). '
-                'Direct KPPMIX "I" argument, needed whenever useSALT_PLUME '
-                'is active; 0.0 otherwise.'
-            )
-        })
-        data_vars['sp_depth'] = (['time', 'x', 'y'], sp_depth, {
-            'long_name': 'Salt plume penetration depth',
-            'units': 'm',
-            'description': (
-                '1DMIX-034: SaltPlumeDepth(i,j), the e-folding depth used '
-                'by SALT_PLUME_FRAC to distribute boplume vertically '
-                '(pkg/salt_plume/salt_plume_calc_depth.F). Direct KPPMIX '
-                '"I" argument (SPDepth), needed whenever useSALT_PLUME is '
-                'active; 0.0 otherwise.'
-            )
-        })
-
-    ds = xr.Dataset(data_vars=data_vars, coords=coords)
-
-    # Global attributes
-    ds.attrs['title'] = 'MITgcm KPP Inputs'
-    ds.attrs['source'] = 'MITgcm with KPP instrumentation'
-    ds.attrs['institution'] = 'MITgcm'
-    ds.attrs['experiment'] = experiment_name
-    ds.attrs['output_file_path'] = str(output_path.absolute())
-    ds.attrs['creation_date'] = datetime.now().isoformat()
-    ds.attrs['uuid'] = run_uuid
-    ds.attrs['description'] = 'KPP inputs (state, forcing, grid) from MITgcm for validation'
-    ds.attrs['conventions'] = 'CF-1.8'
-    ds.attrs['forcing_validation_data'] = (
-        'present' if (has_raw_fluxes or has_raw_mitgcm_fields) else 'absent'
-    )
-    ds.attrs['swatt_data'] = 'present' if has_swatt else 'absent'
-    ds.attrs['saltplume_data'] = 'present' if has_saltplume else 'absent'
-
-    # Model parameters
-    for param_name, param_value in params.items():
-        ds.attrs[param_name] = param_value
-        ds.attrs[f'{param_name}_units'] = _get_param_units(param_name)
-        ds.attrs[f'{param_name}_description'] = _get_param_description(param_name)
-
-    return ds
-
-
-def _create_outputs_dataset(timestep_data, grid_info,
-                            nx, ny, nz, timesteps, run_uuid, experiment_name):
-    """Create outputs Dataset with UUID linking back to inputs."""
-
-    n_time = len(timesteps)
-
-    # Allocate arrays (use zeros instead of NaN for truncated data)
-    visc_az = np.zeros((n_time, nx, ny, nz))
-    diff_kz_s = np.zeros((n_time, nx, ny, nz))
-    diff_kz_t = np.zeros((n_time, nx, ny, nz))
-    ghat = np.zeros((n_time, nx, ny, nz))
-    hbl = np.zeros((n_time, nx, ny))
-    shear_sq = np.zeros((n_time, nx, ny, nz))
-    buoy_freq_sq = np.zeros((n_time, nx, ny, nz))
-    richardson = np.zeros((n_time, nx, ny, nz))
-    dvsq = np.zeros((n_time, nx, ny, nz))
-    ritop = np.zeros((n_time, nx, ny, nz))
-    bulk_ri = np.zeros((n_time, nx, ny, nz))
-    bfsfc_final = np.zeros((n_time, nx, ny))
-    has_kppmix_direct_inputs = False
-    has_bulk_ri = False
-    has_bfsfc_final = False
-
-    # Fill arrays
-    for t_idx, ts in enumerate(timesteps):
-        ts_data = timestep_data[ts]
-
-        for (i,j,k), vals in ts_data['mixing'].items():
-            visc_az[t_idx, i, j, k] = vals['visc_az']
-            diff_kz_s[t_idx, i, j, k] = vals['diff_kz_s']
-            diff_kz_t[t_idx, i, j, k] = vals['diff_kz_t']
-            ghat[t_idx, i, j, k] = vals['ghat']
-
-        for (i,j), val in ts_data['hbl'].items():
-            hbl[t_idx, i, j] = val
-
-        for (i,j,k), vals in ts_data['diagnostics'].items():
-            shear_sq[t_idx, i, j, k] = vals['shear_sq']
-            buoy_freq_sq[t_idx, i, j, k] = vals['buoy_freq_sq']
-            richardson[t_idx, i, j, k] = vals['richardson']
-            if 'dVsq' in vals:
-                dvsq[t_idx, i, j, k] = vals['dVsq']
-                ritop[t_idx, i, j, k] = vals['Ritop']
-                has_kppmix_direct_inputs = True
-
-        for (i,j,k), val in ts_data.get('bulk_ri', {}).items():
-            bulk_ri[t_idx, i, j, k] = val
-            has_bulk_ri = True
-
-        for (i,j), val in ts_data.get('bfsfc_final', {}).items():
-            bfsfc_final[t_idx, i, j] = val
-            has_bfsfc_final = True
-
-    # Coordinates (matching inputs)
-    coords = {
-        'time': timesteps,
-        'x': np.arange(nx),
-        'y': np.arange(ny),
-        'depth': (['z'], grid_info['rC'], {
-            'long_name': 'Cell center depth', 'units': 'm', 'positive': 'up'
-        }),
-        'depth_iface': (['z_iface'], grid_info['rF'], {
-            'long_name': 'Interface depth', 'units': 'm', 'positive': 'up'
-        }),
-    }
-
-    # Data variables
-    data_vars = {
-        'visc_az': (['time', 'x', 'y', 'z_iface'], visc_az, {
-            'long_name': 'Vertical viscosity (MITgcm KPP)', 'units': 'm^2/s',
-            'description': 'KPP vertical viscosity at cell interfaces',
-            'cell_location': 'interface'
-        }),
-        'diff_kz_s': (['time', 'x', 'y', 'z_iface'], diff_kz_s, {
-            'long_name': 'Vertical diffusivity for salt (MITgcm KPP)', 'units': 'm^2/s',
-            'description': 'KPP vertical diffusivity for salinity',
-            'cell_location': 'interface'
-        }),
-        'diff_kz_t': (['time', 'x', 'y', 'z_iface'], diff_kz_t, {
-            'long_name': 'Vertical diffusivity for temperature (MITgcm KPP)', 'units': 'm^2/s',
-            'description': 'KPP vertical diffusivity for temperature',
-            'cell_location': 'interface'
-        }),
-        'ghat': (['time', 'x', 'y', 'z'], ghat, {
-            'long_name': 'Nonlocal transport (MITgcm KPP)', 'units': 's/m^2',
-            'description': 'KPP nonlocal transport at cell centers',
-            'cell_location': 'center'
-        }),
-        'hbl': (['time', 'x', 'y'], hbl, {
-            'long_name': 'Boundary layer depth (MITgcm KPP)', 'units': 'm',
-            'description': 'KPP boundary layer depth',
-            'standard_name': 'ocean_mixed_layer_thickness_defined_by_sigma_theta'
-        }),
-        'shear_sq': (['time', 'x', 'y', 'z_iface'], shear_sq, {
-            'long_name': 'Vertical shear squared', 'units': '1/s^2',
-            'description': 'Square of vertical velocity shear at cell interfaces',
-            'cell_location': 'interface'
-        }),
-        'buoy_freq_sq': (['time', 'x', 'y', 'z_iface'], buoy_freq_sq, {
-            'long_name': 'Buoyancy frequency squared (N²)', 'units': '1/s^2',
-            'description': 'Square of buoyancy frequency (stratification) at cell interfaces',
-            'cell_location': 'interface'
-        }),
-        'richardson': (['time', 'x', 'y', 'z_iface'], richardson, {
-            'long_name': 'Richardson number', 'units': 'dimensionless',
-            'description': 'Gradient Richardson number (Ri = N²/S²) at cell interfaces',
-            'cell_location': 'interface'
-        }),
-    }
-
-    if has_kppmix_direct_inputs:
-        data_vars['dVsq'] = (['time', 'x', 'y', 'z_iface'], dvsq, {
-            'long_name': 'Velocity shear squared relative to surface',
-            'units': 'm^2/s^2',
-            'description': (
-                'Direct KPPMIX "I"-only input (dVsq), dumped verbatim/'
-                'unmodified. Semantically an input to KPPMIX, not an '
-                'MITgcm output; captured here (not in the inputs file) '
-                'because it is only produced as a side effect of the '
-                'full model run, following the existing shear_sq/'
-                'buoy_freq_sq precedent.'
-            ),
-            'cell_location': 'interface'
-        })
-        data_vars['Ritop'] = (['time', 'x', 'y', 'z_iface'], ritop, {
-            'long_name': 'Numerator of bulk Richardson number',
-            'units': 'm^2/s^2',
-            'description': (
-                'Direct KPPMIX "I"-only input (Ritop), dumped verbatim/'
-                'unmodified. See dVsq description for why it lives here.'
-            ),
-            'cell_location': 'interface'
-        })
-
-    if has_bulk_ri:
-        data_vars['bulk_ri'] = (['time', 'x', 'y', 'z_iface'], bulk_ri, {
-            'long_name': "bldepth's real bulk Richardson number",
-            'units': 'dimensionless',
-            'description': (
-                '1DMIX-025: bldepth\'s own Rib(kl) = Ritop(kl)/(dVsq(kl)+vtsq(kl)) '
-                '(kpp_routines.F), exposed via a new KPPMIX output argument '
-                'added for this issue -- real ground truth, distinct from '
-                "'richardson' above (which is dbloc/shsq, the *local* Ri used "
-                'by the separate Ri_iwmix routine, not this bulk Rib).'
-            ),
-            'cell_location': 'interface'
-        })
-
-    if has_bfsfc_final:
-        data_vars['bfsfc_final'] = (['time', 'x', 'y'], bfsfc_final, {
-            'long_name': "bldepth's final surface buoyancy forcing",
-            'units': 'm^2/s^3',
-            'description': (
-                "1DMIX-025: bldepth's bfsfc AFTER the LimitHblStable Ekman/"
-                'Monin-Obukhov clamp is applied (the value used to compute '
-                'that clamp, not the earlier per-trial-level bfsfc used '
-                'inside the Rib search loop), exposed via a new KPPMIX '
-                'output argument added for this issue.'
-            )
-        })
-
-    ds = xr.Dataset(data_vars=data_vars, coords=coords)
-
-    # Global attributes
-    ds.attrs['title'] = 'MITgcm KPP Outputs'
-    ds.attrs['source'] = 'MITgcm KPP'
-    ds.attrs['institution'] = 'MITgcm'
-    ds.attrs['experiment'] = experiment_name
-    ds.attrs['creation_date'] = datetime.now().isoformat()
-    ds.attrs['input_uuid'] = run_uuid
-    ds.attrs['description'] = 'KPP outputs (mixing coefficients, HBL) from MITgcm'
-    ds.attrs['conventions'] = 'CF-1.8'
-    ds.attrs['kppmix_direct_inputs'] = 'present' if has_kppmix_direct_inputs else 'absent'
-
-    return ds
 
 
 def _get_param_units(param: str) -> str:
@@ -1050,12 +400,346 @@ def _get_param_description(param: str) -> str:
     return desc_map.get(param, '')
 
 
+def _inputs_coords(grid_info: Dict) -> Dict:
+    return {
+        'depth': (['z'], grid_info['rC'], {
+            'long_name': 'Cell center depth', 'units': 'm', 'positive': 'up', 'axis': 'Z'
+        }),
+        'depth_iface': (['z_iface'], grid_info['rF'], {
+            'long_name': 'Interface depth', 'units': 'm', 'positive': 'up', 'axis': 'Z'
+        }),
+        'cell_thickness': (['z'], grid_info['drF'], {
+            'long_name': 'Cell thickness', 'units': 'm'
+        }),
+    }
+
+
+def _outputs_coords(grid_info: Dict) -> Dict:
+    return {
+        'depth': (['z'], grid_info['rC'], {
+            'long_name': 'Cell center depth', 'units': 'm', 'positive': 'up'
+        }),
+        'depth_iface': (['z_iface'], grid_info['rF'], {
+            'long_name': 'Interface depth', 'units': 'm', 'positive': 'up'
+        }),
+    }
+
+
+def _dim_sizes(nx: int, ny: int, nz: int) -> Dict[str, int]:
+    # z_swatt has one more level than z (swatt runs 1..Nr+1).
+    return {'x': nx, 'y': ny, 'z': nz, 'z_iface': nz, 'z_swatt': nz + 1}
+
+
+# Variable tables. `optional` variables exist in the file only if at least one
+# data line supplied a value for them (the old parser's has_* flags).
+_INPUT_VARS = [
+    VarDef('temperature', ('x', 'y', 'z'), {
+        'long_name': 'Potential temperature', 'units': 'degC',
+        'standard_name': 'sea_water_potential_temperature'
+    }),
+    VarDef('salinity', ('x', 'y', 'z'), {
+        'long_name': 'Salinity', 'units': 'psu',
+        'standard_name': 'sea_water_salinity'
+    }),
+    VarDef('u_velocity', ('x', 'y', 'z'), {
+        'long_name': 'Zonal velocity', 'units': 'm/s',
+        'standard_name': 'eastward_sea_water_velocity'
+    }),
+    VarDef('v_velocity', ('x', 'y', 'z'), {
+        'long_name': 'Meridional velocity', 'units': 'm/s',
+        'standard_name': 'northward_sea_water_velocity'
+    }),
+    VarDef('ustar', ('x', 'y'), {
+        'long_name': 'Friction velocity', 'units': 'm/s',
+        'description': 'Surface friction velocity from wind stress'
+    }),
+    VarDef('bo', ('x', 'y'), {
+        'long_name': 'Turbulent buoyancy forcing', 'units': 'm^2/s^3',
+        'description': 'Non-penetrating buoyancy forcing at surface'
+    }),
+    VarDef('bosol', ('x', 'y'), {
+        'long_name': 'Radiative buoyancy forcing', 'units': 'm^2/s^3',
+        'description': 'Penetrating shortwave buoyancy forcing'
+    }),
+    VarDef('tau_x', ('x', 'y'), {
+        'long_name': 'Zonal wind stress per unit density', 'units': 'm^2/s^2'
+    }),
+    VarDef('tau_y', ('x', 'y'), {
+        'long_name': 'Meridional wind stress per unit density', 'units': 'm^2/s^2'
+    }),
+    VarDef('f_coriolis', ('x', 'y'), {
+        'long_name': 'Coriolis parameter', 'units': '1/s',
+        'standard_name': 'coriolis_parameter'
+    }),
+    # Optional: raw surface fluxes for forcing validation (legacy format;
+    # see 1DMIX-013 -- q_net/fw_flux here are actually surfaceForcingT/S)
+    VarDef('q_net', ('x', 'y'), {
+        'long_name': 'Net surface heat flux (excluding shortwave)',
+        'units': 'W/m^2',
+        'standard_name': 'surface_net_heat_flux',
+        'description': 'Positive into ocean (warming)',
+        'comment': 'Used to compute bo; for forcing validation only'
+    }, optional=True),
+    VarDef('q_sw', ('x', 'y'), {
+        'long_name': 'Surface shortwave radiation',
+        'units': 'W/m^2',
+        'standard_name': 'surface_shortwave_flux',
+        'description': 'Positive into ocean (heating)',
+        'comment': 'Used to compute bosol; for forcing validation only'
+    }, optional=True),
+    VarDef('fw_flux', ('x', 'y'), {
+        'long_name': 'Freshwater flux (E-P-R)',
+        'units': 'kg/m^2/s',
+        'standard_name': 'freshwater_flux',
+        'description': 'Positive into ocean (freshening)',
+        'comment': 'Used to compute bo; for forcing validation only'
+    }, optional=True),
+    # 1DMIX-013 fix: genuinely raw MITgcm state (distinct *_raw names from
+    # the legacy q_net/q_sw/fw_flux above, which are actually MITgcm's
+    # already-converted surfaceForcingT/surfaceForcingS -- see kpp_calc.F
+    # ::KPP_OUTPUT_VALIDATION and model/src/external_forcing_surf.F:
+    # 217-234,296-320). All four are plain FFIELDS.h COMMON-block fields,
+    # MITgcm's own "upward positive" sign convention (model/inc/FFIELDS.h:
+    # 17-38,44-53) -- NOT yet converted to the "positive into ocean"
+    # convention _compute_surface_forcing's raw-flux parameters expect.
+    # scripts/run_kpp_from_netcdf_input.py's forcing-derivation applies the
+    # exact (derived-and-verified, see 1DMIX-013 evidence) combination before
+    # calling KPPDriver.compute_mixing.
+    VarDef('qnet_raw', ('x', 'y'), {
+        'long_name': 'Net upward surface heat flux (incl. shortwave)',
+        'units': 'W/m^2',
+        'standard_name': 'surface_upward_heat_flux_in_air',
+        'description': (
+            'MITgcm FFIELDS.h Qnet, verbatim: latent+sensible+'
+            'net longwave+net shortwave, UPWARD positive '
+            '(typical range -250..600). NOT the sign convention '
+            '_compute_surface_forcing documents for its own q_net '
+            'parameter -- see run_kpp_from_netcdf_input.py.'
+        ),
+        'comment': '1DMIX-013: raw capture, replaces mislabeled legacy q_net'
+    }, optional=True),
+    VarDef('qsw_raw', ('x', 'y'), {
+        'long_name': 'Net upward shortwave radiation',
+        'units': 'W/m^2',
+        'standard_name': 'surface_upward_shortwave_flux_in_air',
+        'description': (
+            'MITgcm FFIELDS.h Qsw, verbatim: upward positive '
+            '(typical range -350..0). Was already raw before '
+            '1DMIX-013; renamed for consistency with the other '
+            '*_raw fields.'
+        ),
+        'comment': '1DMIX-013: raw capture'
+    }, optional=True),
+    VarDef('empmr_raw', ('x', 'y'), {
+        'long_name': 'Net upward freshwater flux (Evap-Precip-Runoff)',
+        'units': 'kg/m^2/s',
+        'standard_name': 'water_evaporation_flux',
+        'description': (
+            'MITgcm FFIELDS.h EmPmR, verbatim: upward positive '
+            '(typical range -1e-4..1e-4).'
+        ),
+        'comment': '1DMIX-013: raw capture, replaces mislabeled legacy fw_flux'
+    }, optional=True),
+    VarDef('saltflux_raw', ('x', 'y'), {
+        'long_name': 'Net upward salt flux',
+        'units': 'g/m^2/s',
+        'description': (
+            'MITgcm FFIELDS.h saltFlux, verbatim: upward positive; '
+            'g/kg * kg/m^2/s = g/m^2/s (FFIELDS.h:38). For this '
+            'sea-ice column experiment this is set by '
+            'pkg/seaice/seaice_growth.F (brine rejection/freshening '
+            'during ice growth/melt) and combines with empmr_raw '
+            'inside external_forcing_surf.F:233-234,314-317 to form '
+            'surfaceForcingS -- omitting it under-represents the true '
+            'salt forcing for ice-covered columns.'
+        ),
+        'comment': '1DMIX-013: raw capture, no legacy equivalent (new term)'
+    }, optional=True),
+    VarDef('swatt', ('x', 'y', 'z_swatt'), {
+        'long_name': 'Shortwave attenuation fraction (KPPMIX direct input)',
+        'units': 'dimensionless',
+        'description': (
+            'Fraction of solar shortwave flux penetrating to each '
+            'level (SWFrac3D); Nr+1 levels. Direct KPPMIX "I" '
+            'argument, needed whenever SHORTWAVE_HEATING is active.'
+        )
+    }, optional=True),
+    VarDef('boplume', ('x', 'y'), {
+        'long_name': 'Surface haline buoyancy forcing from salt plumes',
+        'units': 'm^2/s^3',
+        'description': (
+            '1DMIX-034: boplume(i,j,1), KPP_FORCING_SURF\'s surface-'
+            'level (SALT_PLUME_VOLUME-undef branch) haline buoyancy '
+            'forcing from rejected brine (kpp_forcing_surf.F:262-273). '
+            'Direct KPPMIX "I" argument, needed whenever useSALT_PLUME '
+            'is active; 0.0 otherwise.'
+        )
+    }, optional=True),
+    VarDef('sp_depth', ('x', 'y'), {
+        'long_name': 'Salt plume penetration depth',
+        'units': 'm',
+        'description': (
+            '1DMIX-034: SaltPlumeDepth(i,j), the e-folding depth used '
+            'by SALT_PLUME_FRAC to distribute boplume vertically '
+            '(pkg/salt_plume/salt_plume_calc_depth.F). Direct KPPMIX '
+            '"I" argument (SPDepth), needed whenever useSALT_PLUME is '
+            'active; 0.0 otherwise.'
+        )
+    }, optional=True),
+]
+
+_OUTPUT_VARS = [
+    VarDef('visc_az', ('x', 'y', 'z_iface'), {
+        'long_name': 'Vertical viscosity (MITgcm KPP)', 'units': 'm^2/s',
+        'description': 'KPP vertical viscosity at cell interfaces',
+        'cell_location': 'interface'
+    }),
+    VarDef('diff_kz_s', ('x', 'y', 'z_iface'), {
+        'long_name': 'Vertical diffusivity for salt (MITgcm KPP)', 'units': 'm^2/s',
+        'description': 'KPP vertical diffusivity for salinity',
+        'cell_location': 'interface'
+    }),
+    VarDef('diff_kz_t', ('x', 'y', 'z_iface'), {
+        'long_name': 'Vertical diffusivity for temperature (MITgcm KPP)', 'units': 'm^2/s',
+        'description': 'KPP vertical diffusivity for temperature',
+        'cell_location': 'interface'
+    }),
+    VarDef('ghat', ('x', 'y', 'z'), {
+        'long_name': 'Nonlocal transport (MITgcm KPP)', 'units': 's/m^2',
+        'description': 'KPP nonlocal transport at cell centers',
+        'cell_location': 'center'
+    }),
+    VarDef('hbl', ('x', 'y'), {
+        'long_name': 'Boundary layer depth (MITgcm KPP)', 'units': 'm',
+        'description': 'KPP boundary layer depth',
+        'standard_name': 'ocean_mixed_layer_thickness_defined_by_sigma_theta'
+    }),
+    VarDef('shear_sq', ('x', 'y', 'z_iface'), {
+        'long_name': 'Vertical shear squared', 'units': '1/s^2',
+        'description': 'Square of vertical velocity shear at cell interfaces',
+        'cell_location': 'interface'
+    }),
+    VarDef('buoy_freq_sq', ('x', 'y', 'z_iface'), {
+        'long_name': 'Buoyancy frequency squared (N²)', 'units': '1/s^2',
+        'description': 'Square of buoyancy frequency (stratification) at cell interfaces',
+        'cell_location': 'interface'
+    }),
+    VarDef('richardson', ('x', 'y', 'z_iface'), {
+        'long_name': 'Richardson number', 'units': 'dimensionless',
+        'description': 'Gradient Richardson number (Ri = N²/S²) at cell interfaces',
+        'cell_location': 'interface'
+    }),
+    VarDef('dVsq', ('x', 'y', 'z_iface'), {
+        'long_name': 'Velocity shear squared relative to surface',
+        'units': 'm^2/s^2',
+        'description': (
+            'Direct KPPMIX "I"-only input (dVsq), dumped verbatim/'
+            'unmodified. Semantically an input to KPPMIX, not an '
+            'MITgcm output; captured here (not in the inputs file) '
+            'because it is only produced as a side effect of the '
+            'full model run, following the existing shear_sq/'
+            'buoy_freq_sq precedent.'
+        ),
+        'cell_location': 'interface'
+    }, optional=True),
+    VarDef('Ritop', ('x', 'y', 'z_iface'), {
+        'long_name': 'Numerator of bulk Richardson number',
+        'units': 'm^2/s^2',
+        'description': (
+            'Direct KPPMIX "I"-only input (Ritop), dumped verbatim/'
+            'unmodified. See dVsq description for why it lives here.'
+        ),
+        'cell_location': 'interface'
+    }, optional=True),
+    VarDef('bulk_ri', ('x', 'y', 'z_iface'), {
+        'long_name': "bldepth's real bulk Richardson number",
+        'units': 'dimensionless',
+        'description': (
+            '1DMIX-025: bldepth\'s own Rib(kl) = Ritop(kl)/(dVsq(kl)+vtsq(kl)) '
+            '(kpp_routines.F), exposed via a new KPPMIX output argument '
+            'added for this issue -- real ground truth, distinct from '
+            "'richardson' above (which is dbloc/shsq, the *local* Ri used "
+            'by the separate Ri_iwmix routine, not this bulk Rib).'
+        ),
+        'cell_location': 'interface'
+    }, optional=True),
+    VarDef('bfsfc_final', ('x', 'y'), {
+        'long_name': "bldepth's final surface buoyancy forcing",
+        'units': 'm^2/s^3',
+        'description': (
+            "1DMIX-025: bldepth's bfsfc AFTER the LimitHblStable Ekman/"
+            'Monin-Obukhov clamp is applied (the value used to compute '
+            'that clamp, not the earlier per-trial-level bfsfc used '
+            'inside the Rib search loop), exposed via a new KPPMIX '
+            'output argument added for this issue.'
+        )
+    }, optional=True),
+]
+
+
+def _inputs_attrs(experiment_name, output_file, run_uuid, params, seen) -> Dict:
+    attrs = {
+        'title': 'MITgcm KPP Inputs',
+        'source': 'MITgcm with KPP instrumentation',
+        'institution': 'MITgcm',
+        'experiment': experiment_name,
+        'output_file_path': str(Path(output_file).absolute()),
+        'creation_date': now_iso(),
+        'uuid': run_uuid,
+        'description': 'KPP inputs (state, forcing, grid) from MITgcm for validation',
+        'conventions': 'CF-1.8',
+        'forcing_validation_data': (
+            'present' if ('q_net' in seen or 'qnet_raw' in seen) else 'absent'
+        ),
+        'swatt_data': 'present' if 'swatt' in seen else 'absent',
+        'saltplume_data': 'present' if 'boplume' in seen else 'absent',
+    }
+    # Model parameters
+    for param_name, param_value in params.items():
+        attrs[param_name] = param_value
+        attrs[f'{param_name}_units'] = _get_param_units(param_name)
+        attrs[f'{param_name}_description'] = _get_param_description(param_name)
+    return attrs
+
+
+def _outputs_attrs(experiment_name, run_uuid, seen) -> Dict:
+    return {
+        'title': 'MITgcm KPP Outputs',
+        'source': 'MITgcm KPP',
+        'institution': 'MITgcm',
+        'experiment': experiment_name,
+        'creation_date': now_iso(),
+        'input_uuid': run_uuid,
+        'description': 'KPP outputs (mixing coefficients, HBL) from MITgcm',
+        'conventions': 'CF-1.8',
+        'kppmix_direct_inputs': 'present' if 'dVsq' in seen else 'absent',
+    }
+
+
+SPEC = ParserSpec(
+    prefix='KPP',
+    # Tags whose (i, j) fix the tile-local index extent (sNx/sNy).
+    extent_tags=frozenset({'INPUT_STATE', 'OUTPUT_MIXING', 'OUTPUT_HBL',
+                           'OUTPUT_RIB', 'OUTPUT_BFSFC'}),
+    parse_parameters=_parse_parameters,
+    parse_grid=_parse_grid,
+    parse_line=_parse_line,
+    inputs_vars=_INPUT_VARS,
+    outputs_vars=_OUTPUT_VARS,
+    inputs_coords=_inputs_coords,
+    outputs_coords=_outputs_coords,
+    dim_sizes=_dim_sizes,
+    inputs_attrs=_inputs_attrs,
+    outputs_attrs=_outputs_attrs,
+)
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python parse_mitgcm_split.py <output.txt> [experiment_name]")
         print("\nExample:")
         print("  python parse_mitgcm_split.py output_validation/output.txt 1D_ocean_ice_column")
-        print("\nCreates:")
+        print("\nCreates (next to output.txt):")
         print("  mitgcm_kpp_inputs.nc  - Inputs with UUID and parameters")
         print("  mitgcm_kpp_outputs.nc - Outputs with UUID link")
         sys.exit(1)
@@ -1071,27 +755,23 @@ def main():
     print("MITgcm KPP Validation: Split Input/Output Format")
     print("="*70)
 
-    # Parse
-    inputs_ds, outputs_ds = parse_mitgcm_split(output_file, experiment_name)
-
-    # Save
     inputs_file = output_file.parent / 'mitgcm_kpp_inputs.nc'
     outputs_file = output_file.parent / 'mitgcm_kpp_outputs.nc'
 
+    # Parse and save (streamed: files are written timestep by timestep)
     print(f"\nSaving files...")
-    encoding = {var: {'zlib': True, 'complevel': 4} for var in inputs_ds.data_vars}
-    inputs_ds.to_netcdf(inputs_file, encoding=encoding)
+    parse_mitgcm_split(output_file, inputs_file, outputs_file, experiment_name)
     print(f"  Inputs:  {inputs_file} ({inputs_file.stat().st_size/1024:.1f} KB)")
-
-    encoding = {var: {'zlib': True, 'complevel': 4} for var in outputs_ds.data_vars}
-    outputs_ds.to_netcdf(outputs_file, encoding=encoding)
     print(f"  Outputs: {outputs_file} ({outputs_file.stat().st_size/1024:.1f} KB)")
 
+    with xr.open_dataset(inputs_file) as inputs_ds:
+        attrs = dict(inputs_ds.attrs)
+
     print(f"\n✅ Success!")
-    print(f"   UUID: {inputs_ds.attrs['uuid']}")
-    print(f"   Experiment: {inputs_ds.attrs['experiment']}")
-    print(f"   Forcing validation data: {inputs_ds.attrs['forcing_validation_data']}")
-    if inputs_ds.attrs['forcing_validation_data'] == 'present':
+    print(f"   UUID: {attrs['uuid']}")
+    print(f"   Experiment: {attrs['experiment']}")
+    print(f"   Forcing validation data: {attrs['forcing_validation_data']}")
+    if attrs['forcing_validation_data'] == 'present':
         print("     -> Python validation will verify forcing computation (ustar, bo, bosol)")
     else:
         print("     -> Only mixing scheme will be validated (forcing assumed correct)")
@@ -1099,11 +779,11 @@ def main():
     # Show key parameters if present
     key_params = ['viscAz', 'diffKzS', 'diffKzT', 'gravity', 'rhoConst',
                   'Ricr', 'Riinfty', 'difm0', 'epsilon', 'vonk']
-    present_params = [k for k in key_params if k in inputs_ds.attrs]
+    present_params = [k for k in key_params if k in attrs]
     if present_params:
-        print(f"\n   Key Parameters (showing {len(present_params)} of {len([k for k in inputs_ds.attrs if k.startswith('PARAM_') or k in key_params])}):")
+        print(f"\n   Key Parameters (showing {len(present_params)} of {len([k for k in attrs if k.startswith('PARAM_') or k in key_params])}):")
         for p in present_params:
-            print(f"     {p}: {inputs_ds.attrs[p]:.6e}")
+            print(f"     {p}: {attrs[p]:.6e}")
 
     print("\n" + "="*70)
     print("Next step: python run_kpp_from_split.py mitgcm_kpp_inputs.nc")

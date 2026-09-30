@@ -58,6 +58,58 @@ anything).
 | `ggl90_standalone_input.txt`, `ggl90_experiment_dense.npz` | `MITgcm_to_Python_port_verification/scripts/export_scenario_to_ggl90_driver.py <scenario>` (reruns the scenario dense, `output_frequency_steps=1`, saving that trajectory to the `.npz`; exports it to the standalone driver's flat-text input format in the same call — see that script's own docstring) |
 | `ggl90_standalone_output.txt` | `MITgcm_to_Python_port_verification/mitgcm_verification_mods/ggl90_standalone_driver/build_and_run.sh ggl90_standalone_input.txt ggl90_standalone_output.txt` (compiles and runs MITgcm's real, unmodified `ggl90_calc.F` `GGL90_CALC` directly, no full model) |
 
+## Regenerated on WSL, 1DMIX-065 (2026-09-30)
+
+The gitignored files under `inputs_from_python_standalone/` and
+`outputs_from_python_standalone/` were absent on the fresh WSL checkout (2026-09-29)
+and were regenerated from scratch under 1DMIX-065 with the commands in the
+provenance table above, for all 6 scenarios, on 2026-09-30 (UTC) against MITgcm
+commit `d861cd501f21303825de860eb3caa0a8a7ae22f8` (`~/Projects/MITgcm`, tracked
+tree unmodified), Docker image `mitgcm:latest` (`6cc66b8957d8`), `x86_64`.
+The Fortran side comes only from the real standalone driver (`ggl90_standalone_driver/build_and_run.sh` compiling the vermix instrumentation copy of `ggl90_calc.F` (sha256 `a0fa9c3838bc29b026b60add3d13c50f27b2acdf42fcb671e8090e8d47d8a80f`, identical to canonical `ggl90_mods/ggl90_calc.F`) plus MITgcm's pristine `pkg/ggl90/ggl90_mixinglength.F` and `model/src/solve_tridiagonal.F`);
+the Python side (``ggl90_experiment_dense.npz``) only from the Python port; neither was used to
+produce the other's file. Producing commands, run from the repo root with
+`MITGCM_ROOT=~/Projects/MITgcm` (the driver scripts' new host-independence
+override; default unchanged):
+
+```
+python3 MITgcm_to_Python_port_verification/scripts/export_scenario_to_ggl90_driver.py <scenario>
+MITGCM_ROOT=~/Projects/MITgcm MITgcm_to_Python_port_verification/mitgcm_verification_mods/ggl90_standalone_driver/build_and_run.sh \
+    Vertical_Mixing_Models/output/<scenario>/ggl90_standalone_input.txt Vertical_Mixing_Models/output/<scenario>/ggl90_standalone_output.txt
+# then copy the 3 files into inputs_from_python_standalone/<scenario>/ and outputs_from_python_standalone/<scenario>/
+```
+
+`build_and_run.sh` regenerates `SIZE.h` in the driver directory on every run
+(`Nr` is auto-detected); the tracked copy was left as committed. Compile-time
+inputs the driver needs were built once with
+`experiment_compile.sh vermix -mods <repo>/MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/code_validation -build build_docker_ggl90_1dmix024 -j 8` (run in `~/Projects/MITgcm/verification`; it supplies `PACKAGES_CONFIG.h`/`CPP_OPTIONS.h` and the dereferenced `vermix/code_validation` copy)`.
+
+Statistics of the regenerated set (`generate_*_scenario_report.py`, run to a
+scratch path, not over the tracked report): all scenarios/fields at floating-point roundoff, 0 cells above 1%, worst `max_rel` 1.237e-11 (hurricane_wind; the tracked Mac-era report's worst was 1.388e-11). The in-memory parse of `ggl90_standalone_output.txt` now goes through the streaming parser (`scripts/parse_mitgcm_ggl90_split.py`); the regenerated report is identical to the one produced with the old parser apart from its `Generated:` timestamp.
+
+sha256 of every regenerated file (bytes on the WSL checkout):
+
+| Scenario | File | sha256 |
+|---|---|---|
+| `calm_baseline` | `inputs_from_python_standalone/calm_baseline/ggl90_standalone_input.txt` | `380ea919b92db7284a6d2110d536fe3f3df42cb457a2ad88229d3ef1cea6297b` |
+| `calm_baseline` | `outputs_from_python_standalone/calm_baseline/ggl90_standalone_output.txt` | `7bfe84355ba60c65d936e8b7e1a2c50505d5687b803ad3cf35c9605d09aae0b1` |
+| `calm_baseline` | `outputs_from_python_standalone/calm_baseline/ggl90_experiment_dense.npz` | `cefc932f6714d2a22da6fb37aad139eed5c62850ebde25096648fbf72de1fbba` |
+| `arctic_convection` | `inputs_from_python_standalone/arctic_convection/ggl90_standalone_input.txt` | `fadcaf95f69448ff7d1dcd968db6afc240b8ab189a44d681797cf39cbb40bf25` |
+| `arctic_convection` | `outputs_from_python_standalone/arctic_convection/ggl90_standalone_output.txt` | `34a65b12e576633378bc9df5b811f8781a309aaf394152d5b5158da339c14fa7` |
+| `arctic_convection` | `outputs_from_python_standalone/arctic_convection/ggl90_experiment_dense.npz` | `5d37b29d2dd82a3c879dc79bbb30e88121b133592de3b27fe190a2d46d207279` |
+| `hurricane_wind` | `inputs_from_python_standalone/hurricane_wind/ggl90_standalone_input.txt` | `78441edf54742e60f9487113f996e482eea3ed803c9232379ffcef11dc029f20` |
+| `hurricane_wind` | `outputs_from_python_standalone/hurricane_wind/ggl90_standalone_output.txt` | `b97f7ad044faebb4377ddfc8d5ac1b8b369e689ad344b956579f3156026b1296` |
+| `hurricane_wind` | `outputs_from_python_standalone/hurricane_wind/ggl90_experiment_dense.npz` | `8724acdc8d1a7e7116118466bde93aaab42da664c03550f6ef8cbf5a02a88972` |
+| `tropical_heating_diurnal` | `inputs_from_python_standalone/tropical_heating_diurnal/ggl90_standalone_input.txt` | `66fb74ab10f2bd317b8972e0af97c2d9655069de47b1adee6296a8842eb9cece` |
+| `tropical_heating_diurnal` | `outputs_from_python_standalone/tropical_heating_diurnal/ggl90_standalone_output.txt` | `f93ec6f24a98c891d44e053c7d56b03f61d49c83c565bbe34f8da8b607241ea2` |
+| `tropical_heating_diurnal` | `outputs_from_python_standalone/tropical_heating_diurnal/ggl90_experiment_dense.npz` | `6f30732529e81e50492e555d8607a7214e33b2a0345c1d04ebb97ff7c70b235b` |
+| `heavy_rain_freshening` | `inputs_from_python_standalone/heavy_rain_freshening/ggl90_standalone_input.txt` | `728e69a1b85304b46e8b9ea31bc5755c0fa42d204723f98fadec97ceba85dd9f` |
+| `heavy_rain_freshening` | `outputs_from_python_standalone/heavy_rain_freshening/ggl90_standalone_output.txt` | `f0d3fe0303926032f270f1a826ec92778452796d01784924a4e213cd4aabb7fc` |
+| `heavy_rain_freshening` | `outputs_from_python_standalone/heavy_rain_freshening/ggl90_experiment_dense.npz` | `e868f74437eb34b65034a3c58fc38664b6a46b39878526af5fb9b9010d9bf1c2` |
+| `combined_storm` | `inputs_from_python_standalone/combined_storm/ggl90_standalone_input.txt` | `393d7c50fee267ec07b3aa52239746cd1b6bd524fb4d135fd0f6fb0ce5681398` |
+| `combined_storm` | `outputs_from_python_standalone/combined_storm/ggl90_standalone_output.txt` | `80e726f031505f3267b77a730cdff3d7e33b3c41562e29752dccfbbe8826eedd` |
+| `combined_storm` | `outputs_from_python_standalone/combined_storm/ggl90_experiment_dense.npz` | `c1e86ddc139a488f772ed6116fe1cdc16554c00cc43f469da0ffab07121e29f4` |
+
 ## Comparison and report
 
 `MITgcm_to_Python_port_verification/scripts/compare_scenario_ggl90_standalone.py::compare`
@@ -73,6 +125,6 @@ those returned values into
 ## Regenerating from scratch
 
 1. `conda run -n ecco python3 MITgcm_to_Python_port_verification/scripts/export_scenario_to_ggl90_driver.py <scenario>` → `Vertical_Mixing_Models/output/<scenario>/{ggl90_experiment_dense.npz,ggl90_standalone_input.txt}` (well under a minute per scenario per that script's own report-generator docstring).
-2. `MITgcm_to_Python_port_verification/mitgcm_verification_mods/ggl90_standalone_driver/build_and_run.sh Vertical_Mixing_Models/output/<scenario>/ggl90_standalone_input.txt Vertical_Mixing_Models/output/<scenario>/ggl90_standalone_output.txt` (requires the local MITgcm checkout at the path hardcoded in that script).
+2. `MITgcm_to_Python_port_verification/mitgcm_verification_mods/ggl90_standalone_driver/build_and_run.sh Vertical_Mixing_Models/output/<scenario>/ggl90_standalone_input.txt Vertical_Mixing_Models/output/<scenario>/ggl90_standalone_output.txt` (requires a local MITgcm checkout: the script's default is the original macOS path `/Users/ifenty/git_repo_others/MITgcm`; on any other host set the `MITGCM_ROOT` environment variable — 1DMIX-065 added that override, default unchanged — e.g. `MITGCM_ROOT=~/Projects/MITgcm`. It also needs the genmake2-generated build directory `$MITGCM_ROOT/verification/vermix/build_docker_ggl90_1dmix024` and the `$MITGCM_ROOT/verification/vermix/code_validation` copy, both created by `experiment_compile.sh vermix -mods <repo>/MITgcm_to_Python_port_verification/mitgcm_verification_mods/vermix/code_validation -build build_docker_ggl90_1dmix024`).
 3. Copy the resulting 3 files into `inputs_from_python_standalone/<scenario>/` and `outputs_from_python_standalone/<scenario>/` per the layout above (no script currently automates this copy step; do it by hand, or write one — 1DMIX-053 did it once by hand for all 6 scenarios since the data already existed).
 4. Rerun `generate_ggl90_scenario_report.py` to refresh the report from the new bytes.

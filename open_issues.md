@@ -67,3 +67,22 @@ Latent, and narrower than it first appears: the invariant holds on current bytes
 
 ### Proposed action and acceptance
 Decide first whether the right answer is another witness or an end-to-end one. A guard that drives a real scenario through `KPPAdapter.compute_mixing` into `_apply_vertical_diffusion` and asserts the same momentum-invariance property would close this layer and would be the first test in this thread to exercise the real pipeline; that is preferable to a fourth hand-built witness, which would only move the boundary again. Consider also whether the property belongs in the adapter's own contract — that `compute_mixing` never returns a `visc_az` depending on `ghat` — which is checkable without a driver at all. Acceptance: whichever guard is chosen fails under the reviewer's adapter-contamination mutant, rebuilt and demonstrated rather than asserted; the three previously demonstrated routes remain caught; no tolerance is widened; and `docs/model_contract.md`'s coverage statement is updated to say which witness covers which boundary, including any boundary still uncovered, so the record does not overstate the guarantee again.
+
+## UNRESOLVED: MITgcm captures loaded by the test suite but not listed in `external_inputs` are absent on the WSL checkout, so their comparison tests skip silently
+
+**Date Identified**: 2026-09-30T04:36:30Z
+**Status**: Unresolved
+**UUID**: 1DMIX-066
+**Anchors**: `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`; `MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md`; `esx/project.json:external_inputs`
+
+### Issue or research question
+Beyond 1DMIX-065's set, the tests load KPP captures `lab_sea_6mo` and `seaice_obcs_1dmix034`, and GGL90 captures `vermix_20_1dmix024`, `isomip_12`, `global_ocean_cs32x15_idemix_10`, `global_ocean_90x40x15_idemix_10` and `1D_ocean_ice_column_11000` (inputs and outputs). None is in `external_inputs`, so their absence neither blocks verification nor is hashed into receipts; the tests just skip.
+
+### Evidence
+`grep` of `MITgcm_to_Python_port_verification/tests/*.py` for `.nc` names (2026-09-30); none of these files exist on this machine; each test calls `pytest.skip` when its capture is missing.
+
+### Scientific or engineering impact
+The GGL90 MITgcm comparison is entirely unexercised on this checkout, as are two KPP captures; a skip is indistinguishable from a pass in the suite summary.
+
+### Proposed action and acceptance
+After 1DMIX-065, regenerate these captures with the same provenance rules via Docker and the repo's instrumented mods, and decide (recording the reason) whether they should join `external_inputs` so their bytes are fingerprinted and their absence blocks verification instead of skipping. Acceptance: the named tests run and pass at existing tolerances (none widened; failures investigated and reported); provenance recorded in the GGL90/KPP CAPTURES.md; independent review.

@@ -60,7 +60,6 @@
   "external_inputs": [
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D_python.nc",
-    "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_1000_0820T0946.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend_rawflux_fix.nc",
     "MITgcm_to_Python_port_verification/KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_global_oce_latlon_720.nc",

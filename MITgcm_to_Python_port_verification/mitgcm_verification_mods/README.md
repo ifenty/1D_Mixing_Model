@@ -51,6 +51,18 @@ arm64 container, causing a `gcc: error: unrecognized argument in option
 for the compile/run commands: `arch -arm64 ./experiment_compile.sh ...`
 and `arch -arm64 ./experiment_run_no_compile.sh ...`.
 
+Note (1DMIX-065, Linux/WSL): the `-mods` example paths above are the original
+macOS ones; use the absolute path of this directory on your host. The
+standalone Fortran drivers (`kpp_standalone_driver/build_and_run.sh`,
+`ggl90_standalone_driver/build_and_run.sh`) default to the macOS MITgcm
+checkout path but honour the `MITGCM_ROOT` environment variable (e.g.
+`MITGCM_ROOT=~/Projects/MITgcm`); they also need the genmake2-generated build
+directories `1D_ocean_ice_column/build_docker_kppmix_extend` (KPP) and
+`vermix/build_docker_ggl90_1dmix024` (GGL90) under `$MITGCM_ROOT/verification/`,
+created with `experiment_compile.sh ... -mods ... -build <name>`. The exact
+recipes that regenerated every capture on the WSL checkout are recorded in
+`../KPP_port_validation/CAPTURES.md` and the two `CONVENTIONS_STANDALONE_DATA.md`.
+
 ## Current Experiments
 
 ### lab_sea/code_validation

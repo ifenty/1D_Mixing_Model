@@ -59,6 +59,17 @@ python3 scripts/parse_mitgcm_ggl90_split.py vermix/output_ggl90/output.txt vermi
 python3 scripts/run_ggl90_from_netcdf_input.py vermix/output_ggl90/mitgcm_ggl90_inputs.nc -o <out>.nc
 ```
 
+`parse_mitgcm_ggl90_split.py` streams (1DMIX-065, shared engine
+`scripts/capture_stream.py`): `output.txt` is read line by line and each
+completed timestep (all tiles) is appended to `mitgcm_ggl90_inputs.nc` /
+`mitgcm_ggl90_outputs.nc` and dropped, so memory use is one timestep
+regardless of file length. The files' variables, dimensions, attributes,
+dtypes and values are unchanged; `time` is now an unlimited dimension. The
+in-memory function `parse_mitgcm_ggl90_split(...)` (used by
+`compare_scenario_ggl90_standalone.py`) still returns loaded Datasets for small
+captures; use `parse_mitgcm_ggl90_split_to_files(...)` or the command line for
+large ones.
+
 ## Historical finding, fixed (as of first capture, 2026-09-16)
 
 See closed issue **1DMIX-014** (resolved; stale "open"/"blocking" wording here

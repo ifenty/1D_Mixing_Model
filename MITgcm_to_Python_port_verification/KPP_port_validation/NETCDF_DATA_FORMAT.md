@@ -861,12 +861,22 @@ cd /path/to/MITgcm_verification_docker
 
 ```bash
 cd /path/to/1D_Mixing_Experiments/scripts
-python parse_mitgcm_kpp_output.py /path/to/output_validation/output.txt
+python parse_mitgcm_split.py /path/to/output_validation/output.txt <experiment_name>
 ```
 
-This creates:
+This creates (next to `output.txt`):
 - `mitgcm_kpp_inputs.nc` (with UUID and parameters)
 - `mitgcm_kpp_outputs.nc` (with input_uuid link)
+
+The parser streams (1DMIX-065): `output.txt` is read line by line and each
+completed timestep (all tiles) is appended to the two files and dropped, so
+memory use is one timestep, independent of file length (a 13.8 GB
+`global_oce_latlon_720` capture exhausted 27 GB of RAM under the previous
+accumulate-then-write implementation). The written files have the variables,
+dimensions, attributes, dtypes and values described in this document; the only
+on-disk difference from files written by the old parser is that `time` is an
+unlimited (appendable) dimension. See `scripts/capture_stream.py` and
+`scripts/README.md`.
 
 ### 4. Run Python Port and Compare
 
