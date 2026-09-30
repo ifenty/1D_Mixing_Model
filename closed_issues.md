@@ -1780,3 +1780,27 @@ Decide first whether the right answer is another witness or an end-to-end one. A
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-09-30T07:17:58.456653+00:00 for iteration 2026-09-30T06:55:55.612667+00:00. Added and strengthened test_real_pipeline_momentum_invariant_to_ghat, the first ghat-momentum witness that drives the real KPPAdapter.compute_mixing -> UnifiedColumnDriver._apply_vertical_diffusion path (ghat varied at the KPPDriver->adapter boundary; exact visc_az and u_vel/v_vel invariance across x4, x0, interior, all-faces and signed variants, with non-vacuity asserts). Richard's round-0 adversarial REJECT showed face-location, sign and threshold leaks on the documented routes escaping the original three variants; round 1 added the all-faces and signed variants, which catch all eight, and rewrote docs/model_contract.md's coverage map and still-uncovered list to claim exactly what the tests catch. Richard round 1: APPROVE_WITH_FIXES, empty must_fix (optional face-0 sign/magnitude variant filed as a follow-up). No model source changed. Final verification EXECUTED PASS.
+
+## 🟢 RESOLVED: MITgcm captures loaded by the test suite but not listed in `external_inputs` are absent on the WSL checkout, so their comparison tests skip silently
+
+**Date Identified**: 2026-09-30T04:36:30Z
+**Date Resolved**: 2026-09-30T08:55:15.590009+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-066
+**Anchors**: `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`; `MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md`; `esx/project.json:external_inputs`
+
+### Issue or research question
+Beyond 1DMIX-065's set, the tests load KPP captures `lab_sea_6mo` and `seaice_obcs_1dmix034`, and GGL90 captures `vermix_20_1dmix024`, `isomip_12`, `global_ocean_cs32x15_idemix_10`, `global_ocean_90x40x15_idemix_10` and `1D_ocean_ice_column_11000` (inputs and outputs). None is in `external_inputs`, so their absence neither blocks verification nor is hashed into receipts; the tests just skip.
+
+### Evidence
+`grep` of `MITgcm_to_Python_port_verification/tests/*.py` for `.nc` names (2026-09-30); none of these files exist on this machine; each test calls `pytest.skip` when its capture is missing.
+
+### Scientific or engineering impact
+The GGL90 MITgcm comparison is entirely unexercised on this checkout, as are two KPP captures; a skip is indistinguishable from a pass in the suite summary.
+
+### Proposed action and acceptance
+After 1DMIX-065, regenerate these captures with the same provenance rules via Docker and the repo's instrumented mods, and decide (recording the reason) whether they should join `external_inputs` so their bytes are fingerprinted and their absence blocks verification instead of skipping. Acceptance: the named tests run and pass at existing tolerances (none widened; failures investigated and reported); provenance recorded in the GGL90/KPP CAPTURES.md; independent review.
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-09-30T08:55:15.590009+00:00 for iteration 2026-09-30T07:21:36.580645+00:00. Regenerated the 7 MITgcm captures the test suite loads but external_inputs did not list (GGL90 vermix_20_1dmix024, isomip_12, global_ocean_90x40x15_idemix_10, global_ocean_cs32x15_idemix_10, 1D_ocean_ice_column_11000; KPP lab_sea_6mo, seaice_obcs_1dmix034) via Docker MITgcm d861cd501 and the streaming parsers, with provenance in both CAPTURES.md files. external_inputs grew 30 -> 47 (MITgcm-side files of these captures plus 3 previously unlisted KPP outputs), so their absence now blocks verification instead of skipping tests. The streaming GGL90 parser was proven byte-identical to the old parser on 36- and 12-tile captures. INFERRED recipes (1D GGL90 namelist, lab_sea_6mo endTime) are confirmed by Richard's recomputation of the tracked Mac-era report PDFs to the last printed digit; the rejected attempt-A namelist does not match. Richard: round-0 REJECT on one false documentation sentence, round-1 APPROVE. Final verification EXECUTED PASS: scientific suite 128 passed, 3 skipped (pre-existing 1DMIX-010 fixture), 0 failed.

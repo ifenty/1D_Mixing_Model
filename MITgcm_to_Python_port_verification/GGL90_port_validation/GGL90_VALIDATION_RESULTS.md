@@ -174,17 +174,17 @@ GGL90 output validation in mind.
 
 | Field | Median abs. diff | Max abs. diff | Max rel. err. | Fraction >1% rel. err. |
 |---|---|---|---|---|
-| `visc_az` | 0 (exact) | 1.8e-9 | 7.9e-7% | 0% |
-| `diff_kz` | 0 (exact) | 1.8e-10 | 7.9e-7% | 0% |
-| `mixing_length` | 2.58e-15 | 5.6e-5 | 7.9e-7% | 0% |
-| `tke_after` | 0 (exact) | 6.6e-15 | 5.1e-9% | 0% |
+| `visc_az` | 0 (exact) | 1.8e-9 | 7.9e-5% | 0% |
+| `diff_kz` | 0 (exact) | 1.8e-10 | 7.9e-5% | 0% |
+| `mixing_length` | 2.58e-15 | 5.6e-5 | 7.9e-5% | 0% |
+| `tke_after` | 0 (exact) | 6.6e-15 | 5.1e-7% | 0% |
 
 (All statistics over the full 253,000 wet column-timesteps.) This is this
 project's cleanest GGL90 experiment — no IDEMIX, no floating ice shelf, no
 pressure-coordinate confound — and it shows it: every field is exact to
 floating-point roundoff, with zero cells exceeding even a strict 1e-4 m²/s
 threshold on `visc_az`/`diff_kz`. `tke_after`'s own tiny remaining relative
-error (5.1e-9%) is strong evidence the TKE buoyancy-term mechanism above is
+error (5.1e-7%) is strong evidence the TKE buoyancy-term mechanism above is
 handled correctly here, not merely coincidentally invisible: this
 experiment's real `viscAz` (1.93e-5) and `diffKzS` (1.46e-7) backgrounds
 differ by two orders of magnitude, which is exactly the condition under

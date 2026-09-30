@@ -61,7 +61,8 @@ directories `1D_ocean_ice_column/build_docker_kppmix_extend` (KPP) and
 `vermix/build_docker_ggl90_1dmix024` (GGL90) under `$MITGCM_ROOT/verification/`,
 created with `experiment_compile.sh ... -mods ... -build <name>`. The exact
 recipes that regenerated every capture on the WSL checkout are recorded in
-`../KPP_port_validation/CAPTURES.md` and the two `CONVENTIONS_STANDALONE_DATA.md`.
+`../KPP_port_validation/CAPTURES.md`, `../GGL90_port_validation/CAPTURES.md` (1DMIX-066) and the two
+`CONVENTIONS_STANDALONE_DATA.md`.
 
 ## Current Experiments
 

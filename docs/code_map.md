@@ -58,6 +58,15 @@ which holds one timestep in memory (the previous whole-file parsers exhausted 27
 (synthetic multi-tile files, never skips). Regenerating the gitignored captures/standalone sets on a new host is documented in
 `MITgcm_to_Python_port_verification/KPP_port_validation/CAPTURES.md` ("Regenerated on WSL, 1DMIX-065") and the two
 `CONVENTIONS_STANDALONE_DATA.md`; the standalone-driver `build_and_run.sh` scripts take `MITGCM_ROOT` from the environment.
+The remaining test captures (the five GGL90 ones and KPP `lab_sea_6mo`/`seaice_obcs_1dmix034`) were regenerated the
+same way under 1DMIX-066: recipes, per-file sha256 and the INFERRED labels (`lab_sea_6mo`'s `endTime` edit, the
+`1D_ocean_ice_column` GGL90 namelist) are in `MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md`
+and `MITgcm_to_Python_port_verification/KPP_port_validation/CAPTURES.md` ("Regenerated on WSL, 1DMIX-066"); the
+streaming GGL90 parser was proven byte-identical to the pre-1DMIX-065 parser on the 36-tile and 12-tile captures.
+Their 14 MITgcm-side files (inputs and outputs) and the three previously unlisted KPP `outputs_from_mitgcm` files
+(`11k_1D`, `lab_sea_1000_0820T0946`, `1D_10_kppmix_extend_rawflux_fix`) are declared in `esx/project.json:external_inputs`
+(now 47 entries), so their bytes are hashed into every verification receipt and their absence blocks instead of skipping;
+the Python replay files are not, because the tests regenerate them.
 
 **1DMIX-054 (bounded first step, no new permanent capture yet)**: built two new
 dual-scheme Docker `-mods` directories following the existing precedent

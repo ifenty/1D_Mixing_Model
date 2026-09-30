@@ -88,6 +88,46 @@ Output content was verified identical to the old parser's on the 10-step,
 `creation_date`, `output_file_path` and `input_uuid` excluded); see
 `scripts/README.md` and `devel-loop/loop_state/bob-1DMIX-065-evidence.md`.
 
+## Regenerated on WSL, 1DMIX-066 (2026-09-30)
+
+The two remaining KPP captures the tests load, `lab_sea_6mo` and
+`seaice_obcs_1dmix034`, were regenerated on the same host, image and MITgcm
+commit as the 1DMIX-065 set above (`d861cd501f21303825de860eb3caa0a8a7ae22f8`,
+`mitgcm:latest` id `6cc66b8957d8`, runs and replays 2026-09-30; cwd
+`~/Projects/MITgcm/verification` unless stated; `<mods>` as above), with the
+same provenance rules: MITgcm files only from a Docker MITgcm run parsed by
+the streaming `scripts/parse_mitgcm_split.py`, Python files only from
+replaying the port on the regenerated input. The GGL90 captures regenerated
+under the same issue are in `../GGL90_port_validation/CAPTURES.md`.
+
+| Id | Steps |
+|---|---|
+| **R5** `lab_sea_6mo` (4368 steps, **INFERRED**) | `./experiment_compile.sh lab_sea -mods <mods>/lab_sea/code_validation -build build_docker_kpp_validation -clean -j 8`; run input dir `input_validation_6mo` = `cp -r input input_validation_6mo` with the single edit in `data` `endTime=36000.` -> `endTime=15728400.` (`startTime=3600`, `deltaT=3600` => (15728400-3600)/3600 = 4368 steps, the rule that gives R3's 999 steps for `endTime=3600000.`): `./experiment_run_no_compile.sh lab_sea input_validation_6mo -build build_docker_kpp_validation -output output_kpp_6mo_1dmix066` (5 min 16 s, `output.txt` 8,230,063,413 bytes, 4368 validation blocks); parse (repo root, `ulimit -v 8000000`): `python3 MITgcm_to_Python_port_verification/scripts/parse_mitgcm_split.py <run>/output.txt lab_sea` (3 min 49 s, **peak RSS 0.174 GB**). The `endTime` edit is recorded nowhere in the repo; it is inferred from the capture name, the step count (4368) and the documented 655,200 wet column-timesteps (4368 x 150), all of which the regenerated file matches. Supporting evidence (1DMIX-066 review, Richard's own recomputation of the tracked Mac-era report `reports/kpp_validation_lab_sea_6mo.pdf`): the regenerated capture's `hbl` statistics match that report; `seaice_obcs` likewise matches `reports/kpp_validation_seaice_obcs_1dmix034.pdf`. The `endTime` edit itself remains unrecorded, so the row stays INFERRED. |
+| **R6** `seaice_obcs_1dmix034` (5 steps, 2 tiles) | `./experiment_compile.sh seaice_obcs -mods <mods>/seaice_obcs/code_validation -build build_docker_kpp_validation -clean -j 8`; `./experiment_run_no_compile.sh seaice_obcs input -build build_docker_kpp_validation -output output_kpp_seaice_obcs_1dmix066` (stock `input/`, `startTime=3600`/`endTime=21600.`/`deltaT=3600`; `input/prepare_run` links the `lab_sea` 1979 forcing and is run by the run script); parse as R5 with experiment name `seaice_obcs` (0.8 s, peak RSS 0.112 GB). Documented (1DMIX-025/-034), not inferred. |
+| **P4** | cwd `MITgcm_to_Python_port_verification`: `python3 scripts/run_kpp_from_netcdf_input.py KPP_port_validation/inputs_from_mitgcm/mitgcm_kpp_inputs_seaice_obcs_1dmix034.nc -o KPP_port_validation/outputs_from_python/python_kpp_outputs_seaice_obcs_1dmix034.nc -j 4` (the file `docs/model_contract.md` cites for the salt-plume evidence). |
+| **P5** | same as P4 for `lab_sea_6mo` with `--last 99 -j 8` and `-o KPP_port_validation/outputs_from_python/python_kpp_outputs_lab_sea_6mo.nc`: the leading 100 of 4368 timesteps only, matching `_LABSEA_6MO_N` in `tests/test_kpp_mitgcm_validation_extended.py`; no full 4368-step replay exists. |
+
+| File | Recipe | Bytes | sha256 |
+|---|---|---|---|
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_6mo.nc` | R5 | 320939794 | `f42c8cc01ff11d79a1854c5c2ffe8a598b880e47d2d5b38adf715003aa6fa96f` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_lab_sea_6mo.nc` | R5 | 520574716 | `0fe45446097668f5315881608bf662b8b142ae0cfe7e007957324406dfe70c93` |
+| `outputs_from_python/python_kpp_outputs_lab_sea_6mo.nc` (first 100 steps) | P5 | 2910396 | `4c87cdab223c9b09761105fc7897092a27605dad98783f681aad4c573d91d154` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_seaice_obcs_1dmix034.nc` | R6 | 261801 | `9fdc8b40ecf63ed05fc92d0970c7ffd572b7d603754749a2bfcf1d6b5a17ea72` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_seaice_obcs_1dmix034.nc` | R6 | 325251 | `0b9bcceead643974959093c2d3efc3927ee0a882c87f2b75e35cf00876942223` |
+| `outputs_from_python/python_kpp_outputs_seaice_obcs_1dmix034.nc` | P4 | 109056 | `ffe9d5c8453a5e2dae0cd1d52803420f82a04a36116c44625f2d80a6b8b2311b` |
+
+The regenerated `lab_sea_6mo` files are 321 MB + 521 MB (time chunk 1, i.e.
+`(1, 20, 16, 23)`), not the Mac-era single 222 MB file with time chunks of 2184
+that the extended test module's comment now records as the original chunking; content and attributes are
+otherwise as documented, and the test's `.load()` preload is unchanged. The
+`lab_sea_6mo` test group passes (6 tests, 33 s) and every statistic in
+`KPP_VALIDATION_RESULTS.md` for `lab_sea_6mo` (first 100 timesteps) and
+`seaice_obcs` reproduces to the printed digits (`hbl` N=15,000: median 2.89e-3
+m, max 40.72 m, 0.68%/0.47% above 1 m/5 m; mixing and `ghat` rows likewise; and
+`seaice_obcs` `hbl` N=295: median 3.46e-2 m, 9.15%/2.71%): evidence in
+`devel-loop/loop_state/bob-1DMIX-066-evidence.md` and
+`devel-loop/loop_state/bob-1DMIX-066-compare-stats.out`.
+
 ### Legacy `mitgcm_kpp_inputs_1D_10.nc`: removed from `esx/project.json:external_inputs`
 
 The original 2026-08-19 capture cannot be faithfully re-made: it predates
@@ -97,7 +137,10 @@ kept, and nothing loads it (grep-confirmed 2026-09-30 over `*.py`, `*.sh`,
 `*.yaml`, `*.json` and the docs: the only references were its own
 `external_inputs` entry and the manifest row below). Rather than fabricate a
 file under that name, the entry was removed from `esx/project.json`; the
-declared external inputs are now 30 files, all present.
+declared external inputs were then 30 files, all present. 1DMIX-066 added 17 (the 14 MITgcm-side
+files of its seven captures plus the three `outputs_from_mitgcm` files of `11k_1D`, `lab_sea_1000_0820T0946` and
+`1D_10_kppmix_extend_rawflux_fix` that the tests load but the list omitted): 47 in total, all present, no Python
+replay files.
 
 ## `global_oce_latlon_720` (720 timesteps, 4-tile 2×2 90×40×15, `global_oce_latlon` verification experiment)
 

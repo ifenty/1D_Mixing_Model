@@ -132,8 +132,9 @@ OUTPUTS_SEAICE_OBCS = _OUTPUTS / 'mitgcm_kpp_outputs_seaice_obcs_1dmix034.nc'
 DATA_GLOBAL_OCE_LATLON = _INPUTS / 'mitgcm_kpp_inputs_global_oce_latlon_720.nc'
 OUTPUTS_GLOBAL_OCE_LATLON = _OUTPUTS / 'mitgcm_kpp_outputs_global_oce_latlon_720.nc'
 
-# lab_sea_6mo is a 222 MB NetCDF file whose on-disk chunking (chunksizes
-# (2184, 7, 6, 8) -- half the time axis per chunk) makes
+# lab_sea_6mo: the original (Mac-era) capture was a 222 MB NetCDF file whose
+# on-disk chunking (chunksizes (2184, 7, 6, 8) -- half the time axis per
+# chunk) made
 # `run_python_kpp_on_dataset`'s per-column `.isel(...).values` access
 # pattern (the project's own established, unmodified replay entry point --
 # not something this issue's scope touches) re-decompress a full chunk for
@@ -144,6 +145,10 @@ OUTPUTS_GLOBAL_OCE_LATLON = _OUTPUTS / 'mitgcm_kpp_outputs_global_oce_latlon_720
 # collapsed that to ~0.28 s/timestep in direct measurement -- a >100x
 # speedup with byte-identical results (same driver call, same data, just no
 # longer re-decompressing per column).
+# 1DMIX-066: the capture regenerated on WSL is two files, 321 MB (inputs) +
+# 521 MB (outputs), written by the streaming parser with one chunk per
+# timestep (chunksizes (1, 20, 16, 23)); the timings above describe the
+# original chunking, and the `.load()` preload below is kept unchanged.
 _LABSEA_6MO_N = 100
 
 # global_oce_latlon (1DMIX-049): 90x40x15, 4-tile, 2,315 wet columns at EVERY

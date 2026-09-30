@@ -51,7 +51,7 @@ EXP=$MITGCM_ROOT/verification/global_ocean.90x40x15
 NEWDIR="$EXP/input_docker_idemix90"
 mkdir -p "$NEWDIR"
 for f in data.ggl90 data.pkg data.exch2.mpi data.gmredi data.ptracers \
-         eedata eedata.mth tidal_energy.bin wind_energy.bin; do
+         data.diagnostics eedata eedata.mth tidal_energy.bin wind_energy.bin; do
   ln -sf "../input.idemix/$f" "$NEWDIR/$f"
 done
 for f in bathymetry.bin lev_t.bin lev_s.bin trenberth_taux.bin \
@@ -60,6 +60,9 @@ for f in bathymetry.bin lev_t.bin lev_s.bin trenberth_taux.bin \
 done
 cp "$EXP/input.idemix/data" "$NEWDIR/data"
 # then append useSingleCpuIO=.TRUE., to $NEWDIR/data's &PARM01 block
+# (1DMIX-066: `data.diagnostics` was missing from this list until the WSL regeneration;
+# without it the run stops at DIAGNOSTICS_READPARMS. Insert the line before the closing
+# `&` of &PARM01.)
 ```
 
 Then compile with `-mods <repo>/MITgcm_to_Python_port_verification/

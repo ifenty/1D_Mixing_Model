@@ -49,25 +49,6 @@ Every currently-tested grid/scheme combination in this project is confounded wit
 ### Proposed action and acceptance
 For each of the 3 new (grid, scheme) pairs: (1) create a new sibling `code_validation` variant directory following the already-established `<scheme>_code_validation/` naming convention (`global_ocean_90x40x15/kpp_code_validation/`, `global_ocean_cs32x15/kpp_code_validation/`, `lab_sea/ggl90_code_validation/`), symlinking the target scheme's Fortran source from the canonical `kpp_mods/`/`ggl90_mods/` (never copying, per this project's own established convention), copying the grid's own real headers/`packages.conf` unmodified except for the scheme package swap. (2) Hand-construct the missing namelist (`data.kpp` for the two `global_ocean` grids, `data.ggl90` for `lab_sea`) by adapting the closest existing working example in this project (e.g. `global_oce_latlon/input_validation/data.kpp` for the KPP namelists; `vermix`'s or `1D_ocean_ice_column/ggl90_code_validation`'s own real `GGL90_OPTIONS.h`/namelist values for the GGL90 one) — verify every adapted parameter against the target grid's own real forcing/geometry, don't blindly copy defaults tuned for a different grid. (3) Build+run+capture via the same Docker pipeline used throughout this project (budget real wall-clock time per grid size — the two `global_ocean` grids are comparable in size to `global_oce_latlon`'s own ~15-minute run per 1DMIX-049's measured precedent; `lab_sea` at 999 and 6-month/4368 timesteps should reuse the existing capture durations exactly, for direct comparability against the existing KPP captures at those same durations). (4) Permanentize into `KPP_port_validation/`/`GGL90_port_validation/` with clear, scheme-disambiguating filenames, add regression tests mirroring the existing per-experiment test-class conventions (bounded/subsampled where a full replay would be impractical, per this project's own established `lab_sea_6mo`/`global_oce_latlon` precedent). Acceptance: 4 new real MITgcm captures exist (90x40x15-KPP, cs32x15-KPP, lab_sea-GGL90-999, lab_sea-GGL90-6mo), each permanently stored and declared in `esx/project.json:external_inputs`, each with at least one numeric-tolerance regression test measured fresh against the actual new capture; `cs32x15-KPP`'s own report/test explicitly states the mechanism above (MITgcm's own real KPP has no `coordFac`-equivalent conversion either, so close port-vs-MITgcm agreement here would reflect a shared unit error, not genuine port fidelity) rather than presenting any resulting close agreement as a clean validation pass; full pytest suite passes.
 
-## UNRESOLVED: MITgcm captures loaded by the test suite but not listed in `external_inputs` are absent on the WSL checkout, so their comparison tests skip silently
-
-**Date Identified**: 2026-09-30T04:36:30Z
-**Status**: Unresolved
-**UUID**: 1DMIX-066
-**Anchors**: `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`; `MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md`; `esx/project.json:external_inputs`
-
-### Issue or research question
-Beyond 1DMIX-065's set, the tests load KPP captures `lab_sea_6mo` and `seaice_obcs_1dmix034`, and GGL90 captures `vermix_20_1dmix024`, `isomip_12`, `global_ocean_cs32x15_idemix_10`, `global_ocean_90x40x15_idemix_10` and `1D_ocean_ice_column_11000` (inputs and outputs). None is in `external_inputs`, so their absence neither blocks verification nor is hashed into receipts; the tests just skip.
-
-### Evidence
-`grep` of `MITgcm_to_Python_port_verification/tests/*.py` for `.nc` names (2026-09-30); none of these files exist on this machine; each test calls `pytest.skip` when its capture is missing.
-
-### Scientific or engineering impact
-The GGL90 MITgcm comparison is entirely unexercised on this checkout, as are two KPP captures; a skip is indistinguishable from a pass in the suite summary.
-
-### Proposed action and acceptance
-After 1DMIX-065, regenerate these captures with the same provenance rules via Docker and the repo's instrumented mods, and decide (recording the reason) whether they should join `external_inputs` so their bytes are fingerprinted and their absence blocks verification instead of skipping. Acceptance: the named tests run and pass at existing tolerances (none widened; failures investigated and reported); provenance recorded in the GGL90/KPP CAPTURES.md; independent review.
-
 ## UNRESOLVED: the real-pipeline ghat witness never makes face 0 negative or larger than 100, and face 0 is where real KPP ghat lives
 
 **Date Identified**: 2026-09-30T07:18:00Z
@@ -86,3 +67,22 @@ Low: real KPP ghat at the surface face is nonnegative and bounded, so these leak
 
 ### Proposed action and acceptance
 Either add a variant that makes face 0 negative and above 100 (e.g. `-g - 10*(1+arange(nz))`) and show N1 and N5 fail while clean bytes pass, or name "sign or magnitude at face 0" explicitly in the still-uncovered list. Exact equality kept; no tolerance widened.
+
+## UNRESOLVED: GGL90's epsilon-scaled Richardson number flips the Prandtl branch on a 1-ulp N² difference in near-neutral cells at the TKE floor
+
+**Date Identified**: 2026-09-30T08:56:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-068
+**Anchors**: `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing`; `Vertical_Mixing_Models/main/physics_basis.py::compute_richardson_number`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`
+
+### Issue or research question
+In 1DMIX-066's rejected attempt-A capture (1D_ocean_ice_column, 11,000 steps, minimal data.ggl90), the bottom cell was near-neutral with TKE at the 1e-11 floor and shear about 1e-100. There the Prandtl number is set by Ri = N²/GGL90eps (eps = 2.23e-16), and the port's N² from captured T,S (6.4e-17) differed from MITgcm's implied N² (3.2e-17; captured sigma_r -3.37e-15) by about one ulp of density. That moved Ri from 0.144 to 0.289 across the 0.2 threshold, so diff_kz and mixing_length disagreed at the bottom two levels (19 cells >1%, mixing_length max abs 0.194 m). The kept recipe B avoids this regime (0 of 11,000 steps with Ri in [0.1, 0.4]); it does not cure it.
+
+### Evidence
+Bob (1DMIX-066 dispatch 7b291fc7, scratch probe_1d_A2.py) and Richard (dispatch 42b0e978, independent re-check) both reproduced the mechanism; attempt-A files are in devel-loop/loop_state/scratch/a90896957ec186e4c/attemptA_1d_minimal_namelist/.
+
+### Scientific or engineering impact
+Low: a documented EOS-roundoff-amplification family, confined to near-neutral cells at the TKE floor. But it means GGL90 agreement in such regimes depends on bit-level N², and any capture that exercises them will disagree.
+
+### Proposed action and acceptance
+Investigate whether MITgcm and the port compute N² at the face from the same quantities in the same order (e.g. MITgcm's sigma_r vs the port's recomputation from T,S), and whether replays should consume the captured sigma_r. Acceptance: either a port change that reproduces MITgcm's N² bit-for-bit in this regime (attempt-A capture then passes with no tolerance widened), or a documented, test-backed explanation of why the difference is irreducible.

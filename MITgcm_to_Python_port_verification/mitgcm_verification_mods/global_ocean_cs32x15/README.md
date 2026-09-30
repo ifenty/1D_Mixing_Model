@@ -13,6 +13,13 @@ experiment's own real header (already `#define ALLOW_GGL90_IDEMIX` **and**
 
 ## Setup steps performed directly inside `input.in_p/` (documented, not a bug)
 
+**1DMIX-066 update (2026-09-30):** the current `experiment_run_no_compile.sh` layers
+`input.<X>` on top of `input/` and runs `input.in_p/prepare_run` inside the run
+directory, so `./experiment_run_no_compile.sh global_ocean.cs32x15 input.in_p -build <build> -output <run>`
+ran to completion on the WSL checkout with none of the manual steps below (no
+file inside the MITgcm checkout is created). They are kept as the record of
+what the original Mac-era run needed.
+
 `input.in_p` has its own real `prepare_run` script — ran it directly (same
 established precedent as `seaice_obcs`'s own `prepare_run`): it symlinks
 `grid_cs32.face00?.bin` (from `../../tutorial_held_suarez_cs/input`),

@@ -59,6 +59,12 @@ python3 scripts/parse_mitgcm_ggl90_split.py vermix/output_ggl90/output.txt vermi
 python3 scripts/run_ggl90_from_netcdf_input.py vermix/output_ggl90/mitgcm_ggl90_inputs.nc -o <out>.nc
 ```
 
+The recipes for the other four captures (`isomip`, `global_ocean.90x40x15`,
+`global_ocean.cs32x15`, `1D_ocean_ice_column`), with their build/run commands,
+sizes and sha256, are in `CAPTURES.md` ("Regenerated on WSL, 1DMIX-066"); the
+build directory names there (`build_docker_ggl90_1dmix024`, ...) replace the
+generic `build_docker_ggl90` above.
+
 `parse_mitgcm_ggl90_split.py` streams (1DMIX-065, shared engine
 `scripts/capture_stream.py`): `output.txt` is read line by line and each
 completed timestep (all tiles) is appended to `mitgcm_ggl90_inputs.nc` /
