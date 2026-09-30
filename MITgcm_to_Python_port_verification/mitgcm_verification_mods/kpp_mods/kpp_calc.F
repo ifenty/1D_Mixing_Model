@@ -913,104 +913,105 @@ C     This ensures parameters are written even when starting from pickup file
        firstCall = .FALSE.
 C      --- MODEL PARAMETERS ---
 C      Output all runtime parameters needed for KPP validation
+C      (real scalars print as ES25.16 = 17 significant digits; were E16.8, 1DMIX-070)
        WRITE(standardMessageUnit,'(A)')
      &   '===== KPP_MODEL_PARAMETERS ====='
 C      Background mixing
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_viscAz=',viscArNr(1)
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_diffKzS=',diffKrNrS(1)
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_diffKzT=',diffKrNrT(1)
 C      Physical constants
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_gravity=',gravity
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_rhoConst=',rhoConst
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_HeatCapacity_Cp=',HeatCapacity_Cp
 C      Boundary layer depth parameters
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_Ricr=',Ricr
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_cekman=',cekman
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_cmonob=',cmonob
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_concv=',concv
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_hbf=',hbf
 C      Surface layer parameters
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_epsilon=',epsilon
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_vonk=',vonk
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_dB_dz=',dB_dz
 C      Interior mixing parameters
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_Riinfty=',Riinfty
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_BVSQcon=',BVSQcon
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_difm0=',difm0
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_difs0=',difs0
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_dift0=',dift0
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_difmcon=',difmcon
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_difscon=',difscon
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_diftcon=',diftcon
 C      Shape function coefficients
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_conc1=',conc1
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_conam=',conam
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_concm=',concm
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_conc2=',conc2
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_zetam=',zetam
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_conas=',conas
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_concs=',concs
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_conc3=',conc3
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_zetas=',zetas
 C      Double diffusion parameters
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_Rrho0=',Rrho0
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_dsfmax=',dsfmax
 C      Regularization parameters
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_epsln=',epsln
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_phepsi=',phepsi
 C      Nonlocal transport
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_cstar=',cstar
 C      Minimum boundary layer depth
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_minKPPhbl=',minKPPhbl
 C      Lookup table parameters
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_zmin=',zmin
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_zmax=',zmax
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_umin=',umin
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_umax=',umax
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_deltaz=',deltaz
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_deltau=',deltau
 C      Integer parameters
        WRITE(standardMessageUnit,'(A,I10)')

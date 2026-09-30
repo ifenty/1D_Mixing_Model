@@ -213,9 +213,15 @@ they fall on.
 
 | Field | Median abs. diff | Max abs. diff | Fraction >1% rel. err. | N (active) |
 |---|---|---|---|---|
-| `visc_az` | 0 (exact) | 7.60e-3 | 0.087% | 242,000 |
-| `diff_kz_s` | 2.38e-7 | 1.73e-2 | 1.19% | 19,603 |
-| `diff_kz_t` | 2.38e-7 | 1.73e-2 | 1.19% | 19,603 |
+| `visc_az` | 0 (exact) | 7.60e-3 | 0.055% (134 cells) | 242,000 |
+| `diff_kz_s` | 2.30e-7 | 1.73e-2 | 0.80% (156 cells) | 19,603 |
+| `diff_kz_t` | 2.30e-7 | 1.73e-2 | 0.80% (156 cells) | 19,603 |
+
+(Refreshed by 1DMIX-070 on the 17-digit capture with the current port. The
+earlier 0.087% / 1.19% / median 2.38e-7 were the 1DMIX-065 measurement; they
+changed because 1DMIX-068 put the shared `jmd95_eos` density/`N²` in MITgcm's
+floating-point operation order, and are identical at 16 digits to within
+0.056% / 0.81% / 2.30e-7, so the recapture itself is not the cause.)
 
 **`ghat`**: median absolute difference `1.521e-3`, max `1321.7` (`N=13,391`
 active cells). This residual is measurably driven by `hbl` disagreement, not
@@ -612,3 +618,30 @@ compute-versus-apply correspondence are documented in `docs/model_contract.md`.
 Regenerate the PDF reports themselves (which additionally render plots the
 tables above summarize numerically) via the commands in this directory's
 parent `README.md`.
+
+**Print precision (1DMIX-070).** All six captures above were recaptured on
+2026-09-30 with the instrumented Fortran printing 17 significant digits
+(`ES25.16`, exact for a double; the earlier captures used `E25.16`, 16
+digits, and the `PARAM_*` scalars `E16.8`). Every MITgcm field of every
+capture agrees with its 16-digit predecessor to <= 5.9e-16 relative (print
+quantization only), so MITgcm's physics did not change. Replaying the same
+port on the old and new captures gives **identical statistics** for every
+KPP capture (hbl, `visc_az`, `diff_kz_s/t`, `ghat`, on the subsets the tests
+use) except two ulp-scale shifts in `1D_ocean_ice_column` 11,000 steps
+(`visc_az` above-1% fraction 0.056% -> 0.055%, `diff_kz_s/t` 0.806% ->
+0.796%): the Rib/Ricr threshold tail, the `wscale` clamp effect and the
+`ghat` exact-zero cells described above are real port-versus-MITgcm
+behaviour, not print quantization, and no KPP assertion changed. (The only
+parameter attributes that differed were the two lookup-table spacings
+`deltaz`/`deltau`, truncated to 8 digits by the old `E16.8` print.) The
+standalone-driver outputs were regenerated with the widened
+`kpp_standalone_main.F` formats and agree with the 16-digit files to
+<= 5.4e-16 relative; the scenario statistics (including `combined_storm`'s
+`keep_mitgcm_bugs=True` residual) are unchanged. The
+`1D_ocean_ice_column` 11,000-step mixing figures in the table above were
+refreshed by 1DMIX-070 (0.055%, 0.80%, median 2.30e-7 at 17 digits; 0.056%,
+0.81%, 2.30e-7 at 16), replacing the 1DMIX-065 values (0.087%, 1.19%, 2.38e-7)
+that 1DMIX-068's shared-`jmd95_eos` operation-order change had already
+superseded; max_abs, `hbl` and `ghat` were unchanged.
+Evidence and per-file provenance: `devel-loop/loop_state/bob-1DMIX-070-evidence.md`
+and `CAPTURES.md`.

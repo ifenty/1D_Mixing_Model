@@ -103,13 +103,17 @@ build configuration copied from the stock experiment `code/` directories (no
 Print format: every captured field is written with `ES25.16` (17 significant digits,
 23 characters including sign and a 3-digit exponent, so it always fits the 25-column
 field). Before 1DMIX-069 it was `E25.16` (16 digits), which is not bit-exact for a
-double; the captures declared under `../KPP_port_validation/` and
-`../GGL90_port_validation/` were all made with `E25.16` and remain valid (see the
-`CAPTURES.md` files). The streaming parsers read both formats unchanged (a 3-digit
-exponent prints without the letter E, e.g. `5.6403554411026415-106`;
-`scripts/capture_stream.py::ffloat` handles it). The two standalone drivers'
-own result files (`*_standalone_main.F`, `E25.16`) are separate programs and are
-unchanged.
+double. 1DMIX-070 recaptured every declared capture under `../KPP_port_validation/` and
+`../GGL90_port_validation/` with `ES25.16` (see the `CAPTURES.md` files); the earlier
+16-digit captures were valid under their limit. The `PARAM_*` scalar lines (previously
+`E16.8`, 8 digits) are `ES25.16` as well (1DMIX-070), so runtime constants such as
+`GGL90ck=0.1` print as the exact double `1.0000000000000001E-01`. The streaming parsers
+read both formats unchanged (a 3-digit exponent prints without the letter E, e.g.
+`5.6403554411026415-106`; `scripts/capture_stream.py::ffloat` handles it; the
+`float()` in the PARAM parsers needs no such form because no parameter is near 1e+-100).
+`kpp_standalone_driver/kpp_standalone_main.F`'s result FORMATs 204/205 are `ES25.16` too
+(1DMIX-070); `ggl90_standalone_driver/ggl90_standalone_main.F` has no result FORMAT of its
+own: its output is the instrumented `ggl90_calc.F`'s `GGL90_OUTPUT_VALIDATION` write.
 
 ## MITgcm Convention
 

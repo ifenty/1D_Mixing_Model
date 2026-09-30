@@ -163,11 +163,21 @@ def result_1d_ocean_ice_column(tmp_path_factory):
     ('tke_after', 1e-12),
 ])
 def test_1d_ocean_ice_column_clean(result_1d_ocean_ice_column, field, max_abs_bound):
-    """Measured fresh this round over all 253,000 wet column-timesteps:
-    max_rel 7.9e-7 (visc_az/diff_kz/mixing_length, tied via the same
-    n_gt_1pct=0 floor) / 5.1e-9 (tke_after); max_abs 1.8e-9/1.8e-10/5.6e-5/
-    6.6e-15 respectively. This is this project's cleanest GGL90 experiment
-    -- no IDEMIX, no ShelfIce, no pressure-coordinate confound.
+    """Over all 253,000 wet column-timesteps. On the 17-digit (ES25.16)
+    capture of 1DMIX-070 the residuals are roundoff: max_abs 3.3e-17 (visc_az)
+    / 1.2e-17 (diff_kz) / 2.6e-13 (mixing_length) / 5.4e-20 (tke_after),
+    max_rel 4e-15 / 4e-15 / 3.8e-15 / 1.2e-14. The same port replayed on the
+    previous 16-digit (E25.16) capture of the same run gave max_abs
+    8.3e-10 / 8.3e-11 / 2.6e-5 / 2.9e-15 (max_rel 3.8e-7 / 3.8e-7 / 3.8e-7 /
+    1.0e-9; the 1DMIX-066-era figures 1.8e-9 / 1.8e-10 / 5.6e-5 / 6.6e-15 were
+    the same quantity before the 1DMIX-068 N^2 order fix): those were print
+    quantization of the captured T/S/sigma_r, not port error (see
+    `devel-loop/loop_state/bob-1DMIX-070-evidence.md`). The bounds below were
+    set from the 16-digit figures and are deliberately left UNCHANGED (never
+    widened); they now have 3-8 orders of magnitude of headroom over the
+    17-digit residuals and could be tightened in a follow-up. This is this
+    project's cleanest GGL90 experiment -- no IDEMIX, no ShelfIce, no
+    pressure-coordinate confound.
     """
     python_ds, mitgcm_ds = result_1d_ocean_ice_column
     diff, rel = _diff_and_rel(mitgcm_ds[field].values, python_ds[field].values)
@@ -183,10 +193,13 @@ def test_1d_ocean_ice_column_clean(result_1d_ocean_ice_column, field, max_abs_bo
 # mismatch (1DMIX-038); tke_after carries that plus the related-but-not-
 # fully-traced kSrf+1/kSrf+2/y=50 residuals 1DMIX-048's review additionally
 # found (logged there as "additional evidence", not reopened as a new
-# issue). Both bounds below have headroom on the upper side and a nonzero
-# floor on the lower side -- this locks in that a real, known, bounded
-# mismatch stays present, rather than either silently tightening (a false
-# clean pass) or silently loosening (papering over a regression).
+# issue). The diff_kz and tke_after bounds have headroom on the upper side
+# and a nonzero floor on the lower side -- this locks in that a real, known,
+# bounded mismatch stays present, rather than either silently tightening (a
+# false clean pass) or silently loosening (papering over a regression).
+# mixing_length is NOT a known gap: its former lower-bounded "kSrf+1"
+# residual was 16-digit print quantization and is asserted clean to roundoff
+# (1DMIX-070, see that test's docstring).
 # ========================================================================
 
 @pytest.fixture(scope='module')
@@ -200,9 +213,12 @@ def result_isomip(tmp_path_factory):
 
 def test_isomip_visc_az_clean(result_isomip):
     """visc_az has no kSrf-boundary defect (only diff_kz's own final
-    assignment order is affected, per 1DMIX-038) -- measured max_abs 2.4e-10
-    over 1,437,204 wet cells (362,796 excluded as above-ice-shelf/below-
-    seafloor NaN), 0 mismatches >1% rel.
+    assignment order is affected, per 1DMIX-038) -- over 1,437,204 wet cells
+    (362,796 excluded as above-ice-shelf/below-seafloor NaN), 0 mismatches
+    >1% rel. max_abs is 9.5e-18 on the 17-digit capture (1DMIX-070) and was
+    1.1e-10 for the same port on the 16-digit capture (2.4e-10 in the older
+    1DMIX-038-era measurement): print quantization, not physics. The 1e-8
+    bound is unchanged (never widened) and now has ~10 orders of headroom.
     """
     python_ds, mitgcm_ds = result_isomip
     diff, rel = _diff_and_rel(mitgcm_ds['visc_az'].values, python_ds['visc_az'].values)
@@ -211,12 +227,16 @@ def test_isomip_visc_az_clean(result_isomip):
 
 
 def test_isomip_diff_kz_ksrf_gap(result_isomip):
-    """1DMIX-038's root-caused kSrf background-diffusivity-floor mismatch:
-    measured fresh this round, 1107/1,437,204 cells (0.077%) exceed 1% rel,
-    max_abs 2.9e-3. Bounded both sides: >0.02% keeps this a real, known,
-    nonzero gap (a silent drop to 0 would mean the kSrf convention changed
-    without 1DMIX-038 being reopened); <0.5% catches an unexplained
-    worsening.
+    """1DMIX-038's root-caused kSrf background-diffusivity-floor mismatch.
+    REAL gap, unchanged at 17 digits (1DMIX-070): 1075/1,437,204 cells
+    (0.075%) exceed 1% rel on the 17-digit capture, max_abs 2.905e-3 (1102
+    cells, same max_abs, on the 16-digit capture: the 27 cells that differ
+    had rel 1.7%-51% at 16 digits and <= 0.26% at 17, i.e. were print
+    artifacts; the 1075 that remain are at k = first-wet+1 (1069, max_abs
+    2.9e-3) and +2 (6, max_abs 1.3e-5)).
+    Bounded both sides: >0.02% keeps this a real, known, nonzero gap (a
+    silent drop to 0 would mean the kSrf convention changed without
+    1DMIX-038 being reopened); <0.5% catches an unexplained worsening.
     """
     python_ds, mitgcm_ds = result_isomip
     diff, rel = _diff_and_rel(mitgcm_ds['diff_kz'].values, python_ds['diff_kz'].values)
@@ -226,23 +246,43 @@ def test_isomip_diff_kz_ksrf_gap(result_isomip):
 
 
 def test_isomip_mixing_length_ksrf_plus_1(result_isomip):
-    """1DMIX-038's kSrf+1 residual (N^2-precision-amplified, not a floor
-    defect): measured max_abs 4.3e-3 over the same wet population, never
-    crossing the 1% relative threshold anywhere (values are large enough
-    there that the absolute residual stays a small fraction). Bounded both
-    sides for the same reason as diff_kz above.
+    """isomip mixing_length is CLEAN to roundoff on the 17-digit capture
+    (1DMIX-070). Through 1DMIX-069 this test asserted a *known gap*
+    (`1e-4 < max_abs < 0.01`) for what 1DMIX-038 called the kSrf+1
+    "N^2-precision-amplified" residual. That residual was print
+    quantization of the E25.16 (16-digit) capture, not physics: the
+    replayed T/S/sigma_r inputs carried ~1e-16 relative print error, which
+    mixing_length ~ 1/sqrt(N^2) amplifies at near-neutral cells. Recapturing
+    the identical run with ES25.16 (17 significant digits, exact for a
+    double; `devel-loop/loop_state/bob-1DMIX-070-evidence.md` Unit 3/4) and
+    replaying the same port gives max_abs 1.07e-13 (max_rel 3.8e-15,
+    0 cells above 1%) versus 3.25e-4 for the same port on the 16-digit
+    capture (4.3e-3 in the original 1DMIX-038 measurement, before the
+    1DMIX-068 N^2 operation-order fix). The MITgcm fields themselves agree
+    between the two captures to <= 5.9e-16 relative (pure print
+    quantization), so no physics changed.
+
+    The lower bound therefore certified an artifact and is removed; the
+    upper bound is TIGHTENED (never widened) from 0.01 to 1e-11, ~90x above
+    the measured 1.07e-13 (a margin that absorbs platform/BLAS roundoff
+    without admitting any physical-size residual). The genuine isomip gaps
+    (diff_kz kSrf floor, tke_after) are unchanged at 17 digits and keep
+    their assertions below.
     """
     python_ds, mitgcm_ds = result_isomip
     diff, _ = _diff_and_rel(mitgcm_ds['mixing_length'].values, python_ds['mixing_length'].values)
-    assert 1e-4 < np.max(diff) < 0.01, f"isomip mixing_length max_abs {np.max(diff):.3e} outside the known 1DMIX-038 bound"
+    assert np.max(diff) < 1e-11, f"isomip mixing_length max_abs {np.max(diff):.3e} regressed (17-digit roundoff level is 1.07e-13)"
 
 
 def test_isomip_tke_after_ksrf_region(result_isomip):
     """tke_after carries the kSrf mismatch plus the related kSrf+1/kSrf+2/
     y=50 residuals 1DMIX-048's review logged as additional evidence for
-    1DMIX-038 (not reopened as a separate issue). Measured fresh this round:
-    17934/1,437,204 cells (1.25%) exceed 1% rel, max_abs 9.1e-6 -- matches
-    1DMIX-048's own cited post-fix count exactly.
+    1DMIX-038 (not reopened as a separate issue). REAL gap, identical at 16
+    and 17 digits (1DMIX-070): 17934/1,437,204 cells (1.25%) exceed 1% rel,
+    max_abs 9.081e-6 -- matches 1DMIX-048's own cited post-fix count
+    exactly. At 17 digits they sit at first-wet+1 (9542 cells), +2 (6581),
+    and 1811 deeper cells (the y=50 row), while mixing_length agrees to
+    1e-13 at every one of those levels, so mixing_length is not their cause.
     """
     python_ds, mitgcm_ds = result_isomip
     diff, rel = _diff_and_rel(mitgcm_ds['tke_after'].values, python_ds['tke_after'].values)

@@ -104,6 +104,32 @@ sha256 of every regenerated file (bytes on the WSL checkout):
 | `combined_storm` | `outputs_from_python_standalone/combined_storm/kpp_standalone_output.txt` | `dd1660f3fe97f60d068ae93bad73ebc7f33be44e371043fd3bca5dda120cc809` |
 | `combined_storm` | `outputs_from_python_standalone/combined_storm/kpp_experiment.npz` | `e6594cfd7b588f3a05d0ebfe3d2b90054513fd7f6f52a3c99b8a6b2a587bf266` |
 
+## Regenerated at 17 digits, 1DMIX-070 (2026-09-30)
+
+The `kpp_standalone_output.txt` files were regenerated with the real standalone driver
+(`build_and_run.sh`, `MITGCM_ROOT=~/Projects/MITgcm`, Docker `mitgcm:latest` `6cc66b8957d8`, MITgcm
+`d861cd501`, tree unmodified) after widening its print formats: `kpp_standalone_driver/kpp_standalone_main.F` (result FORMAT 204/205 `E25.16` -> `ES25.16`). The Python side
+(`kpp_experiment.npz`) and the driver input
+`kpp_standalone_input.txt` were **not** regenerated (unchanged); only the Fortran output changed. Old
+outputs are kept under `devel-loop/loop_state/scratch/bob-1DMIX-070/old16/`. Line-by-line comparison
+(`scratch/.../cmp_standalone_txt.out`): all six scenarios have identical line counts and identical
+non-numeric lines, and every numeric field agrees with the 16-digit file to <= 5.34e-16 relative
+(0 above 6e-16). `compare_scenario_*_standalone.py::compare` statistics
+(`stats_standalone_16v17.out`) are unchanged at every reported digit that is not roundoff-level:
+`combined_storm` keeps its documented `keep_mitgcm_bugs=True` residual (`visc_az` 4/600, `diff_kz_s/t` 2/600, `ghat` 3/600 cells above 1%, `hbl` roundoff); the other five scenarios stay at roundoff with 0 cells above 1% (worst `max_rel` 3.4e-15, arctic_convection).
+So none of the standalone gaps or agreements was a print artifact. The tracked `reports/*_scenario_standalone_summary.md` was not regenerated.
+
+sha256 of the regenerated files (bytes on the WSL checkout):
+
+| Scenario | File | Bytes | sha256 |
+|---|---|---|---|
+| `calm_baseline` | `KPP_port_validation/outputs_from_python_standalone/calm_baseline/kpp_standalone_output.txt` | 319012 | `ccb572d95180cc0b470ef1d83c6c17d3189490dd0f918a43dd2fc0a4cda8e324` |
+| `arctic_convection` | `KPP_port_validation/outputs_from_python_standalone/arctic_convection/kpp_standalone_output.txt` | 156798 | `77a2fd68cacf01b26f3a016965a34c61fff8919816e060ec7a1c2b11c0753a76` |
+| `hurricane_wind` | `KPP_port_validation/outputs_from_python_standalone/hurricane_wind/kpp_standalone_output.txt` | 159580 | `c1c1a288bf07a235a307fbb410fbb456ed98e35a8d09391823d26f7b364a4699` |
+| `tropical_heating_diurnal` | `KPP_port_validation/outputs_from_python_standalone/tropical_heating_diurnal/kpp_standalone_output.txt` | 159580 | `649672a2debb80789e68b0e6974f97eebe9e4c0771e19c2d676af208df6474b9` |
+| `heavy_rain_freshening` | `KPP_port_validation/outputs_from_python_standalone/heavy_rain_freshening/kpp_standalone_output.txt` | 159580 | `6910dea5dcf403b7b5ab427ef12cb5d539b2e3a51300312b22259be5577f4ecb` |
+| `combined_storm` | `KPP_port_validation/outputs_from_python_standalone/combined_storm/kpp_standalone_output.txt` | 79864 | `35312b6de5e8de40bfd7947ac5cc528f918712e3566b63ba907cb6d80384c69a` |
+
 ## Comparison and report
 
 `MITgcm_to_Python_port_verification/scripts/compare_scenario_standalone.py::compare`

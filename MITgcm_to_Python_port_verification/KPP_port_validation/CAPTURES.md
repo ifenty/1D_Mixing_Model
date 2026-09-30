@@ -59,6 +59,8 @@ the documented statistics to all printed digits.
 
 ### File provenance (sha256 of the bytes on the WSL checkout)
 
+*Superseded by 1DMIX-070 ("Recaptured at 17 digits, 1DMIX-070" below): the bytes and hashes in this table (and in the 1DMIX-066 table further down) are the 16-digit captures; the current files replaced them in place.*
+
 | File | Recipe | Bytes | sha256 |
 |---|---|---|---|
 | `inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D.nc` | R2 | 23352759 | `ccdc7c99d2f3c55c2ff876d4ba0ca96ac1820b99ff22484b445da21eac7c17e4` |
@@ -144,6 +146,7 @@ replay files.
 
 ## Print precision and instrumentation fidelity, 1DMIX-069 (2026-09-30)
 
+*(As of 1DMIX-069; all declared KPP captures were recaptured at 17 digits by 1DMIX-070, see "Recaptured at 17 digits, 1DMIX-070" below.)*
 Every KPP capture declared in this manifest (and in `esx/project.json:external_inputs`)
 was produced with `kpp_calc.F`'s `FORMAT E25.16` (16 significant digits) and stays
 valid under that limit; none was replaced by 1DMIX-069. `kpp_mods/kpp_calc.F` now
@@ -165,6 +168,83 @@ arguments, the call to `KPP_OUTPUT_VALIDATION` and that write-only subroutine. N
 hunk can change computed physics; no KPP source correction was needed. Details:
 `devel-loop/loop_state/bob-1DMIX-069-evidence.md` and the GGL90 manifest
 (`../GGL90_port_validation/CAPTURES.md`, same-titled section) for the GGL90 file.
+
+## Recaptured at 17 digits, 1DMIX-070 (2026-09-30)
+
+Every KPP capture declared in this manifest and in `esx/project.json:external_inputs` was
+recaptured with the current instrumented mods (`kpp_calc.F` prints every captured field and every
+`PARAM_*` scalar as `ES25.16`, 17 significant digits, exact for a double) and replaced in place under
+the same names; the 16-digit predecessors were kept only under
+`devel-loop/loop_state/scratch/bob-1DMIX-070/old16/` for the comparison. Recipes R1-R6 are the
+1DMIX-065/066 recipes above, unchanged (**R5 still INFERRED**); MITgcm commit
+`d861cd501f21303825de860eb3caa0a8a7ae22f8` (tree unmodified), image `mitgcm:latest` (`6cc66b8957d8`),
+Docker, fresh build directories `build_docker_kpp_*_070`, run directories `output_kpp_*_070`. Each
+`output.txt` was parsed by the streaming `parse_mitgcm_split.py` in its own process under `RLIMIT_AS`
+8 GB: `1D_10` 0.1 s, `11k_1D` 50.5 s (peak RSS 0.144 GB), `lab_sea_1000` 45.6 s (0.152 GB),
+`lab_sea_6mo` 201 s (0.168 GB), `seaice_obcs` 0.1 s, `global_oce_latlon_720` 486.8 s (0.151 GB; raw
+`output.txt` 13.8 GB, never loaded whole). Parsers unchanged. Python files come only from replaying
+the current port (recipes P1-P5, P2b) on the new inputs; no reference was produced by the component it
+tests.
+
+**16-digit versus 17-digit (`scratch/bob-1DMIX-070/cmp_kpp_*.out`, every variable and attribute,
+streamed).** For all six captures every input and output variable has identical shape, dtype and NaN
+pattern and agrees with its 16-digit predecessor to <= 5.9e-16 relative (`11k_1D` 5.89e-16 `dVsq`,
+`1D_10` 5.01e-16, `lab_sea_1000` 5.68e-16, `lab_sea_6mo` 5.68e-16, `seaice_obcs` 5.36e-16,
+`global_oce_latlon_720` 5.68e-16; 0 elements above 6e-16): print quantization only, MITgcm physics
+unchanged. The only attribute differences are the two lookup-table spacings `deltaz`
+(4.4893378e-10 -> 4.489337822671156e-10, 5.05e-9 relative) and `deltau` (8.3160083e-05 ->
+8.316008316008316e-05, 1.9e-9), which the old `E16.8` PARAM prints truncated to 8 digits; every other
+parameter was exactly representable and is identical. Effect on the port comparison
+(`stats_kpp_16v17_*.out`: the same current port replayed on both captures, with the exact subsets and
+statistics the KPP tests use): **every KPP statistic is identical at both precisions** except two
+shifts in `11k_1D` (`visc_az` cells above 1% 0.056% -> 0.055%; `diff_kz_s/t` 0.806% -> 0.796%,
+median 2.305e-7 -> 2.303e-7), so the KPP known gaps (Rib/Ricr threshold tail, `wscale` clamp, `ghat`
+zero-signature cells) are real and none was a print artifact: `1D_10` `hbl` max 1.289e-2 m,
+`11k_1D` `hbl` median 2.85e-5 m / max 20.28 m, `lab_sea_1000` (first 20 steps) `hbl` max 26.4 m,
+`lab_sea_6mo` (first 100 steps) `hbl` max 40.72 m and `visc_az` 13.35% above 1%, `seaice_obcs` `hbl`
+max 20.4 m, `global_oce_latlon_720` (first 5 steps) `hbl` max 3.09 m. No KPP test assertion needed
+changing (all KPP upper bounds unchanged and passing).
+
+Note on documented numbers: the `11k_1D` fractions above (0.055% and 0.796%) are what the current
+port measures at both precisions; `KPP_VALIDATION_RESULTS.md` and the `11k` test docstring still quote
+0.087% and 1.19%, the 1DMIX-065 measurement taken before 1DMIX-068 changed the shared `jmd95_eos`
+operation order. That drift predates and is independent of this recapture (identical at 16 and 17
+digits) and was left for a separate documentation update.
+
+Recorded per file (sha256 of the bytes on the WSL checkout after 1DMIX-070; `Digits` = significant
+digits of every captured field; raw `output.txt` kept under
+`~/Projects/MITgcm/verification/<exp>/output_kpp_*_070/`). The 1DMIX-065/066 "File provenance" tables
+above record the superseded 16-digit bytes.
+
+| File | Recipe | Bytes | sha256 | Digits | raw `output.txt` bytes | raw `output.txt` sha256 |
+|---|---|---|---|---|---|---|
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D.nc` | R2 | 23352755 | `334a12ef60124fd9c7feb382733b6eca071429e0a2d82b3e891e9b0a6f569a82` | 17 (ES25.16) | 314645448 | `37beef2b1545aa476b854b9998cb6d919a22201dfe5ea6f1afb81dc9df66cf47` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_11k_1D.nc` | R2 | 21557575 | `dd8862754bf1c068421154358a7fdf8d2c7fd8798ca131d7db750ed463ae567f` | 17 (ES25.16) | 314645448 | `37beef2b1545aa476b854b9998cb6d919a22201dfe5ea6f1afb81dc9df66cf47` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_1D_10_kppmix_extend_rawflux_fix.nc` | R1 | 129291 | `92fb04877db2345132a0686fcebffdad62e64f67affdb6ca2dcf5ecf7ac00ef3` | 17 (ES25.16) | 443412 | `a41ff4a87c8a96160177e489a73e5e71987eaf166c560a6cfccc983369ce1050` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_1D_10_kppmix_extend_rawflux_fix.nc` | R1 | 104890 | `4cf0f61f7768ea6cb4ffcb93aa6ed375f789253a8a88e159d84910763d53a057` | 17 (ES25.16) | 443412 | `a41ff4a87c8a96160177e489a73e5e71987eaf166c560a6cfccc983369ce1050` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_1000_0820T0946.nc` | R3 | 73391898 | `6fbee2fd06b7ee82890eed444e3fd15ea5bd4cc788e5d557ac77016eb9a8b72e` | 17 (ES25.16) | 1882448839 | `b79f91b12432ace3c4704b9a9d16abc68a75d525db34d1435c89fd41bf549064` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_lab_sea_1000_0820T0946.nc` | R3 | 124863579 | `c11406138f0709e8188e98f4d81d9ca1e9a26d791841f354132f323315e53111` | 17 (ES25.16) | 1882448839 | `b79f91b12432ace3c4704b9a9d16abc68a75d525db34d1435c89fd41bf549064` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_lab_sea_6mo.nc` | R5 | 320746270 | `becb43a7bcbe8ece06f60a32173a0d9ae99a8eefee331037e86c8a001565ffd7` | 17 (ES25.16) | 8230063810 | `fa874b154a49534c505814d8c946d9276ccce1b27af7bbfcbec4c4f841957d5c` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_lab_sea_6mo.nc` | R5 | 520521369 | `07e93b906d548fb275dafbbb8f5f244cc814b75daa4e7c9aae786cedf7c59463` | 17 (ES25.16) | 8230063810 | `fa874b154a49534c505814d8c946d9276ccce1b27af7bbfcbec4c4f841957d5c` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_seaice_obcs_1dmix034.nc` | R6 | 258244 | `aa08ad9ec3ca76ae57668f70d2b884560670b6e359839b693294870c89a41cd7` | 17 (ES25.16) | 3983594 | `f34c443bb64e46c8f4e3606c68df16195ba9dc8e248654b0c6106656d9d338f0` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_seaice_obcs_1dmix034.nc` | R6 | 325196 | `5798865000291bba567b0095acb83172532d287388ac57304c3b1c09751c06c1` | 17 (ES25.16) | 3983594 | `f34c443bb64e46c8f4e3606c68df16195ba9dc8e248654b0c6106656d9d338f0` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_global_oce_latlon_720.nc` | R4 | 703126967 | `ceb0cdab68222d75e323c97ee4f05808fa5203d9fba5d3f17721952cbed69a8c` | 17 (ES25.16) | 13823542144 | `d7f7532feaaf8cd8fb52c7265e51fcd45846e677062d5ed559ca10bcffb06a3e` |
+| `outputs_from_mitgcm/mitgcm_kpp_outputs_global_oce_latlon_720.nc` | R4 | 1090745317 | `38aee57b1767ef71b8b252b71514d4e6ae1a4bbe9593fe99f9f1dca3cd11c314` | 17 (ES25.16) | 13823542144 | `d7f7532feaaf8cd8fb52c7265e51fcd45846e677062d5ed559ca10bcffb06a3e` |
+
+Replays regenerated on the 17-digit inputs (recipes P1-P5, P2b; `ulimit -v 8000000`):
+
+| File | Recipe | Bytes | sha256 |
+|---|---|---|---|
+| `outputs_from_python/python_kpp_outputs_11k_1D.nc` | P2 | 1613834 | `3424c32d19bc581836bb5a3e673c8a6ccc61a07107d2f07e756d6e1c92dcd36f` |
+| `inputs_from_mitgcm/mitgcm_kpp_inputs_11k_1D_python.nc` | P2b | 1613834 | `d82db884b829cfef6a0c936fb37213819b0a578eff9a5fb80052d79be8a309cb` |
+| `outputs_from_python/python_kpp_outputs_1D_10_kppmix_extend_rawflux_fix.nc` | P1 | 66291 | `b4708d44003f5df9fcc74899db021f6f17346f33d264ffc533d19b62df2b7e65` |
+| `outputs_from_python/python_kpp_outputs_lab_sea_1000_0820T0946.nc` | P3 | 27497350 | `db10a5438ad2a53d5c68c07ebd97f64bae2949ee1cd5511e298bde2556cf8561` |
+| `outputs_from_python/python_kpp_outputs_lab_sea_6mo.nc` | P5 | 2910360 | `440cc6d6e58f0288899ce30e73ef04f269680fd7decaf053434510fe67d279a1` |
+| `outputs_from_python/python_kpp_outputs_seaice_obcs_1dmix034.nc` | P4 | 108951 | `a85c9080222a97032d2b76175e1cc13a6197164cde679d3e8e81d3315c947613` |
+
+Standalone-driver outputs (`outputs_from_python_standalone/<scenario>/kpp_standalone_output.txt`) were
+regenerated with the widened `kpp_standalone_main.F` FORMATs from the unchanged
+`kpp_standalone_input.txt`; see `CONVENTIONS_STANDALONE_DATA.md` ("Regenerated at 17 digits, 1DMIX-070").
 
 ## `global_oce_latlon_720` (720 timesteps, 4-tile 2×2 90×40×15, `global_oce_latlon` verification experiment)
 

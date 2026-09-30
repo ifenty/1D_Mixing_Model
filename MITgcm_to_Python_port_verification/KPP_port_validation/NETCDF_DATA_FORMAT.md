@@ -297,7 +297,7 @@ Parameters are written to STDOUT on the **first call** to `KPP_OUTPUT_VALIDATION
 IF ( firstCall ) THEN
   firstCall = .FALSE.
   WRITE(standardMessageUnit,'(A)') '===== KPP_MODEL_PARAMETERS ====='
-  WRITE(standardMessageUnit,'(A,E16.8)') 'PARAM_Ricr=',Ricr
+  WRITE(standardMessageUnit,'(A,ES25.16)') 'PARAM_Ricr=',Ricr   ! E16.8 before 1DMIX-070
   ! ... 64 parameters total
 #ifdef KPP_GHAT
   WRITE(standardMessageUnit,'(A,I1)') 'PARAM_use_ghat=',1
@@ -686,7 +686,7 @@ All files use NetCDF4 with:
 ### Precision
 
 - **Floating-point data**: 64-bit (double precision)
-- **Output format from MITgcm**: E25.16 (16 significant digits) for all captures declared before 1DMIX-069; the instrumented `kpp_calc.F` now prints ES25.16 (17 significant digits, exact for a double). The parsers read both
+- **Output format from MITgcm**: ES25.16 (17 significant digits, exact for a double) for every declared capture since 1DMIX-070 (E25.16, 16 digits, before it; the `PARAM_*` scalar lines were `E16.8`, 8 digits, and are `ES25.16` from 1DMIX-070 too). The parsers read both
 - **Validation tolerance**: rtol=1e-12 (achievable with double precision)
 
 ### Variable Attributes

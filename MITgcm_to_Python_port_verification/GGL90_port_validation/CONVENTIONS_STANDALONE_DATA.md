@@ -110,6 +110,32 @@ sha256 of every regenerated file (bytes on the WSL checkout):
 | `combined_storm` | `outputs_from_python_standalone/combined_storm/ggl90_standalone_output.txt` | `80e726f031505f3267b77a730cdff3d7e33b3c41562e29752dccfbbe8826eedd` |
 | `combined_storm` | `outputs_from_python_standalone/combined_storm/ggl90_experiment_dense.npz` | `c1e86ddc139a488f772ed6116fe1cdc16554c00cc43f469da0ffab07121e29f4` |
 
+## Regenerated at 17 digits, 1DMIX-070 (2026-09-30)
+
+The `ggl90_standalone_output.txt` files were regenerated with the real standalone driver
+(`build_and_run.sh`, `MITGCM_ROOT=~/Projects/MITgcm`, Docker `mitgcm:latest` `6cc66b8957d8`, MITgcm
+`d861cd501`, tree unmodified) after widening its print formats: `ggl90_mods/ggl90_calc.F` (via the vermix instrumented copy the driver compiles; FORMAT 101/200-203 already `ES25.16` from 1DMIX-069, `PARAM_*` lines `E16.8` -> `ES25.16` in 1DMIX-070; the driver has no result FORMAT of its own). The Python side
+(`ggl90_experiment_dense.npz`) and the driver input
+`ggl90_standalone_input.txt` were **not** regenerated (unchanged); only the Fortran output changed. Old
+outputs are kept under `devel-loop/loop_state/scratch/bob-1DMIX-070/old16/`. Line-by-line comparison
+(`scratch/.../cmp_standalone_txt.out`): all six scenarios have identical line counts and identical
+non-numeric lines, and every numeric field agrees with the 16-digit file to <= 5.80e-16 relative
+(0 above 6e-16). `compare_scenario_*_standalone.py::compare` statistics
+(`stats_standalone_16v17.out`) are unchanged at every reported digit that is not roundoff-level:
+every scenario and field stays at roundoff with 0 cells above 1% (worst `max_rel` 1.237e-11, hurricane_wind `tke_after`, identical at both precisions).
+So none of the standalone gaps or agreements was a print artifact. The tracked `reports/*_scenario_standalone_summary.md` was not regenerated.
+
+sha256 of the regenerated files (bytes on the WSL checkout):
+
+| Scenario | File | Bytes | sha256 |
+|---|---|---|---|
+| `calm_baseline` | `GGL90_port_validation/outputs_from_python_standalone/calm_baseline/ggl90_standalone_output.txt` | 7854518 | `47c035af29218afd131b270450c5dff8c58d6fa6e82dcc3b4128df1faf955430` |
+| `arctic_convection` | `GGL90_port_validation/outputs_from_python_standalone/arctic_convection/ggl90_standalone_output.txt` | 63228458 | `a7d69c62ec0dd1f4f12555bcd29b6aa4aaf84469518c654800b09aefb3ae6841` |
+| `hurricane_wind` | `GGL90_port_validation/outputs_from_python_standalone/hurricane_wind/ggl90_standalone_output.txt` | 3930230 | `1f57ffd8a83639e318ba89d5691da9cc42bf5445d241a755593315b505a8dc2d` |
+| `tropical_heating_diurnal` | `GGL90_port_validation/outputs_from_python_standalone/tropical_heating_diurnal/ggl90_standalone_output.txt` | 3930230 | `cb08d129afe8f5e789a52258c378d5ba24be0aec43ef0aad05d1a593d9b0ea65` |
+| `heavy_rain_freshening` | `GGL90_port_validation/outputs_from_python_standalone/heavy_rain_freshening/ggl90_standalone_output.txt` | 3930230 | `9680e7b77b7b8b7eb70c2cbcd28d5e22289cb158a1999520106996b1f8840126` |
+| `combined_storm` | `GGL90_port_validation/outputs_from_python_standalone/combined_storm/ggl90_standalone_output.txt` | 1968086 | `486c0e5ca1af8dd6b883fd0f5b5a73bf739eb348441a39bb3f0609ca34320ac7` |
+
 ## Comparison and report
 
 `MITgcm_to_Python_port_verification/scripts/compare_scenario_ggl90_standalone.py::compare`

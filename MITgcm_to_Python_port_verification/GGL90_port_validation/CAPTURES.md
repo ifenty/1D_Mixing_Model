@@ -73,6 +73,9 @@ recorded anywhere. Both attempts and the probes are in
 
 ### File provenance (sha256 of the bytes on the WSL checkout)
 
+*Superseded by 1DMIX-070 ("Recaptured at 17 digits, 1DMIX-070" below): the bytes and hashes in this
+table are the 16-digit captures of 1DMIX-066; the current files replaced them in place.*
+
 | File | Recipe | Bytes | sha256 |
 |---|---|---|---|
 | `inputs_from_mitgcm/mitgcm_ggl90_inputs_vermix_20_1dmix024.nc` | G1 | 79949 | `579526a73faddf26672650a49a5ba31b1ac28d5ebb4bb035694c2d82be04c5c0` |
@@ -117,7 +120,9 @@ the full file at 0.16 GB.
 
 ## Print precision and instrumentation fidelity, 1DMIX-069 (2026-09-30)
 
-**Which captures are 16-digit and which are 17-digit.** Every capture declared
+**Which captures are 16-digit and which are 17-digit.** *(As of 1DMIX-069; all
+declared captures were recaptured at 17 digits by 1DMIX-070, see the next section.)*
+Every capture declared
 above (all five GGL90 sets, and every KPP capture in
 `../KPP_port_validation/CAPTURES.md`) was produced with the instrumented
 `FORMAT E25.16` (16 significant digits) and remains valid under that limit; none
@@ -170,6 +175,90 @@ capture ran with `useLANGMUIR` on (`data.ggl90` of every declared run has no
 directories have no `#define/#undef` differences from the stock experiment's own
 `code/` copies wherever one exists. Full hunk table:
 `devel-loop/loop_state/bob-1DMIX-069-evidence.md`.
+
+## Recaptured at 17 digits, 1DMIX-070 (2026-09-30)
+
+Every capture declared in this manifest and in `esx/project.json:external_inputs` was
+recaptured with the current instrumented mods (which print every captured field **and every
+`PARAM_*` scalar** as `ES25.16`, 17 significant digits, exact for a double) and replaced in
+place under the same names; the previous 16-digit files were kept only under
+`devel-loop/loop_state/scratch/bob-1DMIX-070/old16/` for the comparison. Same recipes G1-G5
+(the 1DMIX-066 recipes above, unchanged, **G5 still INFERRED**), same MITgcm commit
+`d861cd501f21303825de860eb3caa0a8a7ae22f8` (tree unmodified), same image (`mitgcm:latest`, id
+`6cc66b8957d8`), Docker, fresh build directories `build_docker_ggl90_*_070`, run directories
+`output_ggl90_*_070`; each `output.txt` was parsed by the streaming
+`parse_mitgcm_ggl90_split.py` in its own process under `RLIMIT_AS` 8 GB (peak RSS 0.108-0.163 GB;
+isomip 21.5 s, 90x40x15 5.0 s, cs32x15 9.5 s, 1D 11,000-step 33.4 s, vermix 0.1 s). The parsers
+needed no change (they read `ES25.16` and the E-less 3-digit-exponent form unchanged). Provenance
+rules as before: MITgcm files come only from an MITgcm run, the `python_ggl90_*` files only from
+replaying the current port on the paired new input (`scripts/run_ggl90_from_netcdf_input.py`,
+`ulimit -v 8000000`); no reference was produced by the component it tests. All files are
+17-digit; none is 16-digit any more. The 1DMIX-066 "File provenance" table above records the
+superseded 16-digit bytes.
+
+**16-digit versus 17-digit, per capture (`scratch/bob-1DMIX-070/cmp_ggl90_*.out`, streaming
+comparison of every variable and attribute).** For all five captures every input and output
+variable has identical shape, dtype and NaN pattern, and agrees with its 16-digit predecessor to
+<= 5.9e-16 relative (isomip 5.90e-16 `vertical_shear`; 90x40x15 5.80e-16; cs32x15 5.71e-16; 1D
+5.87e-16; vermix 5.33e-16), i.e. print quantization of E25.16 only (0 elements above 6e-16, no
+finding). The 15 GGL90 parameter attributes are identical (they were exactly representable in
+8 digits). MITgcm physics is therefore unchanged. Effect on the port comparison
+(`stats_ggl90_16v17.out`: the same current port replayed on both captures, same replay entry
+point and the same statistics the tests assert):
+
+| Capture / field | 16-digit max_abs (n>1%) | 17-digit max_abs (n>1%) | Reading |
+|---|---|---|---|
+| `vermix` all four fields | 1.32e-5 / 1.32e-5 / 7.76e-3 / 7.84e-7 (0) | identical | real 1e-3-relative residual, not print |
+| `1D_ocean_ice_column` `visc_az`/`diff_kz`/`mixing_length`/`tke_after` | 8.3e-10 / 8.3e-11 / 2.6e-5 / 2.9e-15 (0) | 3.3e-17 / 1.2e-17 / 2.6e-13 / 5.4e-20 (0) | print quantization -> roundoff |
+| `isomip` `visc_az` | 1.13e-10 (0) | 9.5e-18 (0) | print quantization -> roundoff |
+| `isomip` `mixing_length` | 3.25e-4 (0) | 1.07e-13 (0) | print quantization -> roundoff; the 1DMIX-038 "kSrf+1" residual |
+| `isomip` `diff_kz` | 2.905e-3 (1102) | 2.905e-3 (1075) | real kSrf gap; 27 cells (rel 1.7%-51% at 16 digits, <= 0.26% at 17) were artifacts |
+| `isomip` `tke_after` | 9.081e-6 (17934) | 9.081e-6 (17934) | real, identical |
+| `global_ocean_90x40x15` (`visc_az`, `diff_kz`, `mixing_length`, `tke_after`) | 5.59 (183) / 2.75 (247456) / 15.5 (206) / 446 (264515) | identical | real (IDEMIX and a small tail) |
+| `global_ocean_cs32x15` (same order) | 100 (508739) / 2.01e9 (510536) / 1.45e7 (510393) / 4.20e5 (527111) | identical | real (pressure coordinates, out of scope) |
+
+Consequently only one test assertion was print-quantization-derived
+(`test_isomip_mixing_length_ksrf_plus_1`, lower bound `1e-4 < max_abs` with an upper bound of 0.01);
+it now asserts `max_abs < 1e-11` (roundoff level; 1.07e-13 measured), and its docstring, the
+other isomip/1D docstring figures and `GGL90_VALIDATION_RESULTS.md` were updated to say so (upper
+bounds elsewhere are unchanged; none was widened). At 17 digits `isomip`'s `tke_after` residuals sit
+at first-wet level +1 (9542 cells above 1%), +2 (6581) and deeper (1811, the y=50 row) while
+`mixing_length` agrees to 1e-13 at those levels, so they are not a `mixing_length` effect; their
+mechanism beyond the 1DMIX-038/048 record was not re-traced (`scratch/.../isomip_levels.out`).
+
+The 1DMIX-069 paragraph above that says the declared isomip bound "was left untouched (follow-up
+when the declared isomip capture is recaptured)" is resolved by this section.
+
+Recorded per file (sha256 of the bytes on the WSL checkout after 1DMIX-070; `Digits` = significant
+digits of every captured field; raw `output.txt` = the run's STDOUT it was parsed from, kept under
+`~/Projects/MITgcm/verification/<exp>/output_*_070/`):
+
+| File | Recipe | Bytes | sha256 | Digits | raw `output.txt` bytes | raw `output.txt` sha256 |
+|---|---|---|---|---|---|---|
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_vermix_20_1dmix024.nc` | G1 | 78881 | `10bb1ba55ced3e2890d940094b2352eddbf75e4623fce28a086258744b4e1745` | 17 (ES25.16) | 555367 | `9b440f06d96d4c115cd56b29a29bf4c005713c7234ce2967f8f6ba4f582c5a55` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_vermix_20_1dmix024.nc` | G1 | 69164 | `244912ce5d10f264de4c5b36c053ff4bfa76ecc1dff05ba3b20eb4572a56d885` | 17 (ES25.16) | 555367 | `9b440f06d96d4c115cd56b29a29bf4c005713c7234ce2967f8f6ba4f582c5a55` |
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_isomip_12.nc` | G2 | 21731913 | `c0c136a472f06c4998da301d9a4ff20d1d3ab1b38828be3be5acd57a7698e665` | 17 (ES25.16) | 950888376 | `d1b18ea6ed1cf3ff3060f34ebf309e7c8def0d039e673ba24b685a5e3c7355b1` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_isomip_12.nc` | G2 | 20118698 | `203b4ecac51da52731f0e110b9db445a31af65ed73ea8bca36594d28ba5b5ebd` | 17 (ES25.16) | 950888376 | `d1b18ea6ed1cf3ff3060f34ebf309e7c8def0d039e673ba24b685a5e3c7355b1` |
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_global_ocean_90x40x15_idemix_10.nc` | G3 | 12694959 | `d996958b6cf7d99a2debde4648eef585c36bf7d5ec9045c76dedd41cd4fd90e7` | 17 (ES25.16) | 190466650 | `6bee8ddf1925c2198541a81fd9f400a7933022553abcece838d968d5267cf273` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_global_ocean_90x40x15_idemix_10.nc` | G3 | 16555011 | `b7891b9ce640ff62ff67c53a26bf752e24d2493064a785015462f1bc96104072` | 17 (ES25.16) | 190466650 | `6bee8ddf1925c2198541a81fd9f400a7933022553abcece838d968d5267cf273` |
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_global_ocean_cs32x15_idemix_10.nc` | G4 | 23813780 | `47c124a8e60da8c2d5abe18cff16bd6271fb260b38e8a51bc7df30efe7d4e102` | 17 (ES25.16) | 363441486 | `be6d863802625ddc2cdc5b9d6a020ed0df6b7a5dc6096e728e7bb03551cfda69` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4 | 30403458 | `3207434355812e853dc0cd633281ebdb1e3ec5e818fc3175ca83b77458444294` | 17 (ES25.16) | 363441486 | `be6d863802625ddc2cdc5b9d6a020ed0df6b7a5dc6096e728e7bb03551cfda69` |
+| `inputs_from_mitgcm/mitgcm_ggl90_inputs_1D_ocean_ice_column_11000.nc` | G5 (INFERRED) | 17966603 | `caeb1bd3e51cb220085ac28f3d7bcf617f0c2899f1ffce03df67e6a7e01141e9` | 17 (ES25.16) | 315048571 | `5ff0828cc9ff44cc774d6de87ab1c2e713236a91b2c7ec325792de0180b2945c` |
+| `outputs_from_mitgcm/mitgcm_ggl90_outputs_1D_ocean_ice_column_11000.nc` | G5 (INFERRED) | 15698062 | `26b6a0c4dd0487589658a76053d49de293860f02fef8d1423f968d794ba3faa6` | 17 (ES25.16) | 315048571 | `5ff0828cc9ff44cc774d6de87ab1c2e713236a91b2c7ec325792de0180b2945c` |
+
+Replays regenerated on the 17-digit inputs (recipe P, `ulimit -v 8000000`):
+
+| File | Recipe | Bytes | sha256 |
+|---|---|---|---|
+| `outputs_from_python/python_ggl90_outputs_vermix_20_1dmix024.nc` | G1+P | 32057 | `67ca61bd7e295e683466865b636606b8239822460c1eef166ef1ca4635f550cf` |
+| `outputs_from_python/python_ggl90_outputs_isomip_12.nc` | G2+P | 57616601 | `c812dfc6e87d0ee20ab9ee721e46bd88620019709b511a19b28a39098ee37b01` |
+| `outputs_from_python/python_ggl90_outputs_global_ocean_90x40x15_idemix_10.nc` | G3+P | 17296185 | `39a3ba8bcbb8040b5edfe16f5b435573bdf6c49ea1a08d86ee8d3da063d4502a` |
+| `outputs_from_python/python_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4+P | 29509545 | `899c7e745b403f38320946c794130264e1d3a6e7f4ea5e5f4525293909c14af5` |
+| `outputs_from_python/python_ggl90_outputs_1D_ocean_ice_column_11000.nc` | G5+P | 8199209 | `1a56afbdefd00adfe29128bb7cfb4e4708d15bbef2aa39403f0c5ea2bf1f0e10` |
+
+Standalone-driver Fortran outputs (`outputs_from_python_standalone/<scenario>/ggl90_standalone_output.txt`)
+were regenerated with the widened `ggl90_calc.F` prints from the unchanged
+`ggl90_standalone_input.txt`; see `CONVENTIONS_STANDALONE_DATA.md` ("Regenerated at 17 digits, 1DMIX-070").
 
 ## `vermix` (20 timesteps, single column)
 

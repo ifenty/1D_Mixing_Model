@@ -258,8 +258,8 @@ C       any finite value is safe.
       CLOSE(10)
       CLOSE(20)
 
- 204  FORMAT(A,3(',',I3),4(',',E25.16))
- 205  FORMAT(A,2(',',I3),',',E25.16)
+ 204  FORMAT(A,3(',',I3),4(',',ES25.16))
+ 205  FORMAT(A,2(',',I3),',',ES25.16)
 
       STOP
       END

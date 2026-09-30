@@ -1355,41 +1355,43 @@ CEOP
 
       IF ( firstCall ) THEN
        firstCall = .FALSE.
+C      Real scalars print as ES25.16 = 17 significant digits (were E16.8,
+C      8 digits, before 1DMIX-070).
        WRITE(standardMessageUnit,'(A)')
      &   '===== GGL90_MODEL_PARAMETERS ====='
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90ck=',GGL90ck
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90ceps=',GGL90ceps
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90alpha=',GGL90alpha
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90m2=',GGL90m2
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90TKEmin=',GGL90TKEmin
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90TKEsurfMin=',GGL90TKEsurfMin
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90TKEbottom=',GGL90TKEbottom
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90mixingLengthMin=',GGL90mixingLengthMin
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90viscMax=',GGL90viscMax
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_GGL90diffMax=',GGL90diffMax
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_gravity=',gravity
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_rhoConst=',rhoConst
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_viscAz=',viscArNr(1)
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_diffKzS=',diffKrNrS(1)
 C      Real tracer timestep (1DMIX-015): the TKE forward step below uses
 C      deltaTloc = dTtracerLev(kSrf) (see this file's TKE update), not the
 C      captured netCDF's raw iteration-index time coordinate. Capture it so
 C      the Python replay harness can read the real dt instead of guessing.
-       WRITE(standardMessageUnit,'(A,E16.8)')
+       WRITE(standardMessageUnit,'(A,ES25.16)')
      &   'PARAM_deltaT=',dTtracerLev(1)
        WRITE(standardMessageUnit,'(A,I10)')
      &   'PARAM_mxlMaxFlag=',mxlMaxFlag

@@ -1878,3 +1878,27 @@ Fix the loop bound to match stock MITgcm and diff every instrumented file agains
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-09-30T11:18:55.590453+00:00 for iteration 2026-09-30T10:37:45.997100+00:00. The instrumented MITgcm Fortran (ggl90_calc.F, kpp_calc.F, kpp_routines.F; per-experiment entries are symlinks) now differs from stock MITgcm d861cd501 only by pure-addition output code: the SHELFICE u* loop bound (DO i=jMin,jMax) is restored to stock DO i=iMin,iMax and the Langmuir uStar/vStar block to stock 2-D form (no declared capture used Langmuir). Capture print format widened E25.16 -> ES25.16 (17 significant digits); streaming parsers unchanged (they already read bare 3-digit exponents). On real Docker runs the 17-digit 1DMIX-066 attempt-A configuration passes all 4 GGL90 bounds with no tolerance widened (mixing_length 0.194 -> 2.2e-13), closing the 1DMIX-068 residual as print quantization; isomip at 17 digits equals the declared capture to print quantization (loop fix is a no-op on square tiles). Richard: APPROVE_WITH_FIXES (independent stock diff, 3M-double round-trip, own attempt-A replay with a 16-digit contrast). Declared captures stay 16-digit; recapture, known-gap test bounds and PARAM/standalone precision are 1DMIX-070. Final verification EXECUTED PASS.
+
+## 🟢 RESOLVED: declared captures are 16-digit (E25.16), and at least one "known gap" test bound encodes pure print quantization
+
+**Date Identified**: 2026-09-30T11:15:00Z
+**Date Resolved**: 2026-09-30T12:47:41.476377+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-070
+**Anchors**: `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py::test_isomip_mixing_length_ksrf_plus_1`; `MITgcm_to_Python_port_verification/GGL90_port_validation/CAPTURES.md`; `esx/project.json:external_inputs`
+
+### Issue or research question
+1DMIX-069 widened the instrumented capture format to 17 significant digits. Every declared capture is still 16-digit. Recapturing isomip_12 at 17 digits shows the 1DMIX-038 kSrf+1 mixing_length residual (3.25e-4 on the declared capture) is entirely print quantization (1.07e-13), so `test_isomip_mixing_length_ksrf_plus_1`'s asserted lower bound `1e-4 < max_abs` would fail on a 17-digit capture; the kSrf diff_kz and tke_after gaps are unchanged and real. The 90x40x15 and cs32x15 captures may carry similar lower-bounded known-gap assertions.
+
+### Evidence
+1DMIX-069 Bob evidence (devel-loop/loop_state/bob-1DMIX-069-evidence.md) and scratch captures under devel-loop/loop_state/scratch/bob-1DMIX-069/ (compare_isomip.out, stats_isomip.out).
+
+### Scientific or engineering impact
+Known-gap assertions currently certify an artifact of capture precision as a physics gap; recaptured references would break them for the right reason, and the documented gap descriptions overstate real disagreement.
+
+### Proposed action and acceptance
+Recapture the declared captures at 17 digits (Docker, streaming parsers, provenance recorded; also widen the PARAM_* scalar lines, still E16.8, and the standalone drivers' E25.16 result formats, per Richard's 1DMIX-069 review), update external_inputs hashes, and for every known-gap assertion distinguish real gaps from print quantization: keep real-gap assertions, and replace artifact lower bounds with the measured 17-digit agreement (documented, reviewed; never widening an upper tolerance). Acceptance: full suite passes on 17-digit captures; each changed expectation is justified by a 16-vs-17-digit comparison.
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-09-30T12:47:41.476377+00:00 for iteration 2026-09-30T11:20:51.919630+00:00. Recaptured all 11 declared MITgcm captures (22 files) at 17 significant digits with unchanged recipes (MITgcm d861cd501, Docker, streaming parsers) and replaced them in place, with their Python replays and standalone-driver outputs; also widened PARAM_* scalars and the KPP standalone driver to ES25.16. Every field agrees with its 16-digit predecessor to <=5.9e-16 relative. The 16-vs-17 comparison separates print artifacts (1D_ocean_ice_column fields, isomip visc_az and kSrf+1 mixing_length) from real gaps (isomip diff_kz/tke_after, 90x40x15, cs32x15, all KPP). Exactly one assertion changed: test_isomip_mixing_length_ksrf_plus_1's artifact lower bound was removed and its upper bound tightened 0.01 -> 1e-11; no tolerance widened. Richard APPROVE: his own 16-digit re-quantization of the 17-digit capture reproduces the old 3.25e-4 exactly. Known nit: the sealed 11k disposition says figures are identical at 16 and 17 digits; they differ slightly (0.0554% vs 0.0558%) while the docstring is correct. Final verification EXECUTED PASS: 137 passed, 3 skipped, 0 failed.

@@ -177,7 +177,14 @@ format widened to 17 significant digits and the capture redone.
 `test_1d_ocean_ice_column_clean` bounds (`mixing_length` max abs 2.2e-13 versus
 1.9e-1 at 16 digits; `diff_kz` 0 cells above 1% versus 19), so the residual was
 print quantisation. The captures declared in `esx/project.json:external_inputs`
-were all produced at 16 digits and stay valid but carry this limit. Instrumented
+were all produced at 16 digits through 1DMIX-069; **1DMIX-070 recaptured every one of them
+at 17 digits** (same recipes, same names) after also widening the PARAM_* scalar prints and the
+KPP standalone driver's result formats, so the limit above no longer applies to the declared
+captures. Every MITgcm field agrees with its 16-digit predecessor to <= 6e-16 relative
+(print quantisation only), the KPP residuals are unchanged (the Rib/Ricr tail is real), and the
+GGL90 rows that were print quantisation (`1D_ocean_ice_column` all fields, `isomip` `mixing_length`
+and `visc_az`) dropped to roundoff; `isomip` `diff_kz` (kSrf) and `tke_after`, `global_ocean.90x40x15`
+and `global_ocean.cs32x15` are unchanged and remain real gaps. Instrumented
 Fortran fidelity (only output-only hunks versus stock MITgcm d861cd501, after
 fixing the `ggl90_calc.F` SHELFICE `DO i=jMin,jMax` transcription error): see
 `MITgcm_to_Python_port_verification/mitgcm_verification_mods/README.md`.

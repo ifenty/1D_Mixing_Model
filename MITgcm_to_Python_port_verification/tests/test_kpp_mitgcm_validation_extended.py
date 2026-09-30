@@ -306,9 +306,12 @@ def test_11k_ocean_ice_column_mixing(result_11k, ocean_mask_11k, field,
     """Mixing-coefficient agreement over the FULL, now-clean 11,000-timestep
     sample (1DMIX-050 refresh -- no clean-subset filtering needed anymore).
     Measured fresh this round: `visc_az` median_abs 0 (exact), max_abs
-    7.60e-3, 0.087% of active cells exceed 1% rel (n=242,000); `diff_kz_s`/
-    `diff_kz_t` (identical values in this configuration) median_abs 2.38e-7,
-    max_abs 1.73e-2, 1.19% exceed 1% rel (n=19,603) -- tighter bounds than
+    7.60e-3, 0.055% of active cells exceed 1% rel (134 of n=242,000); `diff_kz_s`/
+    `diff_kz_t` (identical values in this configuration) median_abs 2.30e-7,
+    max_abs 1.73e-2, 0.80% exceed 1% rel (156 of n=19,603). (Refreshed in
+    1DMIX-070 on the 17-digit capture: the 1DMIX-050/065-era 0.087% / 1.19% /
+    2.38e-7 were superseded by 1DMIX-068's MITgcm-order `jmd95_eos`; identical
+    to within 0.056% / 0.81% / 2.30e-7 at 16 digits. Bounds unchanged.) -- tighter bounds than
     the pre-refresh clean-subset numbers, as expected now that corrupted-
     zero comparisons are gone from the sample entirely.
     """

@@ -86,10 +86,14 @@ level, which matters specifically for GGL90 because its mixing length varies
 as `L ∝ 1/√N²`: any small relative error in `N²` is amplified wherever a
 real water column sits close to neutral stratification (`N²≈0`), producing a
 visible absolute `mixing_length` difference from an otherwise-negligible
-pressure error. This mechanism is examined in detail in the `isomip` section
-below, where it is the dominant remaining source of disagreement once the
-capture's own surface-boundary defect (also described there) is accounted
-for.
+error. Since 1DMIX-070 the captures are 17-significant-digit (exact
+doubles); the `N²`-amplification that earlier showed up as a `mixing_length`
+residual in `isomip` and `1D_ocean_ice_column` turned out to come from the
+16-digit *print quantization of the captured T/S/`sigma_r` inputs* fed to the
+replay, not from any port or EOS discrepancy (see the `isomip` section
+below and the "Print precision" note under "Reproducibility"). The
+amplification itself is real and would reappear for any input with
+~1e-16 relative error near neutral stratification.
 
 **GGL90's own real MITgcm package, unlike KPP's, has genuine
 pressure-coordinate handling — and that difference is directly visible in
@@ -174,17 +178,23 @@ GGL90 output validation in mind.
 
 | Field | Median abs. diff | Max abs. diff | Max rel. err. | Fraction >1% rel. err. |
 |---|---|---|---|---|
-| `visc_az` | 0 (exact) | 1.8e-9 | 7.9e-5% | 0% |
-| `diff_kz` | 0 (exact) | 1.8e-10 | 7.9e-5% | 0% |
-| `mixing_length` | 2.58e-15 | 5.6e-5 | 7.9e-5% | 0% |
-| `tke_after` | 0 (exact) | 6.6e-15 | 5.1e-7% | 0% |
+| `visc_az` | 0 (exact) | 3.3e-17 | 4.0e-13% | 0% |
+| `diff_kz` | 0 (exact) | 1.2e-17 | 4.1e-13% | 0% |
+| `mixing_length` | 1.5e-16 | 2.6e-13 | 3.8e-13% | 0% |
+| `tke_after` | 0 (exact) | 5.4e-20 | 1.2e-12% | 0% |
 
-(All statistics over the full 253,000 wet column-timesteps.) This is this
+(All statistics over the full 253,000 wet column-timesteps, on the
+17-digit capture of 1DMIX-070. The previous, 16-digit capture of the same
+run gave max abs 8.3e-10 / 8.3e-11 / 2.6e-5 / 2.9e-15 and max rel 3.8e-5% /
+3.8e-5% / 3.8e-5% / 1.0e-7% with the same port — the earlier 1.8e-9 /
+1.8e-10 / 5.6e-5 / 6.6e-15 figures of this table were the same quantity
+before the 1DMIX-068 `N²` operation-order fix — and those residuals were
+print quantization of the captured inputs, not port error.) This is this
 project's cleanest GGL90 experiment — no IDEMIX, no floating ice shelf, no
 pressure-coordinate confound — and it shows it: every field is exact to
 floating-point roundoff, with zero cells exceeding even a strict 1e-4 m²/s
 threshold on `visc_az`/`diff_kz`. `tke_after`'s own tiny remaining relative
-error (5.1e-7%) is strong evidence the TKE buoyancy-term mechanism above is
+error (1.2e-12%) is strong evidence the TKE buoyancy-term mechanism above is
 handled correctly here, not merely coincidentally invisible: this
 experiment's real `viscAz` (1.93e-5) and `diffKzS` (1.46e-7) backgrounds
 differ by two orders of magnitude, which is exactly the condition under
@@ -206,12 +216,20 @@ index 0.
 
 | Field | Median\|diff\| | Max\|diff\| | Max rel | Fraction >1% rel | N |
 |---|---|---|---|---|---|
-| `visc_az` | 0 | 2.4e-10 | 2.1e-05% | 0% | 1,437,204 |
-| `diff_kz` | 0 | 2.9e-03 | 300.0% | 0.077% | 1,437,204 |
-| `mixing_length` | 5.0e-18 | 4.3e-03 | 0.032% | 0% | 1,437,204 |
+| `visc_az` | 0 | 9.5e-18 | 3.9e-13% | 0% | 1,437,204 |
+| `diff_kz` | 0 | 2.9e-03 | 300.0% | 0.075% | 1,437,204 |
+| `mixing_length` | 4.6e-18 | 1.1e-13 | 3.8e-13% | 0% | 1,437,204 |
 | `tke_after` | 0 | 9.1e-06 | 232.7% | 1.25% | 1,437,204 |
 
-**`diff_kz`'s `kSrf` residual (0.077% of cells, max_abs 2.9e-3).** This
+(17-digit capture, 1DMIX-070. `visc_az` and `mixing_length` were previously
+tabulated at 2.4e-10 and 4.3e-3 maximum absolute difference; the same port
+on the earlier 16-digit capture gives 1.1e-10 and 3.25e-4 — 4.3e-3 predates
+the 1DMIX-068 `N²` fix — and those two residuals were print quantization of
+the captured inputs, see below. The `diff_kz` and `tke_after` rows are real
+and did not change: 1102 -> 1075 `diff_kz` cells above 1%, `tke_after`
+17,934 cells and 9.081e-6 identical at both precisions.)
+
+**`diff_kz`'s `kSrf` residual (0.075% of cells, max_abs 2.9e-3).** This
 port's final background-floor assignment for `diff_kz` threads an explicit
 `is_true_surface` flag through the mixing-coefficient code
 (`ggl90_mixing_coefficients.py::compute_viscosity_diffusivity`) so that, at
@@ -227,34 +245,42 @@ place. `tke_after`'s post-solve minimum-TKE re-mask uses the same explicit
 ShelfIce column's real `kSrf` rather than the ordinary surface-Dirichlet
 value.
 
-**`mixing_length`'s `kSrf+1` residual (never exceeds 1% relative error, but
-reaches max_abs 4.3e-3) is a different, general mechanism, not this same
-boundary defect recurring.** Tracing a real mismatching cell one level below
-`kSrf` — backing out each side's implied `N²` from its own `mixing_length`
-— shows both implementations compute real, mutually close `mixing_length`
-values that differ only because their respective `N²` values differ by
-roughly 0.1% relative, at a cell sitting very close to neutral
-stratification (`N²≈0`). Since `mixing_length ∝ 1/√N²`, that tiny relative
-`N²` gap is amplified into a visible absolute difference — the general
-EOS-precision mechanism described under "Shared infrastructure" above. This
-is confirmed to be general, not ShelfIce-specific: the identical
-near-`N²=0` mismatch pattern, with an even larger worst-case magnitude,
-occurs in ordinary fully-wet columns within this same capture, away from
-any ice-shelf boundary.
+**`mixing_length` has no residual: the former "`kSrf+1` residual" was
+print quantization (corrected by 1DMIX-070).** Through 1DMIX-069 this
+document reported a `mixing_length` residual one level below `kSrf`
+(max_abs 4.3e-3, later 3.25e-4 after the 1DMIX-068 `N²` fix; never above 1%
+relative) and attributed it to a general near-neutral (`N²≈0`)
+EOS-precision amplification, based on backing out each side's implied `N²`
+from a mismatching cell (the two `N²` differed by ~0.1% relative). The
+mechanism it described is real — `mixing_length ∝ 1/√N²` amplifies any
+relative `N²` error at a near-neutral cell — but its source was the
+capture, not the port: the declared capture printed T, S and `sigma_r` with
+16 significant digits (`FORMAT E25.16`), so the `N²` computed from those
+printed values had ~1e-16-relative input noise that near-neutral cells
+amplified. Recapturing the identical run with 17 digits (`ES25.16`, exact
+doubles; MITgcm's own fields agree between the two captures to <= 5.9e-16
+relative) and replaying the same port gives `mixing_length` max_abs 1.07e-13
+(max_rel 3.8e-15, 0 cells above 1%) versus 3.25e-4 on the 16-digit capture,
+and `visc_az` 9.5e-18 versus 1.1e-10. The regression test
+`test_isomip_mixing_length_ksrf_plus_1` accordingly no longer asserts a
+lower-bounded gap (its old `1e-4 < max_abs` floor certified the artifact)
+but a roundoff-level upper bound (`< 1e-11`, tightened from `< 0.01`).
 
-**`tke_after`'s residual (1.25% of cells, max_abs 9.1e-6) is the sum of the
-two mechanisms above**, plus the TKE buoyancy-term mechanism applied
-through this experiment's own coupled implicit solve: it carries the
-`kSrf` background-floor effect, the related `kSrf+1`/`kSrf+2` and one
-specific latitude row's own near-neutral-stratification effect, and the
-ordinary TKE-buoyancy-term redistribution the coupled solve introduces
-column-wide. A per-cell probe at several of these cells confirms `kappa_m`,
-mixing length, Prandtl number, and `N²` all match MITgcm exactly at the
-affected locations — i.e. the underlying formulas are exactly right, and
-the residual is the implicit TKE solve redistributing an already-correct,
-column-wide quantity into a region where the `N²`-amplification mechanism
-above already produces a small, real difference, not a new or separate
-defect.
+**`tke_after`'s residual (1.25% of cells, max_abs 9.1e-6) is real and is
+identical at 16 and 17 digits.** It carries the `kSrf` background-floor
+effect on the coupled TKE solve and the related first-wet `+1`/`+2` levels
+and one specific latitude row: at 17 digits its 17,934 cells above 1% sit
+at first-wet level `+1` (9,542 cells, max_abs 9.1e-6), `+2` (6,581 cells,
+max_abs 2.6e-8) and deeper (1,811 cells, 9.3e-9), while `mixing_length`
+agrees to 1e-13 at every one of those levels. That rules `mixing_length`
+(and hence the near-neutral `N²` amplification the earlier text invoked for
+the `+1`/`+2`/row-50 part) out as their cause; a per-cell probe from
+1DMIX-048 (`kappa_m`, mixing length, Prandtl number and `N²` all match
+MITgcm at the affected locations) is consistent with that, and the
+implicit TKE solve redistributing the `kSrf`-boundary effect is the
+explanation this document carried before. The residual mechanism at the
+`+2` and row-50 cells was not re-traced by 1DMIX-070; it stays a documented
+known gap under 1DMIX-038/048, not a print artifact.
 
 ## `global_ocean.90x40x15` — the only clean, z-coordinate IDEMIX capture
 
@@ -420,10 +446,13 @@ exercise and this port, not open action items:
 - **The Rib/Ricr-style threshold sensitivity that dominates several KPP
   discrepancies has no direct GGL90 analogue.** GGL90 has no hard
   Richardson-number threshold anywhere in its own formulas; its
-  discrepancies are instead governed by the two mechanisms in this document
-  (the TKE buoyancy-term distinction, and EOS-precision amplification near
-  neutral stratification), both of which are bounded, understood
-  numerical-precision effects rather than a hard-threshold-crossing
+  discrepancies are instead governed by the mechanisms in this document
+  (the TKE buoyancy-term distinction, the `isomip` `kSrf` boundary
+  convention, and the fact that `mixing_length ∝ 1/√N²` amplifies any input
+  noise near neutral stratification — which, in the 16-digit captures, was
+  the print quantization of the captured T/S/`sigma_r`, not a port
+  discrepancy; see the `isomip` section), all of which are bounded,
+  understood numerical effects rather than a hard-threshold-crossing
   phenomenon.
 
 ## Reproducibility
@@ -439,7 +468,25 @@ docstrings in
 which drive the same replay entry point
 (`scripts/run_ggl90_from_netcdf_input.py::run`). The `isomip`,
 `global_ocean.90x40x15`, and `global_ocean.cs32x15` statistics come from
-that same test module's own fresh measurements. The idealized-scenario
+that same test module's own fresh measurements.
+
+**Print precision (1DMIX-070).** All five captures above were recaptured on
+2026-09-30 with the instrumented Fortran printing 17 significant digits
+(`ES25.16`, exact for a double; the earlier captures used `E25.16`, 16
+digits), and the PARAM_* scalars likewise. Per capture, every MITgcm field
+agrees with the previous 16-digit file to <= ~5.9e-16 relative (print
+quantization only; `vermix`, `isomip`, `global_ocean.90x40x15`,
+`global_ocean.cs32x15` and `1D_ocean_ice_column` all confirmed), so no MITgcm
+physics changed. Replaying the same port on the old and new captures: the
+`vermix`, `global_ocean.90x40x15` and `global_ocean.cs32x15` statistics are
+identical at both precisions to the displayed digits (real gaps or clean
+agreement; nothing in them was print quantization); the `1D_ocean_ice_column`
+and `isomip` rows named above (`visc_az`, `mixing_length`, and the
+`1D_ocean_ice_column` `diff_kz`/`tke_after` roundoff rows) were print
+quantization and dropped to roundoff; the `isomip` `diff_kz` and `tke_after`
+gaps are real and unchanged. Evidence and per-file provenance:
+`devel-loop/loop_state/bob-1DMIX-070-evidence.md`, and
+`GGL90_port_validation/CAPTURES.md`. The idealized-scenario
 statistics come from
 `GGL90_port_validation/reports/ggl90_scenario_standalone_summary.md`,
 generated by `compare_scenario_ggl90_standalone.py::compare` against the
