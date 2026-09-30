@@ -888,3 +888,33 @@ Recording a receipt whose message_link disagrees with channel/ts fails with a cl
 
 ### Expected Effect
 Receipt files always equal the provider response in every field.
+
+---
+
+## 🔴 PROPOSED: verification evidence validity depends on the invoking shell's conda environment
+
+**Date Identified**: 2026-09-30  12:40
+**Status**: Proposed
+**UUID**: TEAM-EVIDENCE-SHELL-ENV-001
+**Category**: evidence_freshness
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
+**Anchors**: tools/esx/verify.py:fingerprint; tools/esx/project.py:environment; esx/project.json:environment_variables
+
+### Issue
+The verification fingerprint includes the configured environment_variables (here CONDA_PREFIX, CONDA_DEFAULT_ENV) read from the invoking process. Evidence produced by `python3 tools/esx/verify.py` from the base conda shell validates only under base; evidence produced under `conda run -n ecco` validates only under ecco. Two reviewers using different invocations produced evidence that no single gate context accepts, so the final packet reported FINAL_EVIDENCE_INVALID ("verification evidence is stale") for an unchanged candidate.
+
+### Evidence
+1DMIX-070: Richard's 3928609a... valid only under base, Bob's cf8ceb5c... valid only under ecco (recomputed fingerprint in both shells).
+
+### Potential Impact
+Valid, current evidence is reported stale; extra reviewer turns are spent re-running checks.
+
+### Proposed Fix
+Now that `{python}` can be pinned in project.json ("python"), drop CONDA_PREFIX/CONDA_DEFAULT_ENV from this project's environment_variables (the pinned interpreter path and toolchain probe outputs already identify the environment); kit-side, when "python" is set, have verify.py/agent guidance run gate tools through the configured interpreter so the invoking shell cannot change the fingerprint.
+
+### Acceptance Criteria
+The same verify.py evidence validates identically whether the gate is invoked from the base shell or `conda run -n ecco`.
+
+### Expected Effect
+Zero spurious stale-evidence refusals caused by invocation environment.
