@@ -465,8 +465,18 @@ def test_real_pipeline_momentum_invariant_to_ghat():
     ghat variants (all compared to the unmodified run): x4, x0, "interior"
     (+50 @ face 3, +20 @ face 8), "allfaces" (+10*(1..nz) at every face,
     strictly positive, max > 100) and "signed" (same magnitudes with
-    alternating sign). Covers leaks localised by face, by sign, or gated on a
-    large ghat value; see docs/model_contract.md for what remains uncovered.
+    alternating sign), plus two face-0 variants (1DMIX-067): "face0neg"
+    (`-ghat - 10*(1..nz)` with face 0 pushed below -100: every face negative,
+    face 0 negative with |ghat[0]| > 100) and "face0pos" (allfaces with face 0
+    raised above 100). Face 0 is where real KPP ghat lives but the other
+    variants only ever gave it 0, 5.8, 15.8 or 23. Covers leaks localised by
+    face, by sign, or gated on a large ghat value, and leaks keyed to a
+    face-0 condition ALONE (sign or |ghat[0]| > 100) at the sampled face-0
+    values (0, 5.84, 15.84, 23.35, -115.84, +115.84). This witness certifies
+    invariance only across its sampled variants: a condition that conjoins a
+    face-0 condition with the sign/threshold/extremum of another face, or
+    otherwise distinguishes an untested ghat configuration, is uncovered by
+    construction; see docs/model_contract.md for what remains uncovered.
 
     Non-vacuity is asserted: ghat is genuinely nonzero and differs across the
     runs, the tracers respond to it, and momentum has nonzero forcing and
@@ -483,6 +493,12 @@ def test_real_pipeline_momentum_invariant_to_ghat():
     # large-value threshold are what a leak could hide behind (1DMIX-064
     # correction round 1: leaks at faces >= 10, the last face, faces 1-2,
     # negative-only ghat and ghat.max() > 100 all escaped the first version).
+    # 1DMIX-067: face 0 (the only face with real nonzero ghat) only ever took
+    # 0, 5.8, 15.8 or 23, so a leak keyed to negative ghat[0] or to
+    # |ghat[0]| > 100 escaped; "face0neg" and "face0pos" close leaks keyed to
+    # those face-0 conditions ALONE. Conjunctions of a face-0 condition with
+    # another face's sign/threshold/extremum are not covered (see
+    # docs/model_contract.md).
     def _interior(g):
         g = g.copy()
         g[3] += 50.0
@@ -495,6 +511,18 @@ def test_real_pipeline_momentum_invariant_to_ghat():
     def _signed(g):
         return g + 10.0 * (1.0 + np.arange(g.size)) * (-1.0) ** np.arange(g.size)
 
+    def _face0neg(g):
+        # Negative at every face; face 0 pushed well below -100.
+        out = -g - 10.0 * (1.0 + np.arange(g.size))
+        out[0] -= 100.0
+        return out
+
+    def _face0pos(g):
+        # allfaces with face 0 raised above 100.
+        out = g + 10.0 * (1.0 + np.arange(g.size))
+        out[0] += 100.0
+        return out
+
     st_base, mo_base, g_base, kin = _real_pipeline_step(lambda g: g)
     variants = {
         "4x": _real_pipeline_step(lambda g: g * 4.0),
@@ -502,14 +530,19 @@ def test_real_pipeline_momentum_invariant_to_ghat():
         "interior": _real_pipeline_step(_interior),
         "allfaces": _real_pipeline_step(_allfaces),
         "signed": _real_pipeline_step(_signed),
+        "face0neg": _real_pipeline_step(_face0neg),
+        "face0pos": _real_pipeline_step(_face0pos),
     }
     st_zero = variants["0x"][0]
     st_big = variants["4x"][0]
     st_int = variants["interior"][0]
     st_all = variants["allfaces"][0]
     st_sgn = variants["signed"][0]
+    st_f0n = variants["face0neg"][0]
+    st_f0p = variants["face0pos"][0]
     g_big, g_zero, g_int = (variants[k][2] for k in ("4x", "0x", "interior"))
     g_all, g_sgn = variants["allfaces"][2], variants["signed"][2]
+    g_f0n, g_f0p = variants["face0neg"][2], variants["face0pos"][2]
 
     # Non-vacuity of the varied quantity and of the momentum problem.
     assert np.count_nonzero(g_base) > 0
@@ -525,12 +558,19 @@ def test_real_pipeline_momentum_invariant_to_ghat():
     # signed: genuinely contains negative values (and positive ones).
     assert float(np.min(g_sgn)) < 0.0 < float(np.max(g_sgn))
     assert np.count_nonzero(g_sgn[1:]) == g_sgn.size - 1
+    # face0neg (1DMIX-067): face 0 negative AND |face 0| > 100; all faces
+    # negative. face0pos: face 0 positive and > 100.
+    assert float(g_f0n[0]) < 0.0 and abs(float(g_f0n[0])) > 100.0
+    assert np.all(g_f0n < 0.0)
+    assert float(g_f0p[0]) > 100.0
     # Tracers must genuinely respond to ghat in the same runs.
     assert float(np.max(np.abs(st_base.theta - st_zero.theta))) > 1.0e-6
     assert float(np.max(np.abs(st_base.theta - st_big.theta))) > 1.0e-6
     assert float(np.max(np.abs(st_base.theta - st_int.theta))) > 1.0e-6
     assert float(np.max(np.abs(st_base.theta - st_all.theta))) > 1.0e-6
     assert float(np.max(np.abs(st_base.theta - st_sgn.theta))) > 1.0e-6
+    assert float(np.max(np.abs(st_base.theta - st_f0n.theta))) > 1.0e-6
+    assert float(np.max(np.abs(st_base.theta - st_f0p.theta))) > 1.0e-6
 
     for label, (st, mo, _g, _k) in variants.items():
         # Adapter contract: momentum-relevant outputs independent of ghat.

@@ -49,25 +49,6 @@ Every currently-tested grid/scheme combination in this project is confounded wit
 ### Proposed action and acceptance
 For each of the 3 new (grid, scheme) pairs: (1) create a new sibling `code_validation` variant directory following the already-established `<scheme>_code_validation/` naming convention (`global_ocean_90x40x15/kpp_code_validation/`, `global_ocean_cs32x15/kpp_code_validation/`, `lab_sea/ggl90_code_validation/`), symlinking the target scheme's Fortran source from the canonical `kpp_mods/`/`ggl90_mods/` (never copying, per this project's own established convention), copying the grid's own real headers/`packages.conf` unmodified except for the scheme package swap. (2) Hand-construct the missing namelist (`data.kpp` for the two `global_ocean` grids, `data.ggl90` for `lab_sea`) by adapting the closest existing working example in this project (e.g. `global_oce_latlon/input_validation/data.kpp` for the KPP namelists; `vermix`'s or `1D_ocean_ice_column/ggl90_code_validation`'s own real `GGL90_OPTIONS.h`/namelist values for the GGL90 one) — verify every adapted parameter against the target grid's own real forcing/geometry, don't blindly copy defaults tuned for a different grid. (3) Build+run+capture via the same Docker pipeline used throughout this project (budget real wall-clock time per grid size — the two `global_ocean` grids are comparable in size to `global_oce_latlon`'s own ~15-minute run per 1DMIX-049's measured precedent; `lab_sea` at 999 and 6-month/4368 timesteps should reuse the existing capture durations exactly, for direct comparability against the existing KPP captures at those same durations). (4) Permanentize into `KPP_port_validation/`/`GGL90_port_validation/` with clear, scheme-disambiguating filenames, add regression tests mirroring the existing per-experiment test-class conventions (bounded/subsampled where a full replay would be impractical, per this project's own established `lab_sea_6mo`/`global_oce_latlon` precedent). Acceptance: 4 new real MITgcm captures exist (90x40x15-KPP, cs32x15-KPP, lab_sea-GGL90-999, lab_sea-GGL90-6mo), each permanently stored and declared in `esx/project.json:external_inputs`, each with at least one numeric-tolerance regression test measured fresh against the actual new capture; `cs32x15-KPP`'s own report/test explicitly states the mechanism above (MITgcm's own real KPP has no `coordFac`-equivalent conversion either, so close port-vs-MITgcm agreement here would reflect a shared unit error, not genuine port fidelity) rather than presenting any resulting close agreement as a clean validation pass; full pytest suite passes.
 
-## UNRESOLVED: the real-pipeline ghat witness never makes face 0 negative or larger than 100, and face 0 is where real KPP ghat lives
-
-**Date Identified**: 2026-09-30T07:18:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-067
-**Anchors**: `Vertical_Mixing_Models/tests/test_kpp_ghat_gate.py::test_real_pipeline_momentum_invariant_to_ghat`; `docs/model_contract.md` (KPP ghat coverage map)
-
-### Issue or research question
-Richard's 1DMIX-064 round-1 review (APPROVE_WITH_FIXES, optional suggestion) found that the five variants give face 0 only the values 0, 5.8, 15.8 and 23. So a leak keyed to negative ghat at face 0, or to ghat[0] > 100, escapes, e.g. `visc_az[1] += 1e-3*min(ghat[0], 0)` (N1) and a face-0-only leak when ghat[0] > 100 (N5). The coverage map's generic "outside the tested values" bullet covers this in substance but does not name face 0.
-
-### Evidence
-Richard, 1DMIX-064 correction round 1, dispatch event 7395bad8f6d6457caed7a488bd00442e: scratch mutants N1 and N5 pass 6/6; N3/N4 (magnitude windows elsewhere) also escape and are named in the still-uncovered list.
-
-### Scientific or engineering impact
-Low: real KPP ghat at the surface face is nonnegative and bounded, so these leaks are contrived. But face 0 is the only face with real nonzero ghat on the fixture, so it is the one place a plausible surface-specific leak would sit.
-
-### Proposed action and acceptance
-Either add a variant that makes face 0 negative and above 100 (e.g. `-g - 10*(1+arange(nz))`) and show N1 and N5 fail while clean bytes pass, or name "sign or magnitude at face 0" explicitly in the still-uncovered list. Exact equality kept; no tolerance widened.
-
 ## UNRESOLVED: GGL90's epsilon-scaled Richardson number flips the Prandtl branch on a 1-ulp N² difference in near-neutral cells at the TKE floor
 
 **Date Identified**: 2026-09-30T08:56:00Z

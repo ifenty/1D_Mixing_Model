@@ -1804,3 +1804,27 @@ After 1DMIX-065, regenerate these captures with the same provenance rules via Do
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-09-30T08:55:15.590009+00:00 for iteration 2026-09-30T07:21:36.580645+00:00. Regenerated the 7 MITgcm captures the test suite loads but external_inputs did not list (GGL90 vermix_20_1dmix024, isomip_12, global_ocean_90x40x15_idemix_10, global_ocean_cs32x15_idemix_10, 1D_ocean_ice_column_11000; KPP lab_sea_6mo, seaice_obcs_1dmix034) via Docker MITgcm d861cd501 and the streaming parsers, with provenance in both CAPTURES.md files. external_inputs grew 30 -> 47 (MITgcm-side files of these captures plus 3 previously unlisted KPP outputs), so their absence now blocks verification instead of skipping tests. The streaming GGL90 parser was proven byte-identical to the old parser on 36- and 12-tile captures. INFERRED recipes (1D GGL90 namelist, lab_sea_6mo endTime) are confirmed by Richard's recomputation of the tracked Mac-era report PDFs to the last printed digit; the rejected attempt-A namelist does not match. Richard: round-0 REJECT on one false documentation sentence, round-1 APPROVE. Final verification EXECUTED PASS: scientific suite 128 passed, 3 skipped (pre-existing 1DMIX-010 fixture), 0 failed.
+
+## 🟢 RESOLVED: the real-pipeline ghat witness never makes face 0 negative or larger than 100, and face 0 is where real KPP ghat lives
+
+**Date Identified**: 2026-09-30T07:18:00Z
+**Date Resolved**: 2026-09-30T09:29:02.956304+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-067
+**Anchors**: `Vertical_Mixing_Models/tests/test_kpp_ghat_gate.py::test_real_pipeline_momentum_invariant_to_ghat`; `docs/model_contract.md` (KPP ghat coverage map)
+
+### Issue or research question
+Richard's 1DMIX-064 round-1 review (APPROVE_WITH_FIXES, optional suggestion) found that the five variants give face 0 only the values 0, 5.8, 15.8 and 23. So a leak keyed to negative ghat at face 0, or to ghat[0] > 100, escapes, e.g. `visc_az[1] += 1e-3*min(ghat[0], 0)` (N1) and a face-0-only leak when ghat[0] > 100 (N5). The coverage map's generic "outside the tested values" bullet covers this in substance but does not name face 0.
+
+### Evidence
+Richard, 1DMIX-064 correction round 1, dispatch event 7395bad8f6d6457caed7a488bd00442e: scratch mutants N1 and N5 pass 6/6; N3/N4 (magnitude windows elsewhere) also escape and are named in the still-uncovered list.
+
+### Scientific or engineering impact
+Low: real KPP ghat at the surface face is nonnegative and bounded, so these leaks are contrived. But face 0 is the only face with real nonzero ghat on the fixture, so it is the one place a plausible surface-specific leak would sit.
+
+### Proposed action and acceptance
+Either add a variant that makes face 0 negative and above 100 (e.g. `-g - 10*(1+arange(nz))`) and show N1 and N5 fail while clean bytes pass, or name "sign or magnitude at face 0" explicitly in the still-uncovered list. Exact equality kept; no tolerance widened.
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-09-30T09:29:02.956304+00:00 for iteration 2026-09-30T08:58:01.647123+00:00. test_real_pipeline_momentum_invariant_to_ghat gains face0neg (every face negative, face 0 = -115.8) and face0pos (face 0 = +115.8) variants with non-vacuity asserts, so leaks keyed to a face-0 condition alone (negative sign, |ghat[0]| > 100) at the sampled values are caught (N1, N5); both variants were shown necessary by ablation. Richard's round-0 REJECT showed face-0-plus-other-face conjunction leaks (M2-M4) escaping while the contract claimed face-0 sign covered; round 1 narrowed the claims to face-0-alone conditions at sampled values, named the conjunction class as uncovered, and stated that the witness certifies invariance only across its sampled variants (no further variants, to stop moving the boundary). Richard round 1: APPROVE. No model source changed. Final verification EXECUTED PASS: 128 passed, 3 skipped, 0 failed.

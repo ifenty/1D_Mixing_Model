@@ -264,19 +264,32 @@ path:
   x4 and x0 of the real `ghat`; "interior" (real `ghat` + 50 at face 3 and +20
   at face 8); "allfaces" (real `ghat` + `10*(1..nz)` at every face: strictly
   positive at faces 1..nz-1, maximum > 100); "signed" (same magnitudes with
-  alternating sign, so about half the faces are negative). Asserts, with exact
+  alternating sign, so about half the faces are negative); "face0neg"
+  (`-ghat - 10*(1..nz)` with a further -100 at face 0: every face negative,
+  face 0 about -116, so face 0 is negative with |face 0| > 100); "face0pos"
+  (allfaces with a further +100 at face 0: face 0 about +116, positive and > 100).
+  The two face-0 variants (1DMIX-067) are separate because a threshold leak
+  keyed to positive `ghat[0] > 100` is not reached by a negative face 0, and
+  vice versa. Asserts, with exact
   equality (no tolerance), that the adapter's `visc_az` (the only adapter
   field feeding the u/v solve) and the stepped `u_vel`/`v_vel` are
   bit-identical across variants, and asserts non-vacuity (nonzero `ghat`
   differing across runs, "allfaces" nonzero at every interior face and > 100,
-  "signed" containing both signs, tracers responding to every variant, nonzero
-  `tau`, momentum evolving). The interior, allfaces and signed variants are
+  "signed" containing both signs, "face0neg" negative at every face with
+  |face 0| > 100, "face0pos" face 0 > 100, tracers responding to every
+  variant, nonzero `tau`, momentum evolving). The interior, allfaces and signed variants are
   needed because real KPP `ghat` on the fixture is nonzero only at index 0 (the
   surface face, ignored by the implicit solve), so scaling it alone cannot make
   an interior leak visible. Correction round 1 (1DMIX-064): the first version
   (x4, x0, interior at faces 3 and 8 only, positive only) let leaks confined to
   faces >= 10, the last face, faces 1-2, negative `ghat`, or `ghat.max() > 100`
-  pass; the allfaces and signed variants close those.
+  pass; the allfaces and signed variants close those. Before 1DMIX-067 face 0,
+  the only face with real nonzero `ghat` on the fixture, took only 0, 5.8, 15.8
+  or 23 across all variants; the face0neg and face0pos variants close a leak
+  keyed to a face-0 condition alone (negative `ghat[0]`, or `ghat[0]` above
+  100 or below -100), at the sampled face-0 values only. They do not close a
+  leak that conjoins a face-0 condition with a condition on another face (see
+  the still-uncovered list).
 
 Coverage map (what a passing test establishes; per scratch mutant, 1DMIX-064
 correction round 1, each mutated in a copy of the tree and run against
@@ -288,7 +301,13 @@ the u surface flux):
 - Adapter -> `visc_az` boundary (`visc_az += c*ghat` in
   `KPPAdapter.compute_mixing`): real-pipeline witness only. Caught: all faces;
   faces >= 10 only; last face only; faces 1-2 only; negative-`ghat`-only;
-  leak only when `ghat.max() > 100`.
+  leak only when `ghat.max() > 100`. Face 0 (1DMIX-067; scratch mutants N1
+  and N5 from Richard's 1DMIX-064 review, which the earlier five variants
+  passed 6/6; both are leaks keyed to a face-0 condition alone): `visc_az[1] += 1e-3*min(ghat[0], 0)` (negative face 0) is
+  caught by face0neg alone; `visc_az[1] += 1e-3*ghat[0]*(ghat[0] > 100)`
+  (positive face 0 above 100) is caught by face0pos alone. Also caught (N6,
+  N7): a leak keyed to the count of nonzero `ghat` entries in 2..5, and a leak
+  keyed to `ghat[6]/max|ghat|`.
 - `ghat=` keyword into the momentum solve: all three witnesses.
 - Contaminated `k_interface` inside `_apply_vertical_diffusion` (u, or v only,
   all faces): quantity-level and real-pipeline witnesses (call-level spy
@@ -302,9 +321,25 @@ Still uncovered (the guarantee is per-boundary, per-variant, not absolute):
 
 - a leak that depends on `ghat` only outside the tested values: a magnitude
   window not reached by the variants (for example active only for
-  `0 < |ghat| < 1` at a face where the variants put no such value, or only
-  above the allfaces maximum of about 200); the variants are a finite sample of
-  `ghat` space, not a proof of independence;
+  `0 < |ghat[5]| < 1`, or only for `60 < |ghat[10]| < 100`; both measured
+  escaping, scratch mutants N4 and N3 of 1DMIX-064, still open). Leaks keyed
+  to a face-0 sign or |ghat[0]| > 100 condition alone are covered (1DMIX-067),
+  but face 0 still takes only
+  about -116, 0, 5.8 (base and interior), 15.8 (allfaces and signed), 23 (4x)
+  and +116 across the baseline plus seven variants, so a magnitude window at
+  face 0 between or beyond those values (for example 30 < |ghat[0]| < 100, or
+  |ghat[0]| > 116) remains uncovered; likewise any window above the allfaces
+  maximum of about 200; the variants are a finite sample of `ghat` space, not
+  a proof of independence;
+- a leak that conjoins a face-0 sign/threshold/magnitude condition with the
+  sign, threshold or extremum of another face (1DMIX-067 correction round 1,
+  measured escaping the tests 6/6 by Richard as scratch mutants: M2,
+  `ghat[0] < 0` and `ghat[5] > 0`; M3, `ghat[0] > 100` and `ghat[1] < 0`; M4,
+  `ghat[0] < -100` and `ghat[3] > 0`; also face 0 positive with every other
+  face negative, face 0 negative with all other faces zero, and face 0 as
+  the array extremum). The witness certifies invariance only across its
+  sampled variants; any condition that distinguishes untested `ghat`
+  configurations is uncovered by construction;
 - a leak gated on a quantity other than `ghat` (state, forcing, `dt`, step
   count) that is not exercised by this single-step fixture, or a `ghat`-like
   quantity recomputed inside the adapter from `state` (the wrapper varies only
