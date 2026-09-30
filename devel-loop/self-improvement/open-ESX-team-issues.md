@@ -803,12 +803,13 @@ Zero resume turns needed only to re-state footers.
 ## 🔴 PROPOSED: Capture provenance docs are outside the documentation inventory, so the sealed report cannot cite them
 
 **Date Identified**: 2026-09-30  07:00
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-DOC-INVENTORY-PROVENANCE-001
 **Category**: documentation_inventory
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
 **Anchors**: esx/project.json; tools/esx/doc_contract.py:docs_measure
+**Implementation-Reference**: esx/project.json configuration_paths (the six KPP/GGL90 *_port_validation provenance .md files listed individually, so no gitignored capture data enters the snapshot); validation receipt devel-loop/loop_state/process-evidence/team-doc-inventory-provenance-001.json
 
 ### Issue
 The KPP/GGL90 `*_port_validation/*.md` files (CAPTURES.md, CONVENTIONS_STANDALONE_DATA.md, NETCDF_DATA_FORMAT.md) hold the authoritative capture provenance but are not in the documentation inventory, so doc_contract rejects them as references ('contains no inventoried documentation').
