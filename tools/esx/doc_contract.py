@@ -420,11 +420,61 @@ def prefill(root, row, base_files, current, supplied=None, issue=None):
         'references': [], 'deployment': provenance}
 
 
+PROSE_OR_CONFIG = ('.md', '.rst', '.tex', '.txt', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '')
+
+
+def file_bound(row):
+    """Whether an undeclared judgment may be bound to its own file instead of the whole inventory.
+
+    Only a judgment that describes a code or test unit as it now is (`updated`,
+    `removed`) qualifies. Two kinds of judgment are about OTHER files and never
+    qualify: `reviewed_unchanged`, whose whole claim is that an existing
+    description still fits whatever else changed, and any judgment on a document,
+    map or configuration file, whose text describes code elsewhere. Carrying
+    those forward unexamined is exactly how a document goes stale.
+    """
+    suffix = Path(row.get('target', '').partition('::')[0]).suffix.lower()
+    return row.get('action') in ('updated', 'removed') and suffix not in PROSE_OR_CONFIG
+
+
+def same_judgment(sealed, measured, row=None):
+    """Whether a sealed judgment's own inputs are unchanged in the current tree.
+
+    A judgment with declared dependencies is bound to its target, those
+    dependencies and its cited references. One without them is bound to the whole
+    inventory, with one exception: an `updated` or `removed` judgment on a code or
+    test unit (see file_bound) is bound to the whole FILE that holds the target
+    and to every reference it cites. Between two rounds of one issue something
+    always changes somewhere, so whole-inventory binding reused nothing for those
+    (0 of 136-259 judgments per round in measured use) and pushed coordinators to
+    refill plans by script with no check at all. An edit to a sibling definition
+    in the same file still forces a fresh look at everything in that file. A
+    report sealed before the file state was measured keeps the whole-inventory
+    rule for every judgment.
+    """
+    if not isinstance(sealed, dict) or not isinstance(measured, dict):
+        return False
+    without_file = lambda value: {k: v for k, v in value.items() if k != 'file_sha256'}
+    if sealed.get('dependency_inventory') is None:  # declared dependencies
+        return without_file(sealed) == without_file(measured)
+    if 'file_sha256' not in sealed or row is None or not file_bound(row):
+        return without_file(sealed) == without_file(measured)
+    return all(sealed.get(key) == measured.get(key)
+               for key in ('target', 'references', 'dependency_contexts', 'file_sha256'))
+
+
+def inputs_equal(sealed, measured):
+    """Exact equality, tolerating a report sealed before file_sha256 was measured."""
+    if isinstance(sealed, dict) and isinstance(measured, dict) and 'file_sha256' not in sealed:
+        measured = {k: v for k, v in measured.items() if k != 'file_sha256'}
+    return sealed == measured
+
+
 def draft(root, issue, base_ref, previous_ref=None):
     """Build complete coverage, optionally retaining measured unchanged judgments.
 
-    Explicit dependency references permit selective reuse. Judgments with no
-    declared dependency slice conservatively depend on the whole inventory.
+    With ``previous_ref`` a judgment from the earlier sealed report of this issue
+    is carried forward when its own inputs are unchanged (see same_judgment).
     Every changed or unmeasured judgment remains blank for human review.
     """
     base = load(root, base_ref, 'baseline', issue)
@@ -444,12 +494,16 @@ def draft(root, issue, base_ref, previous_ref=None):
             prior = prior_rows.get(row['target'])
             if prior and prior.get('change') == row['change'] and prior.get('judgment_inputs'):
                 try:
-                    valid = prior['judgment_inputs'] == judgment_inputs(root, prior, current)
+                    measured = judgment_inputs(root, prior, current)
+                    valid = same_judgment(prior['judgment_inputs'], measured, prior)
                 except (ValueError, OSError, KeyError):
                     valid = False
                 if valid:
                     payload['dispositions'][index] = copy.deepcopy(prior)
                     payload['dispositions'][index]['reused_from'] = previous_ref
+                    # Sealing measures the inputs again against the current tree.
+                    payload['dispositions'][index]['judgment_inputs'] = measured
+        payload['reused'] = sum(bool(r.get('reused_from')) for r in payload['dispositions'])
         delta = previous.get('map_delta', {})
         # Map judgments discuss routes across the entire inventory. Their reuse
         # requires the same inventory, retaining coverage of new dependencies.
@@ -482,7 +536,8 @@ def judgment_inputs(root, row, current):
     hashes = [{k: entry[k] for k in ('ref', 'sha256', 'components')} for entry in (excerpt(root, r) for r in refs)]
     return {'target': target, 'references': hashes,
             'dependency_contexts': {ref: unit_inputs(current, ref) for ref in dependencies if '::' in ref},
-            'dependency_inventory': None if dependencies else digest(current)}
+            'dependency_inventory': None if dependencies else digest(current),
+            'file_sha256': current.get(row['target'].partition('::')[0], {}).get('sha256')}
 
 
 def docs_measure(files, ref):
@@ -553,13 +608,13 @@ def validate_report(root, report, issue, base_ref, current=None):
         refs.update(links)
         measured = judgment_inputs(root, row, current)
         if 'judgment_inputs' in row:
-            require(row['judgment_inputs'] == measured, f'{target}: documentation judgment inputs changed')
+            require(inputs_equal(row['judgment_inputs'], measured), f'{target}: documentation judgment inputs changed')
         if row.get('reused_from'):
             previous = load(root, row['reused_from'], 'documentation', issue)
             require(previous.get('baseline') == base_ref and 'references' in previous,
                     f'{target}: invalid documentation reuse source')
             found = [r for r in previous.get('dispositions', []) if r.get('target') == target]
-            require(len(found) == 1 and found[0].get('judgment_inputs') == measured,
+            require(len(found) == 1 and same_judgment(found[0].get('judgment_inputs'), measured, found[0]),
                     f'{target}: reused judgment has changed target, dependencies or references')
             require(all(row.get(k) == found[0].get(k) for k in
                         ('action', 'change', 'reason', 'references', 'dependencies')),
@@ -681,11 +736,10 @@ def check_done(root, start, done, records, candidate_signature):
                     from workflow_policy import resolved_dispatch
                     require(resolved_dispatch(found[0], records, done),
                             f'{role}: incomplete dispatch needs a completed continuation or explicit replacement')
-                    # A failed turn may have produced no footer. Its actual
-                    # status remains in history; the completed continuation or
-                    # replacement supplies current navigation and approval.
-                    if footer.get('orientation'):
-                        validate_orientation(root, footer['orientation'], done['id'], base_ref, role, fresh=False)
+                    # A failed or superseded turn may have produced no footer, or a
+                    # malformed one. Its actual status remains in history, and it
+                    # supplies neither navigation nor approval: the completed
+                    # continuation or replacement does, and that one is validated.
                     continue
                 require(isinstance(raw_footer, dict), f'{role}: completed dispatch needs a structured footer')
                 if historical_completion(entry, found[0], base, base_ref):
@@ -749,6 +803,21 @@ def parse_receipt(value):
     return parse_ref(text)
 
 
+NAVIGATE_EXAMPLE = '''example:
+  doc_contract.py navigate --issue PROJECT-001 --role bob \\
+    --baseline '{"path": "devel-loop/loop_state/maintenance/<sha>.json", "sha256": "<sha>"}' \\
+    --map 'docs/code_map.md#verification-routes' \\
+    --target 'src/model.py::step' --target 'tests/test_model.py::<module>' \\
+    --doc docs/model_contract.md \\
+    --use 'Trace the update into its oracle before judging the change.'
+
+--map takes the code map path and a heading slug (the heading text lower-cased, with
+spaces as hyphens). Give at least two --target entries, each path::symbol or
+path::<module>, and at least one --doc. --baseline may also be the path of a file
+holding the reference. To repeat an earlier orientation use --reuse-args RECEIPT.
+'''
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[2])
@@ -757,11 +826,12 @@ def main():
     capture.add_argument('--issue', required=True)
     capture.add_argument('--git-base', help='recover from a known commit; review every intervening change')
     capture.add_argument('--reason')
-    nav = sub.add_parser('navigate', help='display a bounded dependency slice and save role evidence')
+    nav = sub.add_parser('navigate', help='display a bounded dependency slice and save role evidence',
+                         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=NAVIGATE_EXAMPLE)
     nav.add_argument('--issue', required=True)
     nav.add_argument('--baseline', type=parse_ref, help='required unless --reuse-args; must match when both are given')
     nav.add_argument('--role', choices=ROLES, help='required unless --reuse-args; must match when both are given')
-    nav.add_argument('--map')
+    nav.add_argument('--map', help='docs/code_map.md#heading-slug: the heading text lower-cased, spaces as hyphens')
     nav.add_argument('--target', action='append', help='path::qualified.symbol or path::<module>')
     nav.add_argument('--doc', action='append', help='path#heading or path::symbol')
     nav.add_argument('--reuse-args', type=parse_receipt, metavar='ORIENTATION_REF',

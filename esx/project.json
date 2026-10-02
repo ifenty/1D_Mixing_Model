@@ -179,7 +179,9 @@
     "provider": "slack",
     "channel": "C0C4ZNQNG1M",
     "message_prefix": "[1D-Mixing]",
-    "authorization_reference": "esx/project_profile.md#runtime-and-operations (communication)"
+    "authorization_reference": "esx/project_profile.md#runtime-and-operations (communication)",
+    "heartbeat_minutes": 60,
+    "screen_status_minutes": 15
   },
   "commit_policy": {
     "mode": "owner_authorization",

@@ -586,15 +586,16 @@ One recorded discovery with its probe evidence replaces fifteen near-duplicate j
 
 ---
 
-## 🔴 PROPOSED: The ESX template imports `adx_workflow`, a module that exists only in the ADX project
+## 🟡 IMPLEMENTED: The ESX template imports `adx_workflow`, a module that exists only in the ADX project
 
 **Date Identified**: 2026-09-29  12:00
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-TEMPLATE-ADX-IMPORT-001
 **Category**: template_foreign_project_import
 **Severity**: Low
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-29-template-adx-import-leak/assessment.md
 **Anchors**: tools/esx/workflow_handoff.py:142
+**Implementation-Reference**: ESX-Team 1b4f3cf (1.6.0), deployed 2026-10-02
 
 ### Issue
 `tools/esx/workflow_handoff.py` tries `import adx_workflow as lifecycle` and falls back to `workflow_policy` on `ImportError`. `adx_workflow` doesn't exist in this project. It is left over from the ADX project the ESX framework was extracted from, and it ships in the upstream template (`ESX-Team/template/tools/esx/workflow_handoff.py:142`, present since ESX-Team's first commit `f8f6df1`).
@@ -770,15 +771,16 @@ Zero host-memory exhaustion incidents from role commands.
 
 ---
 
-## 🔴 PROPOSED: Reports returned through SubagentHandback were recorded as incomplete dispatches
+## 🟡 IMPLEMENTED: Reports returned through SubagentHandback were recorded as incomplete dispatches
 
 **Date Identified**: 2026-09-30  07:00
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-HANDBACK-CAPTURE-001
 **Category**: completion_capture
 **Severity**: High
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
 **Anchors**: tools/esx/agent_runtime.py:stop_record
+**Implementation-Reference**: ESX-Team ff1c0ee (1.5.7), deployed 2026-09-30
 
 ### Issue
 The CLI now makes Agent-tool subagents return their final report via the SubagentHandback tool; SubagentStop's last_assistant_message is then empty and ESX 1.5.6 records the finished dispatch as `incomplete: missing ... footer`.
@@ -831,15 +833,16 @@ Provenance docs are bound by sealed reports.
 
 ---
 
-## 🔴 PROPOSED: Final verification must be rebound against the closeout because the review packet lacks agent_continuity
+## 🟡 IMPLEMENTED: Final verification must be rebound against the closeout because the review packet lacks agent_continuity
 
 **Date Identified**: 2026-09-30  07:00
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-RECEIPT-CONTINUITY-001
 **Category**: closeout_receipt
 **Severity**: Low
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
 **Anchors**: tools/esx/loop_lifecycle.py:prepare_done; tools/esx/final_verification.py
+**Implementation-Reference**: ESX-Team 9125d34 via merge 599c9cf (1.6.0), deployed 2026-10-02
 
 ### Issue
 final_verification binds its receipt to the review packet's signed fields, but agent_continuity (a signed closeout field) is only added after prepare-done, so the receipt is always stale and `rebind-receipt` refuses a packet-bound receipt.
@@ -891,15 +894,16 @@ Receipt files always equal the provider response in every field.
 
 ---
 
-## 🔴 PROPOSED: verification evidence validity depends on the invoking shell's conda environment
+## 🟡 IMPLEMENTED: verification evidence validity depends on the invoking shell's conda environment
 
 **Date Identified**: 2026-09-30  12:40
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-EVIDENCE-SHELL-ENV-001
 **Category**: evidence_freshness
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-29-runtime-permission-denied-crash/assessment.md
 **Anchors**: tools/esx/verify.py:fingerprint; tools/esx/project.py:environment; esx/project.json:environment_variables
+**Implementation-Reference**: ESX-Team 1b4f3cf (1.6.0), deployed 2026-10-02
 
 ### Issue
 The verification fingerprint includes the configured environment_variables (here CONDA_PREFIX, CONDA_DEFAULT_ENV) read from the invoking process. Evidence produced by `python3 tools/esx/verify.py` from the base conda shell validates only under base; evidence produced under `conda run -n ecco` validates only under ecco. Two reviewers using different invocations produced evidence that no single gate context accepts, so the final packet reported FINAL_EVIDENCE_INVALID ("verification evidence is stale") for an unchanged candidate.
@@ -921,15 +925,16 @@ Zero spurious stale-evidence refusals caused by invocation environment.
 
 ---
 
-## 🔴 PROPOSED: implementer comparisons re-derive a port quantity instead of citing the port's own computation
+## 🟡 IMPLEMENTED: implementer comparisons re-derive a port quantity instead of citing the port's own computation
 
 **Date Identified**: 2026-09-30  14:50
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-BRIEF-PORT-REFERENCE-001
 **Category**: scientific_accuracy
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
 **Anchors**: .claude/ESX-team/ARCHITECT.md; MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py::test_global_ocean_90x40x15_dvsq_is_four_point_average
+**Implementation-Reference**: ESX-Team 61fcc38 (1.6.0), deployed 2026-10-02
 
 ### Issue
 In 1DMIX-054, the implementer built a "column-local" reference for dVsq/shear_sq by re-deriving the formula. He carried over a 0.5 factor that belongs only to MITgcm's four-term neighbour average; the port computes du**2+dv**2 (kpp_core_driver.py line 669). The test's loose assertion (median > 0.1) held either way, so the wrong figures reached a docstring and KPP_VALIDATION_RESULTS.md. The error surfaced only when the reviewer recomputed independently, costing a correction round.
@@ -982,15 +987,16 @@ Validation-report passages are covered by the sealed documentation contract.
 
 ---
 
-## 🔴 PROPOSED: `/esx-loop cancel` must not stop the loop; it should only prevent the next iteration from starting from the top
+## 🟡 IMPLEMENTED: `/esx-loop cancel` must not stop the loop; it should only prevent the next iteration from starting from the top
 
 **Date Identified**: 2026-09-30  15:10
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-LOOP-CANCEL-DRAIN-001
 **Category**: loop_control
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
 **Anchors**: .claude/commands/esx-loop.md; tools/esx/loop_control.py:cancel
+**Implementation-Reference**: ESX-Team 80f674b (1.6.0), deployed 2026-10-02
 
 ### Issue
 The owner ran `/esx-loop cancel` while Bob was implementing 1DMIX-072. The command text says "drain the queued cancellation notification, and stop". `loop_control.cancel` archives the state immediately and queues "Loop ending: cancelled ... Unfinished work remains recorded on disk". Arch took this as abandonment: it stopped its wait monitors and offered to stop the running implementer. The owner's intended semantics: "/esx-loop cancel should only stop the NEXT loop cycle, not stop work in progress". After cancel, the Stop hook also no longer holds Arch in-turn for the running dispatch, although `loop_gate.py --next` still reports the active iteration.
@@ -1025,15 +1031,16 @@ Owner cancellations never strand in-flight work.
 
 ---
 
-## 🔴 PROPOSED: Stop hook blocks the owner session while a subagent runs, and Claude Code shows each block to the owner as "Stop hook error"
+## 🟡 IMPLEMENTED: Stop hook blocks the owner session while a subagent runs, and Claude Code shows each block to the owner as "Stop hook error"
 
 **Date Identified**: 2026-09-30  15:15
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-LOOP-INFLIGHT-BLOCK-NOISE-001
 **Category**: owner_experience
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
 **Anchors**: tools/esx/ralph_stop.py:305; tools/esx/ralph_stop.py:native_in_flight
+**Implementation-Reference**: ESX-Team 80f674b, 537f11d (1.6.0), deployed 2026-10-02
 
 ### Issue
 When Arch ends a turn while a native subagent (Bob/Richard) runs, `ralph_stop.step` returns `{"decision": "block", "reason": "An ESX dispatch (retained session or Agent-tool subagent) is still running. Wait in-turn for its completion record (do not end the turn to wait), then continue with tools/esx/loop_gate.py --next."}`. Claude Code renders every Stop-hook block to the owner as "Ran 2 stop hooks / Stop hook error: ..." and "Stop hook blocking error from command: ...". The owner asked whether this was an ESX failure and called the messages ridiculous.
@@ -1058,15 +1065,16 @@ No false error lines shown to the owner during normal dispatch waits; no busy-wa
 
 ---
 
-## 🔴 PROPOSED: long loop runs need a 15-minute on-screen status line and an hourly one-sentence Slack heartbeat
+## 🟡 IMPLEMENTED: long loop runs need a 15-minute on-screen status line and an hourly one-sentence Slack heartbeat
 
 **Date Identified**: 2026-09-30  15:25
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-LOOP-PROGRESS-CADENCE-001
 **Category**: owner_experience
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-09-30-1dmix-054-retrospective/assessment.md
 **Anchors**: tools/esx/notifications.py; tools/esx/ralph_stop.py; tools/esx/loop_gate.py; .claude/skills/esx-announce/SKILL.md
+**Implementation-Reference**: ESX-Team 80f674b, 537f11d (1.6.0), c3a14df (1.6.1), deployed 2026-10-02; the 15-minute screen cadence is guidance plus the wake helper, not gate-enforced
 
 ### Issue
 On long runs (multi-hour issues, a 20-iteration loop, Bob dispatches lasting 15-60+ min), the owner sees nothing on screen for long stretches. The harness had to inject "The user hasn't heard from you in a while" several times this session. Slack gets only event-driven posts (issue start/close/new issue/loop end), so there is no periodic sign of life or ETA.
@@ -1100,15 +1108,16 @@ The owner always knows the loop is alive, where it is, and roughly how long rema
 
 ---
 
-## 🔴 PROPOSED: a skipped `--check-start` cannot be recovered once work has started, and nothing stops dispatch without it
+## 🟡 IMPLEMENTED: a skipped `--check-start` cannot be recovered once work has started, and nothing stops dispatch without it
 
 **Date Identified**: 2026-10-02  11:15
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-LOOP-CHECK-START-RECOVERY-001
 **Category**: loop_control
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-072-retrospective/assessment.md
 **Anchors**: tools/esx/loop_gate.py:Gate.check_start; tools/esx/final_verification.py; tools/esx/doc_contract.py:validate_orientation
+**Implementation-Reference**: ESX-Team 80f674b (1.6.0), deployed 2026-10-02
 
 ### Issue
 In 1DMIX-072, Arch ran `--prepare` and then dispatched Bob without running `--check-start`. `--next` said only "finish active iteration 1DMIX-072 and run --check-done", and nothing refused the dispatch. At closeout, `final_verification.py` / the final review packet refused with FINAL_EVIDENCE_INVALID: "successful --check-start receipt required before final verification".
