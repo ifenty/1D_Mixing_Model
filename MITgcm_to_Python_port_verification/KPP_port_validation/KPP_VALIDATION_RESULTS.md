@@ -110,10 +110,13 @@ below), because the prior expectation recorded here -- that both sides would be
 "equally unaware of the unit mismatch, so a clean-looking comparison would agree
 for the wrong reason rather than fail visibly" -- turned out to be only partly
 true: MITgcm's own KPP run *does* fail visibly (it aborts at iteration 1), the
-port does **not** agree with it (NaN in 91% of interior cells), and the only
-field that agrees closely (`ghat`) does so because both sides evaluate the same
-formula on the same unit-confused geometry. That capture is a known-gap
-characterization, never a validation.
+port did **not** agree with it (NaN in 91% of interior cells, measured before
+1DMIX-072), and the only field that agreed closely (`ghat`) did so because both
+sides evaluate the same formula on the same unit-confused geometry. Since
+1DMIX-072 the port refuses such input with a `ValueError`
+(`kpp_core_driver.py::validate_zcoordinate_geometry`), so there is no port replay of
+that capture any more. That capture is a known-gap characterization, never a
+validation.
 
 ## Two mechanisms that explain most of the tail below
 
@@ -584,21 +587,35 @@ each part is stated here so that no number on this capture is mistaken for port 
    therefore holds **one** timestep (the KPP computation before the abort). A rerun with
    `KPP_GHAT` `#undef`'d (evidence only) completes 10 steps with the same unit-confused KPP
    output.
-2. **The port does not agree.** In every column the port's interior `visc_az`/`diff_kz_s`/`diff_kz_t`
-   are NaN in most cells (91.0% of the 22,694 interior cells; the first floating-point error when
-   one column is replayed under `np.seterr(all='raise')` is an overflow in `swfrac`'s `exp(-z/d)`
+2. **The port did not agree, and (1DMIX-072) now refuses the input.** Measured before the
+   guard existed: in every column the port's interior `visc_az`/`diff_kz_s`/`diff_kz_t`
+   were NaN in most cells (91.0% of the 22,694 interior cells; the first floating-point error when
+   one column was replayed under `np.seterr(all='raise')` is an overflow in `swfrac`'s `exp(-z/d)`
    with the Pa-valued depth; whether that is the only NaN source was not traced further), and its
-   `hbl` differs from MITgcm's by a median 1.2e6 with 76.6% of columns differing by more than 1
-   (Pa-as-metres). The port replay produces NaN silently rather than raising the `ValueError` the
-   project profile asks for on unsupported input -- tracked as 1DMIX-072, not changed here.
-3. **Only `ghat` is close, and that is shared unit arithmetic.** Median absolute difference 0,
-   87.3% of the 22,526 active cells within 1%, and the maximum `6.3275154945147095e10` is identical
+   `hbl` differed from MITgcm's by a median 1.2e6 with 76.6% of columns differing by more than 1
+   (Pa-as-metres). That silent NaN output is what the project profile forbids for unsupported
+   input; 1DMIX-072 added `KPP/kpp_core_driver.py::validate_zcoordinate_geometry`, called first by
+   `KPPDriver.compute_mixing`, which raises `ValueError` (naming the offending quantity and value,
+   the pressure-coordinate reason and 1DMIX-040) for geometry that cannot be a metres-scale
+   z-coordinate column. This capture's geometry -- `depth` positive Pa (max 4.9466694605501e7),
+   `cell_thickness` 5.0e5..7.1e6 -- fails the sign and the 11,000 m magnitude checks. The replay
+   harness (`run_python_kpp_on_dataset`) validates the grid up front, because it otherwise turns a
+   per-column exception into a NaN cell. The numbers in item 2 and 3 are therefore historical
+   (measured before the guard, when the pre-change tests asserting them passed) and can no longer
+   be re-measured through the driver.
+3. **Only `ghat` was close, and that is shared unit arithmetic.** Median absolute difference 0,
+   87.3% of the 22,526 active cells within 1%, and the maximum `6.3275154945147095e10` was identical
    on both sides to the last digit: the same formula on the same unit-confused geometry reproduces
    the same number. That value is itself unphysical (physical `ghat` is O(1e-3..1e3)), so this
-   agreement says nothing about the port being correct for pressure coordinates.
+   agreement says nothing about the port being correct for pressure coordinates. Its executable
+   port-side test was retired with 1DMIX-072 (reproducing it would mean bypassing the guard to
+   characterize unsupported input); the MITgcm-side fact that `ghat` peaks at 6.3e10 is still
+   asserted (`test_global_ocean_cs32x15_mitgcm_kpp_is_itself_unit_confused`).
 
-The three tests on this capture (`test_global_ocean_cs32x15_*`) assert exactly these facts as a
-bounded known-gap characterization and their docstrings repeat the mechanism.
+The tests on this capture are `test_global_ocean_cs32x15_mitgcm_kpp_is_itself_unit_confused`
+(MITgcm-side facts, item 1, unchanged) and
+`test_global_ocean_cs32x15_port_rejects_pressure_coordinate_input` (the `ValueError`, through the
+driver and the replay harness), and their docstrings repeat the mechanism.
 
 ## The 6 idealized scenarios, standalone Fortran driver — isolating the physics from any capture noise
 
@@ -666,11 +683,12 @@ exercise and this port, not open action items:
   pressure-coordinate KPP configuration is out of scope for this project
   entirely -- not merely untested. 1DMIX-054 measured what one looks like
   (section "`global_ocean_cs32x15` + KPP"): MITgcm's own KPP is unit-confused and
-  its run aborts at iteration 1, the port returns NaN in most interior cells, and
-  the one field that agrees closely (`ghat`) does so through shared unit-confused
-  arithmetic, so no agreement on such a capture can be read as fidelity. Every
-  capture and idealized scenario validated here is otherwise a z-coordinate ocean
-  configuration.
+  its run aborts at iteration 1, the port then returned NaN in most interior cells,
+  and the one field that agreed closely (`ghat`) did so through shared
+  unit-confused arithmetic, so no agreement on such a capture can be read as
+  fidelity. Since 1DMIX-072 the port raises `ValueError` on such geometry instead
+  of returning NaN. Every capture and idealized scenario validated here is
+  otherwise a z-coordinate ocean configuration.
 - **Double-diffusion (`KPP_DOUBLEDIFF`) is not implemented.** Real MITgcm
   optionally adds a double-diffusive contribution to the interior salt and
   temperature diffusivities — salt fingering in salt-stratified,
@@ -734,7 +752,7 @@ come from the PDF validation reports generated by
 `compute_mixing_statistics`, run against the paired NetCDF captures under
 `KPP_port_validation/{inputs,outputs}_from_mitgcm/`. The `1D_ocean_ice_column`
 (11,000-step), `lab_sea` (6-month), `seaice_obcs`, `global_oce_latlon`,
-`global_ocean_90x40x15` and `global_ocean_cs32x15` (1DMIX-054) statistics come from the regression assertions and docstrings in
+`global_ocean_90x40x15` and (MITgcm-side facts only, since 1DMIX-072) `global_ocean_cs32x15` (1DMIX-054) statistics come from the regression assertions and docstrings in
 `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`,
 which drive the same replay entry point
 (`scripts/run_kpp_from_netcdf_input.py::run_python_kpp_on_dataset`) against

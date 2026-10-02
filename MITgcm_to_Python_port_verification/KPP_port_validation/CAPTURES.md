@@ -276,10 +276,12 @@ the abort is the application of `ghat` (6.3e10) to the tracers.
 **cs32x15 must not be read as validation.** MITgcm's `pkg/kpp` has no pressure-coordinate handling (`coordFac`,
 `usingPCoords`: zero occurrences, unlike `pkg/ggl90/ggl90_calc.F`). Measured on R8: MITgcm's own `hbl` is negative in
 all 1,621 columns (99.26% exactly the surface layer's Pa value), its interior mixing is the constant Pa-unit background
-(`viscAr = 1.0309e5`), `ghat` reaches 6.3e10 and the run aborts; the port's interior mixing coefficients are NaN in 91%
-of cells and its `hbl` differs by a median 1.2e6 (the silent NaN is tracked as 1DMIX-072); the only close field, `ghat`, agrees because both sides evaluate the same
+(`viscAr = 1.0309e5`), `ghat` reaches 6.3e10 and the run aborts. Before 1DMIX-072 the port's interior mixing coefficients were NaN in 91%
+of cells and its `hbl` differed by a median 1.2e6, and the only close field, `ghat`, agreed because both sides evaluated the same
 formula on the same Pa-as-metres geometry (maximum identical to the last digit, `6.3275154945147095e10`) -- a shared
-unit error, not fidelity. Details and the test that encodes each fact:
+unit error, not fidelity. Since 1DMIX-072 `KPPDriver.compute_mixing` raises `ValueError` on this geometry
+(`kpp_core_driver.py::validate_zcoordinate_geometry`; depth is positive Pa, max 4.9e7), so the capture serves as MITgcm-side
+evidence only and has no port replay. Details and the tests that encode each fact:
 `KPP_VALIDATION_RESULTS.md` ("`global_ocean_cs32x15` + KPP"),
 `tests/test_kpp_mitgcm_validation_extended.py::test_global_ocean_cs32x15_*`.
 

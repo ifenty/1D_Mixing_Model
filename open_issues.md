@@ -45,21 +45,24 @@ High for interpretation: the documented "known gaps" on multi-column captures (i
 ### Proposed action and acceptance
 Make the replays reconstruct MITgcm's tracer-point velocities from neighbouring columns (with MITgcm's masks/halo conventions) and re-measure every multi-column comparison; separate the replay artifact from real gaps per field (as 1DMIX-070 did for print precision), updating known-gap assertions only with 16-vs-averaged evidence and never widening an upper tolerance. Acceptance: shear inputs reproduce MITgcm's captured shear to roundoff on every multi-column capture; each known-gap assertion is re-justified or removed.
 
-## UNRESOLVED: the KPP port returns NaN silently for pressure-coordinate input instead of raising the ValueError the project profile requires for unsupported input
+## UNRESOLVED: the GGL90 port returns finite wrong values for pressure-coordinate input, and a declared GGL90 capture is pressure-coordinate
 
-**Date Identified**: 2026-09-30T14:20:00Z
+**Date Identified**: 2026-09-30T15:30:00Z
 **Status**: Unresolved
-**UUID**: 1DMIX-072
-**Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_routines.py`; `esx/project_profile.md`
+**UUID**: 1DMIX-073
+**Anchors**: `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_core_driver.py::validate_zcoordinate_geometry`; `MITgcm_to_Python_port_verification/scripts/run_ggl90_from_netcdf_input.py`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`
 
 ### Issue or research question
-On the 1DMIX-054 `global_ocean_cs32x15_pcoords_1` capture (pressure coordinates, Pa-valued depth), `KPPDriver.compute_mixing` returns visc_az/diff_kz NaN in 91% of interior cells; the first floating-point error is an overflow in `swfrac`'s `exp(-z/d)`. The project profile's invalid-input rule asks for an explicit ValueError on unsupported input rather than silent NaN.
+1DMIX-072 made KPP reject pressure-coordinate geometry. `GGL90Driver.compute_mixing` has no equivalent check. The declared GGL90 capture `global_ocean_cs32x15_idemix_10` (recipe G4, `OCEANICP`) is itself pressure-coordinate: positive Pa depths up to 4.95e7, `cell_thickness` 5.03e5 to 7.11e6. Its current tests therefore compare the port against MITgcm on geometry the port does not support (1DMIX-040).
 
 ### Evidence
-Bob, 1DMIX-054 (cs32_direct.py under devel-loop/loop_state/scratch/bob-1DMIX-054/, `np.seterr(all='raise')`).
+Bob, 1DMIX-072 unit 4 (devel-loop/loop_state/bob-1DMIX-072-evidence.md): replaying steps 0-9 gives 813,820 wet cells, all finite, with `visc_az`/`diff_kz` capped at `GGL90viscMax`=100, `mixing_length` up to 1.449e7 m and `tke_after` up to 4.199e5. There is no raise and no geometry check anywhere in the GGL90 path.
 
 ### Scientific or engineering impact
-Silent NaN can propagate into diagnostics unnoticed; the port has no pressure-coordinate support (neither does MITgcm's KPP), so the correct behaviour is to reject such input explicitly.
+It is the same silent-incorrect-result risk the contract records. Existing GGL90 cs32x15 known-gap assertions characterize unsupported input as if it were a port comparison.
 
 ### Proposed action and acceptance
-Add an explicit input guard (e.g. depth units/sign/magnitude consistent with a z-coordinate column, or an explicit coordinate flag) that raises ValueError with a clear message; test that the cs32x15 capture input raises and that every existing z-coordinate capture and scenario is unaffected (full suite passes, no tolerance change).
+Share the z-coordinate guard (move `validate_zcoordinate_geometry` to a common module) and call it from `GGL90Driver.compute_mixing`. Convert the GGL90 cs32x15 port-side tests to assert the ValueError, keeping MITgcm-side facts and recording historical numbers the way 1DMIX-072 did. Acceptance:
+- every z-coordinate GGL90 capture and scenario is unaffected, with outputs bit-identical;
+- the full suite passes;
+- no tolerance is widened.

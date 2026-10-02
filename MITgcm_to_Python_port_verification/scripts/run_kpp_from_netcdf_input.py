@@ -42,7 +42,7 @@ from multiprocessing import Pool, cpu_count
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'Vertical_Mixing_Models'))
 
-from KPP.kpp_core_driver import KPPDriver
+from KPP.kpp_core_driver import KPPDriver, validate_zcoordinate_geometry
 from KPP.kpp_parameters import KPPParameters
 
 # Try to import tqdm for progress bar
@@ -648,6 +648,15 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
     -------
     xr.Dataset
         Python KPP outputs with UUID provenance tracking
+
+    Raises
+    ------
+    ValueError
+        If the input grid (`depth`/`cell_thickness`) is not a metres-scale
+        z-coordinate column (1DMIX-072; e.g. the pressure-coordinate
+        `global_ocean.cs32x15` capture, 1DMIX-040), raised by
+        `KPP.kpp_core_driver.validate_zcoordinate_geometry` before any column is
+        run. (Per-column exceptions are otherwise recorded as NaN cells.)
     """
 
     if verbose:
@@ -707,6 +716,13 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
     # Extract grid info
     depth = inputs_ds.depth.values
     cell_thickness = inputs_ds.cell_thickness.values
+
+    # Fail fast on non-z-coordinate geometry (1DMIX-072). KPPDriver.compute_mixing
+    # rejects it too, but both column loops below turn ANY per-column exception
+    # into a NaN cell ("except Exception ... continue" / the worker's error dict),
+    # which would re-create the silent all-NaN output the driver guard exists to
+    # prevent (e.g. the pressure-coordinate global_ocean.cs32x15 capture, 1DMIX-040).
+    validate_zcoordinate_geometry(depth, cell_thickness)
 
     # Allocate output arrays
     visc_az_out = np.full((n_time, nx, ny, nz), np.nan)

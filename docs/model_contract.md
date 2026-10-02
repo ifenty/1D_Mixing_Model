@@ -8,7 +8,15 @@ explicitly justified in a code comment and, if uncertain, opened as an issue
 
 ## Coordinate and unit conventions
 
-- `z` positive **up**; `depth` positive **down**; `z = -depth`.
+- `z` positive **up**; the physical depth below the surface is positive **down**
+  (`z = -depth_below_surface`). The port's `depth` arguments are **signed
+  cell-centre depths, negative downward, i.e. they are `z` itself** (surface near 0,
+  deeper cells more negative): `main/column_grid.py::ColumnGrid.depth` (its
+  `z_positive_up` property is an alias for it), and the `depth` argument of
+  `KPPDriver.compute_mixing` and `GGL90Driver.compute_mixing`, whose docstrings say
+  "negative, increasing downward". This is what
+  `KPP/kpp_core_driver.py::validate_zcoordinate_geometry` enforces (`depth <= 0`) and why
+  the EOS pressure below is computed from `-depth`.
 - Pressure is positive and increases with depth. The EOS pressure argument fed to
   `jmd95_eos`'s pressure-dependent bulk-modulus terms is `main/eos.py::
   _depth_to_eos_pressure(depth, rho_const, gravity)` = `rho_const*gravity*1e-4 *
@@ -74,10 +82,32 @@ explicitly justified in a code comment and, if uncertain, opened as an issue
   a silent-incorrect-result risk for any future p-coordinate MITgcm
   configuration, not merely a coverage gap. (KPP, measured under 1DMIX-054 on
   the same experiment: MITgcm's own `pkg/kpp` has no `coordFac`/`usingPCoords`
-  handling either and its run aborts at iteration 1 with `ghat`=6.3e10; the port
-  replay of that capture returns NaN in 91% of interior `visc_az`/`diff_kz`
-  cells without raising (tracked as 1DMIX-072), and only `ghat` agrees closely -- through shared
-  Pa-as-metres arithmetic, not fidelity. See `KPP_VALIDATION_RESULTS.md`.) **Resolved (1DMIX-040)**: Arch
+  handling either and its run aborts at iteration 1 with `ghat`=6.3e10; before
+  1DMIX-072 the port replay of that capture returned NaN in 91% of interior
+  `visc_az`/`diff_kz` cells without raising, and only `ghat` agreed closely --
+  through shared Pa-as-metres arithmetic, not fidelity. See
+  `KPP_VALIDATION_RESULTS.md`.) **Explicit rejection for KPP (1DMIX-072)**:
+  `KPPDriver.compute_mixing` now calls
+  `Vertical_Mixing_Models/KPP/kpp_core_driver.py::validate_zcoordinate_geometry`
+  first and raises `ValueError` -- naming the offending quantity, its value and
+  the pressure-coordinate reason (citing 1DMIX-040) -- when `depth`/
+  `cell_thickness` cannot be a metres-scale z-coordinate column: non-finite;
+  `cell_thickness` not strictly positive; any `depth` > 0 (`depth` is negative
+  downward; a pressure-coordinate grid presents as positive Pa); or `max|depth|`,
+  `sum(cell_thickness)` or `max(cell_thickness)` above
+  `MAX_ZCOORD_EXTENT_M = 11000` m (deepest ocean point ~10,935 m; every capture,
+  scenario grid and test fixture in this repo has `max|depth|` <= 5,450 m,
+  the `cs32x15` capture 4.9e7). It is a pure pre-check: outputs for valid input
+  are bit-identical (`test_guard_is_pure_pre_check_outputs_bit_identical_with_and_without_it`).
+  Limits: a column expressed in dbar (1 dbar ~ 1 m) or any metre-sized wrong grid
+  is not detectable by magnitude, and depth-versus-cumulative-thickness
+  consistency is deliberately not checked (existing fixtures and ice-shelf column
+  slices legitimately break it). The replay harness
+  `run_kpp_from_netcdf_input.py::run_python_kpp_on_dataset` validates the grid up
+  front because it otherwise turns every per-column exception into a NaN cell.
+  **GGL90 has no equivalent guard** (as described above it returns finite, wrong
+  values on Pa geometry; scope check in 1DMIX-072's evidence, tracked as 1DMIX-073
+  in `open_issues.md`). **Resolved (1DMIX-040)**: Arch
   decided pressure-coordinate support is permanently out of scope rather than
   implementing real `coordFac`-equivalent support — this project's own
   Primary Goal and every one of its own captures/scenarios are z-coordinate

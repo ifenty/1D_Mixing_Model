@@ -1930,3 +1930,27 @@ For each of the 3 new (grid, scheme) pairs: (1) create a new sibling `code_valid
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-09-30T14:44:42.891410+00:00 for iteration 2026-09-30T12:49:42.429131+00:00. First geometry-matched cross-scheme MITgcm captures: KPP on global_ocean_90x40x15 and global_ocean_cs32x15 (10 steps), GGL90 on lab_sea (999 steps and 6 months/4368 steps), built in Docker with MITgcm d861cd501 and the 17-digit stock-plus-output instrumented mods. Hand-constructed namelists are labelled CONSTRUCTED in CAPTURES.md with a per-parameter justification. Parsing uses the streaming parsers. Every capture is declared in external_inputs with its sha256. 26 regression tests were added using existing capture-class tolerances; no tolerance was widened. Known gaps are characterized with bounded assertions. The multi-column shear/dVsq gaps are traced to replay-input velocity averaging: MITgcm's four-point neighbour average reproduces the captured dVsq/shear exactly, while column-local du^2+dv^2 differs by a median of 27% (dVsq), filed as 1DMIX-071. cs32x15+KPP pressure-coordinate agreement is documented as shared-unit arithmetic, not fidelity, and the port's silent NaN there is filed as 1DMIX-072. Richard APPROVE after 2 correction rounds (round 1: mechanism wording, citations, bounds; round 2: column-local dVsq convention and figures). Final verification EXECUTED PASS: 163 passed, 3 skipped, 0 failed.
+
+## 🟢 RESOLVED: the KPP port returns NaN silently for pressure-coordinate input instead of raising the ValueError the project profile requires for unsupported input
+
+**Date Identified**: 2026-09-30T14:20:00Z
+**Date Resolved**: 2026-10-02T11:09:32.633049+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-072
+**Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_routines.py`; `esx/project_profile.md`
+
+### Issue or research question
+On the 1DMIX-054 `global_ocean_cs32x15_pcoords_1` capture (pressure coordinates, Pa-valued depth), `KPPDriver.compute_mixing` returns visc_az/diff_kz NaN in 91% of interior cells; the first floating-point error is an overflow in `swfrac`'s `exp(-z/d)`. The project profile's invalid-input rule asks for an explicit ValueError on unsupported input rather than silent NaN.
+
+### Evidence
+Bob, 1DMIX-054 (cs32_direct.py under devel-loop/loop_state/scratch/bob-1DMIX-054/, `np.seterr(all='raise')`).
+
+### Scientific or engineering impact
+Silent NaN can propagate into diagnostics unnoticed; the port has no pressure-coordinate support (neither does MITgcm's KPP), so the correct behaviour is to reject such input explicitly.
+
+### Proposed action and acceptance
+Add an explicit input guard (e.g. depth units/sign/magnitude consistent with a z-coordinate column, or an explicit coordinate flag) that raises ValueError with a clear message; test that the cs32x15 capture input raises and that every existing z-coordinate capture and scenario is unaffected (full suite passes, no tolerance change).
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-10-02T11:09:32.633049+00:00 for iteration 2026-09-30T14:48:37.065384+00:00. The KPP port now raises an explicit ValueError on geometry that cannot be a metres-scale z-coordinate column, instead of silently returning NaN. The check is validate_zcoordinate_geometry, a pure pre-check run as step 0 of KPPDriver.compute_mixing: values finite, dz > 0, depth <= 0, and max|depth|, sum(dz) and max(dz) each <= 11,000 m (deepest ocean ~10,935 m). The replay harness validates the grid up front, because it turns per-column exceptions into NaN. 15 guard unit tests. The cs32x15 port-side tests now assert the ValueError; the ghat shared-unit test is retired, with its last measured numbers kept as historical evidence, and the MITgcm-side unit-confusion assertions are unchanged. Docs updated, including the contract's signed negative-down depth convention. GGL90 has the same exposure (a declared GGL90 capture is pressure-coordinate), filed as 1DMIX-073. Richard: APPROVE after 1 documentation-only correction round. His HEAD-vs-candidate replays of 5 real captures are bit-identical, and no valid geometry is rejected. Final verification EXECUTED PASS: 177 passed, 3 skipped, 0 failed. Process note: --check-start was skipped after --prepare and replayed late on the stashed pre-change tree (filed as an ESX-Team issue).

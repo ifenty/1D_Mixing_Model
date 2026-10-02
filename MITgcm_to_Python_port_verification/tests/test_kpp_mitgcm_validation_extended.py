@@ -1175,9 +1175,11 @@ def test_global_ocean_90x40x15_ghat(result_global_ocean_90x40x15, ocean_mask_glo
 
 
 # ========================================================================
-# global_ocean_cs32x15 + KPP (1DMIX-054): pressure coordinates (OCEANICP,
-# TEOS10), 12 tiles, ONE timestep (MITgcm's own run aborts after step 1, see
-# below). KNOWN-GAP CHARACTERIZATION ONLY -- NOT a validation of the port.
+# global_ocean_cs32x15 + KPP (1DMIX-054, updated 1DMIX-072): pressure
+# coordinates (OCEANICP, TEOS10), 12 tiles, ONE timestep (MITgcm's own run
+# aborts after step 1, see below). KNOWN-GAP CHARACTERIZATION ONLY -- NOT a
+# validation of the port, and (since 1DMIX-072) NOT a port replay either: the
+# port now REJECTS this input with a ValueError.
 #
 # The issue's hypothesis (1DMIX-054) was that, because MITgcm's pkg/kpp has NO
 # coordFac/usingPCoords handling (grep-confirmed: no occurrence in pkg/kpp),
@@ -1193,34 +1195,41 @@ def test_global_ocean_90x40x15_ghat(result_global_ocean_90x40x15, ocean_mask_glo
 #      MITgcm's own solution monitor STOPs the run (an abort, not a silent pass).
 #      With KPP_GHAT #undef'd (evidence-only rerun) the run completes 10 steps,
 #      still with hbl=-2.5e5 in 99.3% of columns and background-only mixing.
-#  (2) The port does NOT agree (its silent NaN output on unsupported input is
-#      tracked as 1DMIX-072): in every one of the 1,621 columns most of the
-#      interior interface cells of its visc_az/diff_kz are NaN (91.0% of the
-#      22,694 interior cells; the first floating-point error when one column is
-#      replayed under np.seterr(all='raise') is an overflow in `swfrac`'s
-#      exp(-z/d) with the Pa-valued depth -- whether that is the only source of
-#      the NaNs was not traced further), and its hbl differs from MITgcm's by a median
-#      1.2e6 (Pa-as-metres). Only `ghat` is close (median_abs 0, 87% of active
-#      cells within 1%; the largest value, 6.3275154945147095e10, is
-#      IDENTICAL to the last digit): that is the same unit-confused formula fed
-#      the same unit-confused inputs on both sides -- shared unit arithmetic,
-#      not port fidelity -- and MITgcm's own value there is 6.3e10, itself
-#      unphysical.
+#  (2) The port did NOT agree, and (1DMIX-072) now refuses to try. Before the
+#      guard, replaying every one of the 1,621 columns produced NaN in most
+#      interior interface cells of visc_az/diff_kz (91.0% of the 22,694 interior
+#      cells; the first floating-point error under np.seterr(all='raise') is an
+#      overflow in `swfrac`'s exp(-z/d) with the Pa-valued depth), hbl differing
+#      from MITgcm's by a median 1.2e6 (Pa-as-metres), and only `ghat` close
+#      (median_abs 0, 87% of active cells within 1%; the largest value,
+#      6.3275154945147095e10, IDENTICAL to the last digit on both sides -- shared
+#      unit arithmetic, not port fidelity; MITgcm's own value there is itself
+#      unphysical). Those port-side numbers were measured fresh before the guard
+#      (the pre-change tests asserting them passed); they can no longer be
+#      re-measured through the driver because `KPPDriver.compute_mixing` raises
+#      ValueError on this geometry (`validate_zcoordinate_geometry`, permanent
+#      p-coordinate exclusion, 1DMIX-040). The former ghat "shared unit
+#      arithmetic" test was retired for that reason, not weakened: reproducing
+#      it would mean bypassing the guard to characterize explicitly unsupported
+#      input. Its finding survives in KPP_VALIDATION_RESULTS.md ("global_ocean_
+#      cs32x15 + KPP" item 3) and in the MITgcm-side assertion below that
+#      ghat's own maximum is the unphysical 6.3e10.
 # ========================================================================
 
 @pytest.fixture(scope='module')
 def result_global_ocean_cs32x15():
+    """MITgcm-side data only: the capture inputs and MITgcm's own outputs. There
+    is no port replay to load -- the port rejects this geometry (1DMIX-072)."""
     _require(DATA_GLOBAL_OCEAN_CS32X15)
     _require(OUTPUTS_GLOBAL_OCEAN_CS32X15)
     inputs_ds = xr.open_dataset(DATA_GLOBAL_OCEAN_CS32X15).load()
-    python_ds = run_python_kpp_on_dataset(inputs_ds, verbose=False)
     mitgcm_ds = xr.open_dataset(OUTPUTS_GLOBAL_OCEAN_CS32X15).load()
-    return inputs_ds, python_ds, mitgcm_ds
+    return inputs_ds, mitgcm_ds
 
 
 @pytest.fixture(scope='module')
 def ocean_mask_global_ocean_cs32x15(result_global_ocean_cs32x15):
-    inputs_ds, _python_ds, _mitgcm_ds = result_global_ocean_cs32x15
+    inputs_ds, _mitgcm_ds = result_global_ocean_cs32x15
     return _ocean_mask(inputs_ds['temperature'].values, inputs_ds['salinity'].values)
 
 
@@ -1240,7 +1249,7 @@ def test_global_ocean_cs32x15_mitgcm_kpp_is_itself_unit_confused(
       that MITgcm's tracer transport then multiplies into a -1e13 K
       potential temperature, stopping the run.
     """
-    inputs_ds, _python_ds, mitgcm_ds = result_global_ocean_cs32x15
+    inputs_ds, mitgcm_ds = result_global_ocean_cs32x15
     assert inputs_ds.sizes['time'] == 1, "the cs32x15 KPP capture is a single-timestep capture"
     ocean = ocean_mask_global_ocean_cs32x15
     assert int(ocean.sum()) == 1621
@@ -1254,53 +1263,58 @@ def test_global_ocean_cs32x15_mitgcm_kpp_is_itself_unit_confused(
     assert float(np.max(mitgcm_ds['ghat'].values[ocean])) > 1e10
 
 
-def test_global_ocean_cs32x15_port_disagrees_known_gap(result_global_ocean_cs32x15,
-                                                        ocean_mask_global_ocean_cs32x15):
-    """KNOWN-GAP CHARACTERIZATION (1DMIX-054): the port does NOT reproduce
-    MITgcm on this pressure-coordinate capture, and no bound here is a
-    fidelity bound. Measured fresh over the 1,621 wet columns: 76.6% of
-    columns have |hbl diff| > 1 (Pa-as-metres), median |hbl diff| 1.24e6, max
-    4.9e7; the port's interior `visc_az`/`diff_kz_s`/`diff_kz_t` are NaN in
-    91.0% of the 22,694 interior cells (first floating-point error in a replayed column:
-    an overflow in `swfrac` exp(-z/d) with Pa-valued z; see the section comment). Asserted as bounds so that a change in either direction
-    (a silent 'improvement' without a documented pressure-coordinate scope
-    reversal, cf. 1DMIX-040, or a still worse behavior) is noticed. The silent
-    NaN output itself (no ValueError on unsupported input) is tracked as
-    1DMIX-072.
-    """
-    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_cs32x15
-    ocean = ocean_mask_global_ocean_cs32x15
-    hbl_diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)[ocean]
-    assert float(np.mean(hbl_diff > 1.0)) > 0.5, "port hbl now agrees with MITgcm on most p-coordinate columns"
-    assert float(np.median(hbl_diff)) > 1e5
-    assert float(np.max(hbl_diff)) < 1e9
-    for field in ('visc_az', 'diff_kz_s', 'diff_kz_t'):
-        nan_frac = float(np.mean(np.isnan(python_ds[field].values[ocean][:, 1:])))
-        assert nan_frac > 0.5, (
-            f"cs32x15 {field}: NaN fraction {nan_frac:.3f} fell below the known 0.91 -- the port's "
-            "behavior on pressure-coordinate input changed; update this test and its docs.")
-
-
-def test_global_ocean_cs32x15_ghat_agreement_is_shared_unit_arithmetic_not_fidelity(
+def test_global_ocean_cs32x15_port_rejects_pressure_coordinate_input(
         result_global_ocean_cs32x15, ocean_mask_global_ocean_cs32x15):
-    """The ONE field on which the port and MITgcm do agree closely on this
-    capture, and why that agreement is not a validation. Measured fresh over
-    the 22,526 active `ghat` cells: median_abs 0, 87.3% within 1% rel, and the
-    maximum value -- 6.3275154945147095e10 on both sides, identical to the last
-    digit -- is a number MITgcm itself produces from Pa used as metres (a
-    physical value is O(1e-3..1e3)). Both sides evaluate the same formula on the
-    same unit-confused geometry, so they reproduce each other's unit error;
-    agreement here says nothing about the port being correct for pressure-
-    coordinate configurations. (Asserted: closeness on the agreeing subset AND
-    that the agreed value is itself unphysical.)
+    """PORT-SIDE (1DMIX-072, replaces the 1DMIX-054 NaN characterization): the
+    port must refuse this pressure-coordinate capture with an explicit
+    `ValueError`, not return NaN silently (the project profile's invalid-input
+    rule; p-coordinate support is permanently out of scope, 1DMIX-040).
+
+    Capture geometry (measured fresh): `depth` is POSITIVE Pa, decreasing with
+    the level index (max 4.9466694605501e7 at level 0), `cell_thickness` 5.0e5 ..
+    7.1e6 -- not a metres-scale z-coordinate column, whatever the sign.
+    Asserted three ways, none of which is a tolerance:
+    (a) `KPPDriver.compute_mixing` directly on a real, fully-wet captured column
+        raises, with a message naming the offending quantity, its value, the
+        pressure-coordinate reason and 1DMIX-040;
+    (b) the replay harness `run_python_kpp_on_dataset` raises on the whole
+        capture (it pre-validates the grid, because it otherwise swallows every
+        per-column exception into a NaN cell, which would re-create the silent
+        NaN one layer up);
+    (c) the same holds for every wet column: the geometry is column-independent,
+        so no wet column can be computed.
     """
-    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_cs32x15
+    from KPP.kpp_core_driver import KPPDriver, validate_zcoordinate_geometry
+    inputs_ds, _mitgcm_ds = result_global_ocean_cs32x15
     ocean = ocean_mask_global_ocean_cs32x15
-    mit = mitgcm_ds['ghat'].values[ocean]
-    py = python_ds['ghat'].values[ocean]
-    active = mit > 1e-6
-    rel = np.abs(py[active] - mit[active]) / mit[active]
-    assert float(np.median(np.abs(py[active] - mit[active]))) == 0.0
-    assert float(np.mean(rel < 0.01)) > 0.8
-    assert float(np.max(mit)) > 1e10
-    assert float(np.max(py)) == pytest.approx(float(np.max(mit)), rel=1e-12)
+    depth = inputs_ds['depth'].values
+    dz = inputs_ds['cell_thickness'].values
+    assert float(depth.max()) == pytest.approx(4.9466694605501e7, rel=1e-12)
+    assert float(depth.min()) > 0.0, "cs32x15 depth is expected positive Pa"
+
+    # (a) the driver, on a real fully-wet captured column with its captured forcing
+    theta_all = inputs_ds['temperature'].values[0]
+    salt_all = inputs_ds['salinity'].values[0]
+    wet_all_levels = ocean[0] & np.all(theta_all != 0.0, axis=-1)
+    i, j = (int(a[0]) for a in np.nonzero(wet_all_levels))
+    with pytest.raises(ValueError) as exc:
+        KPPDriver().compute_mixing(
+            theta=theta_all[i, j], salt=salt_all[i, j],
+            u_vel=inputs_ds['u_velocity'].values[0, i, j], v_vel=inputs_ds['v_velocity'].values[0, i, j],
+            depth=depth, cell_thickness=dz,
+            ustar_forcing=float(inputs_ds['ustar'].values[0, i, j]),
+            bo_forcing=float(inputs_ds['bo'].values[0, i, j]),
+            bosol_forcing=float(inputs_ds['bosol'].values[0, i, j]),
+            coriol=float(inputs_ds['f_coriolis'].values[0, i, j]))
+    msg = str(exc.value)
+    assert f"max(depth)={float(depth.max()):.6g}" in msg, msg
+    assert 'pressure-coordinate' in msg and '1DMIX-040' in msg, msg
+
+    # (b) the replay harness on the whole capture
+    with pytest.raises(ValueError, match=r'1DMIX-040'):
+        run_python_kpp_on_dataset(inputs_ds, verbose=False)
+
+    # (c) every wet column has this same geometry, so none can be computed
+    with pytest.raises(ValueError):
+        validate_zcoordinate_geometry(depth, dz)
+    assert int(ocean.sum()) == 1621

@@ -22,10 +22,13 @@ KPP_VALIDATION_RESULTS.md`, `tests/test_kpp_mitgcm_validation_extended.py`):
   with the same unit-confused KPP output (background-only mixing, `hbl` = -2.5e5 in 99.3% of columns).
 * The issue that requested this capture predicted that a port without pressure-coordinate handling
   might agree closely with MITgcm because both would make the same unit error. Measured: it does
-  **not**. The port returns NaN in 91% of the interior interface cells of `visc_az`/`diff_kz`
-  (the first floating-point error when one column is replayed is an overflow in `swfrac`'s
-  `exp(-z/d)` with the Pa-valued depth) and its `hbl` differs from MITgcm's by a median 1.2e6.
-  Only `ghat` is close (median abs diff 0, 87% of active cells within 1%, maximum 6.3275154945147095e10
+  **not**. Measured before 1DMIX-072, the port returned NaN in 91% of the interior interface cells of
+  `visc_az`/`diff_kz` (the first floating-point error when one column is replayed is an overflow in
+  `swfrac`'s `exp(-z/d)` with the Pa-valued depth) and its `hbl` differed from MITgcm's by a median 1.2e6.
+  Since 1DMIX-072, `KPPDriver.compute_mixing` and the replay harness `run_python_kpp_on_dataset` raise
+  `ValueError` on this geometry (`KPP/kpp_core_driver.py::validate_zcoordinate_geometry`), so the port
+  can no longer be replayed on this capture and those port-side numbers are historical.
+  Only `ghat` was close (median abs diff 0, 87% of active cells within 1%, maximum 6.3275154945147095e10
   identical on both sides): **that agreement is shared unit-confused arithmetic, not port fidelity**,
   and the value MITgcm itself produces there is unphysical.
 

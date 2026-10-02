@@ -482,7 +482,8 @@ exercise and this port, not open action items:
   which is the only configuration this validation exercise is designed to
   say anything meaningful about. The equivalent KPP limitation was expected
   to produce a misleading close agreement; measured under 1DMIX-054 it does not (MITgcm's own KPP
-  aborts at iteration 1 and the port returns NaN in most interior cells; see
+  aborts at iteration 1 and the port returned NaN in most interior cells before 1DMIX-072, which
+  now makes `KPPDriver` raise `ValueError` on such geometry instead; see
   `KPP_VALIDATION_RESULTS.md`), so for both schemes a pressure-coordinate capture gives a large,
   visible disagreement -- see `global_ocean.cs32x15` above for the measured size for GGL90.
 - **`calc_mean_vert_shear` is declared but not implemented.** This
