@@ -85,3 +85,41 @@ A real difference in the ice-shelf surface boundary treatment of TKE (the kSrf l
 
 ### Proposed action and acceptance
 Reduce one sub-ice-shelf column to a single-column witness and compare the TKE surface boundary condition and its first interior levels in `ggl90_calc.F` (kSrf handling, SHELFICE friction velocity) with the port. Acceptance: the mechanism is identified with file and line on both sides, and the port is corrected to match MITgcm or the difference is documented with its cause.
+
+## UNRESOLVED: the port's shortwave surface buoyancy forcing (`bfsfc`) differs from MITgcm's, leaving the remaining KPP mixing residuals
+
+**Date Identified**: 2026-10-02T22:50:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-078
+**Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_routines.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
+
+### Issue or research question
+After 1DMIX-075 a few KPP cells still differ from MITgcm, and some moved slightly further away. Richard's review traced them to the surface buoyancy forcing `bfsfc`: the port's value differs systematically from MITgcm's captured `bfsfc_final` (median about 5e-9), in shallow and full-depth columns alike. The shortwave part is the suspect (the fraction of shortwave absorbed above the boundary layer, `swfrac`).
+
+### Evidence
+Richard, 1DMIX-075 review (devel-loop/loop_state/scratch/aef4cdd3c224c88b0/pop_bfsfc_latlon.txt, pop_bfsfc_labsea6mo.txt): with MITgcm's `bfsfc_final` substituted into the port, `visc_az`, `diff_kz` and `ghat` agree to 1e-13 on every hbl-equal global_oce_latlon column-step (wet levels 2 to 15) and to 1e-12 on lab_sea 6-month; without the substitution the same cells differ by up to 0.077 / 0.0945.
+
+### Scientific or engineering impact
+This is now the leading cause of the remaining KPP mixing-coefficient residuals on global_oce_latlon (62 `visc_az` and 1,136 `diff_kz_s` cells above 1% in the first 5 steps) and lab_sea. It may also explain part of 1DMIX-076.
+
+### Proposed action and acceptance
+Compare the port's `bfsfc` computation with MITgcm's (`kpp_routines.F` bldepth and blmix, `swfrac` and its water-type coefficients, the depth at which the shortwave fraction is evaluated) on a single-column witness, and find the first differing quantity. Acceptance: the cause is identified with file and line on both sides; the port is corrected to match, the captured `bfsfc_final` is reproduced to roundoff, and the latlon and lab_sea residuals are re-measured without widening any tolerance.
+
+## UNRESOLVED: the stored `combined_storm` KPP standalone data predates 1DMIX-075, and two documents state its agreement without that qualification
+
+**Date Identified**: 2026-10-02T22:50:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-079
+**Anchors**: `MITgcm_to_Python_port_verification/tests/test_kpp_combined_storm_hbl_substitution.py`; `MITgcm_to_Python_port_verification/scripts/kpp_hbl_substitution_experiment.py`; `docs/model_contract.md`; `docs/code_map.md`
+
+### Issue or research question
+1DMIX-075 changed the `combined_storm` KPP trajectory from output time 9 on. The stored standalone datasets (`outputs_from_python_standalone/combined_storm`, the Python run and the Fortran driver output made from it) were not regenerated, so the test compares the current port with the Fortran output on the old run's states. That comparison is valid point by point (600 of 600 cells bit-exact) but is not a validation of the new trajectory.
+
+### Evidence
+Bob and Richard, 1DMIX-075: the Fortran side was not re-run (Bob cited no `gfortran` on the host; the project's MITgcm builds run in Docker). Richard's optional notes: `docs/model_contract.md` and `docs/code_map.md` say "now exactly 0" without "port re-run on stored diagnostics; Fortran not re-run"; the seaice `ghat` test docstring cites `kpp_scheme_specific.py:520-572`, a line range the change moved; `reports/kpp_scenario_standalone_summary.md` is a generated file whose narrative is hand-edited, so regenerating it would drop the 1DMIX-075 paragraph.
+
+### Scientific or engineering impact
+Declared external inputs no longer correspond to the port that the scenario runs with. The agreement is real but narrower than two documents state.
+
+### Proposed action and acceptance
+Regenerate the `combined_storm` KPP standalone datasets (Python run and Fortran driver, built in Docker) with the current port, record their provenance and hashes, and re-run the comparison on the new trajectory. Add the qualifying clause to the two documents until then, replace the stale line pointer with a symbol name, and make the summary report's 1DMIX-075 text survive regeneration. Acceptance: the declared datasets match the current port's `combined_storm` run, the comparison passes on them, and no document states the agreement more broadly than the evidence.
