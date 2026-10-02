@@ -1146,15 +1146,16 @@ No stranded approved candidates and no stash workarounds.
 
 ---
 
-## 🔴 PROPOSED: the loop has no pause for a usage limit, so the Stop hook spends iterations on a coordinator that is trying to stop
+## 🟡 IMPLEMENTED: the loop has no pause for a usage limit, so the Stop hook spends iterations on a coordinator that is trying to stop
 
 **Date Identified**: 2026-10-02  18:00
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-LOOP-USAGE-LIMIT-PAUSE-001
 **Category**: loop_control
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-073-retrospective/assessment.md
 **Anchors**: tools/esx/ralph_stop.py; tools/esx/loop_control.py
+**Implementation-Reference**: ESX-Team b73aecb (1.6.2), deployed 2026-10-02; a live pause and resume under a running loop is not yet exercised
 
 ### Issue
 When the coordinator's session reaches its usage limit, the harness tells it to finish the piece in hand and stop. An active loop does not allow that: the Stop hook returns the continuation prompt and advances the iteration counter. In 1DMIX-073 this happened three times (iterations 1 -> 2 -> 3 -> 4) with no iteration of work ending. The coordinator's only quiet exit was to have a subagent running, which spends the same allowance.
@@ -1176,15 +1177,16 @@ No iterations lost to usage-limit pauses.
 
 ---
 
-## 🔴 PROPOSED: a repeated stop of the same reviewer counts as a new completion and invalidates a final packet mid-verification
+## 🟡 IMPLEMENTED: a repeated stop of the same reviewer counts as a new completion and invalidates a final packet mid-verification
 
 **Date Identified**: 2026-10-02  20:30
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-FINAL-PACKET-LATEST-EVENT-001
 **Category**: packet_tooling
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-071-retrospective/assessment.md
 **Anchors**: tools/esx/final_verification.py; tools/esx/workflow_records.py; tools/esx/hooks.py
+**Implementation-Reference**: ESX-Team b73aecb (1.6.2), deployed 2026-10-02
 
 ### Issue
 A native reviewer agent can stop more than once at the end of a turn (its hand-back, then again when background work it started completes). Each stop records a completion event with the same footer. A final packet built from the first event is ready, and `final_verification.py run` checks readiness before the suite. But when the second stop is recorded while the suite is running, the readiness check after the run sees a newer "latest completion" and refuses: "final review must reference the latest completion event; current candidate has 0 independent approvals". The suite has then been run for nothing.
@@ -1208,15 +1210,16 @@ No full-suite run is spent on a packet that cannot be accepted.
 
 ---
 
-## 🔴 PROPOSED: the stale-claim sweep finds symbol mentions, not superseded figures and readings
+## 🟡 IMPLEMENTED: the stale-claim sweep finds symbol mentions, not superseded figures and readings
 
 **Date Identified**: 2026-10-02  20:30
-**Status**: Proposed
+**Status**: Implemented — awaiting publication/effectiveness evidence
 **UUID**: TEAM-STALE-FIGURE-SWEEP-001
 **Category**: documentation_coverage
 **Severity**: Medium
 **Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-071-retrospective/assessment.md
 **Anchors**: tools/esx/brief.py; devel-loop/documentation_contract.md
+**Implementation-Reference**: ESX-Team b73aecb (1.6.2), deployed 2026-10-02; advisory, and noisy for bare small integers
 
 ### Issue
 When a change re-measures a result, the statements it makes stale are old numbers and old readings of them, often in passages the change does not edit. `brief.py --sweep-symbol` lists mentions of a name, and the working rule asks the implementer to search, but neither is driven by the figures being superseded. Three consecutive issues (1DMIX-072, 073, 071) were rejected in round 0 for exactly this kind of statement.
