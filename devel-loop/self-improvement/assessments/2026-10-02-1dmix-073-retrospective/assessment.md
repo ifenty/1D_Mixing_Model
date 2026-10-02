@@ -1,0 +1,5 @@
+# 1DMIX-073 retrospective assessment (2026-10-02)
+
+1. **No pause for a usage limit (TEAM-LOOP-USAGE-LIMIT-PAUSE-001).** The coordinator's session hit its usage limit three times during the issue. Each time it tried to end the turn cleanly, the Stop hook returned the continuation prompt and advanced the iteration counter (1 -> 2 -> 3 -> 4) although no iteration of work had ended. The implementer was stopped mid-round once to protect the remaining allowance and resumed later; nothing was lost because each unit was on disk.
+2. **Stale statements in unchanged sections, again.** Richard's round-0 REJECT was two statements the change made false, in sections the implementer had not edited (GGL90_VALIDATION_RESULTS.md "Reproducibility", code_map.md report coverage). The brief asked for a repository-wide search and Bob fixed eight other stale statements, but the brief was hand-written and did not use `brief.py --sweep` with the changed symbols.
+3. **Plan carry-forward.** The round-1 re-draft with `--previous` reused 7 of 49 judgments. Not investigated; recorded for the kit backlog.

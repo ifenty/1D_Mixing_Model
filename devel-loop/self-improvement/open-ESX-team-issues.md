@@ -1143,3 +1143,33 @@ An approved, verified candidate cannot close without a workaround that bypasses 
 
 ### Expected Effect
 No stranded approved candidates and no stash workarounds.
+
+---
+
+## 🔴 PROPOSED: the loop has no pause for a usage limit, so the Stop hook spends iterations on a coordinator that is trying to stop
+
+**Date Identified**: 2026-10-02  18:00
+**Status**: Proposed
+**UUID**: TEAM-LOOP-USAGE-LIMIT-PAUSE-001
+**Category**: loop_control
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-073-retrospective/assessment.md
+**Anchors**: tools/esx/ralph_stop.py; tools/esx/loop_control.py
+
+### Issue
+When the coordinator's session reaches its usage limit, the harness tells it to finish the piece in hand and stop. An active loop does not allow that: the Stop hook returns the continuation prompt and advances the iteration counter. In 1DMIX-073 this happened three times (iterations 1 -> 2 -> 3 -> 4) with no iteration of work ending. The coordinator's only quiet exit was to have a subagent running, which spends the same allowance.
+
+### Evidence
+Session 377c3c70, 2026-10-02: three "usage limit reached" notices during 1DMIX-073; .claude/esx-loop-exit.log shows CONTINUE at iterations 2, 3 and 4 directly after each stop attempt.
+
+### Potential Impact
+A 10-iteration budget loses iterations to pauses, and a coordinator under a limit is pushed to start work it cannot finish.
+
+### Proposed Fix
+`loop_control.py pause --reason TEXT [--minutes N]` sets `paused_until`/`pause_reason` in the live state. While paused, the Stop hook allows the stop with a status systemMessage and advances nothing; `/esx-loop` (or the pause expiring) resumes. Document it in ARCHITECT.md as the response to a usage-limit notice. Consider recognising the harness's limit notice in `last_assistant_message` is not reliable; the explicit command is.
+
+### Acceptance Criteria
+With the loop paused, ending the turn changes no state and produces no block; after resume the iteration counter is the one it had at the pause.
+
+### Expected Effect
+No iterations lost to usage-limit pauses.

@@ -1,0 +1,369 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/0c805f3fb101155ef068c2b51ef49bf67796fb7c42d097b8002c50cb17958d52.json",
+      "sha256": "0c805f3fb101155ef068c2b51ef49bf67796fb7c42d097b8002c50cb17958d52"
+    },
+    "carry_forward": [
+      "Generate implementer briefs with brief.py and pass the changed symbols as sweep input, so statements made stale in unedited sections are listed for the implementer."
+    ],
+    "closes_timestamp": "2026-10-02T16:12:46.985593+00:00",
+    "confirmations": [
+      {
+        "category": "kit_upgrade_effective",
+        "summary": "ESX 1.6 behaved as designed on its first issue here: --next demanded --check-start before dispatch, the Stop hook held quietly while a subagent ran, and rebind-receipt bound the final execution to the closeout in one command.",
+        "evidence": "check-start receipt taken before the Bob dispatch; exit log HOLD lines with no block; rebind-receipt returned reissued true and the closeout doctor reported 0 unmet on the first run"
+      },
+      {
+        "category": "independent_oracle",
+        "summary": "Asking the reviewer to read the Fortran behind an inferred mechanism turned a 1,275-cell coincidence check into a law asserted over every cell and cited to source lines.",
+        "evidence": "Richard round 0: ggl90_calc.F lines 1088-1089 and the ratio law over all 510,536 cells; Bob round 1 test asserts it with measured deviation 0.0"
+      }
+    ],
+    "id": "1DMIX-073",
+    "iteration": 1,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator": {
+        "provider_reported_usd": null,
+        "self_reported_minutes": 95.0,
+        "self_reported_usd": null,
+        "tool_measured_minutes": 6.2
+      },
+      "coordinator_coverage": "recorded",
+      "cost_scope": "cost_usd and span-based figures describe dispatched agents; coordinator cost is recorded separately: Arch self-reported 95 min, cost unknown (coordinator.self_reported; not added to cost_usd)",
+      "cost_usd": {
+        "bob": 0.0,
+        "richard": 0.0
+      },
+      "dispatches": {
+        "bob": 2,
+        "richard": 2
+      },
+      "rounds": {
+        "bob": 2,
+        "richard": 2
+      },
+      "span_minutes": 102,
+      "unknown_cost_event_ids": [
+        "0def75188540415aa9c368408e14d17b",
+        "a5609b1b3c8443758a8738421352382f",
+        "d64ac07efe3b495fb7007d00041ddb50",
+        "0fc192781b7b45398fc5b3461158b20c"
+      ]
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "loop_control",
+        "summary": "The session reached its usage limit three times; each attempt to stop cleanly made the Stop hook return the continuation prompt and advance the iteration counter although no iteration of work had ended.",
+        "evidence": ".claude/esx-loop-exit.log CONTINUE at iterations 2, 3 and 4 during 1DMIX-073; Bob stopped mid-round once and resumed",
+        "minutes_lost": 10
+      },
+      {
+        "category": "documentation_coverage",
+        "summary": "The round-0 review was rejected for two statements the change made false in sections the implementer had not edited, costing a documentation-only correction round.",
+        "evidence": "Richard 1DMIX-073 round-0 must_fix 1 (GGL90_VALIDATION_RESULTS.md Reproducibility) and 2 (code_map.md report coverage)",
+        "minutes_lost": 12
+      }
+    ],
+    "schema_version": 3,
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-LOOP-USAGE-LIMIT-PAUSE-001"
+      },
+      {
+        "problem": 1,
+        "action": "deferred",
+        "issue": "TEAM-DOC-SWEEP-001",
+        "reason": "The kit already builds a stale-claim sweep section from changed symbols (brief.py --sweep); the 1DMIX-073 brief was hand-written and asked for a search without it. The next implementer brief is generated with brief.py and the changed symbols as sweep input."
+      }
+    ],
+    "timestamp": "2026-10-02T17:56:34Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 2.5697319507598877,
+        "elapsed_seconds": 2.5697319507598877,
+        "events": 1
+      },
+      "orientation": {
+        "effort_seconds": 0.47606801986694336,
+        "elapsed_seconds": 0.47606801986694336,
+        "events": 7
+      },
+      "verification": {
+        "effort_seconds": 584.9382209777832,
+        "elapsed_seconds": 584.9382209777832,
+        "events": 8
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 2,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 2,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      }
+    },
+    "child_elapsed_seconds": 0,
+    "components": [
+      {
+        "event_id": "0def75188540415aa9c368408e14d17b",
+        "kind": "unmetered_native",
+        "parent_event_id": "0def75188540415aa9c368408e14d17b",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "a5609b1b3c8443758a8738421352382f",
+        "kind": "unmetered_native",
+        "parent_event_id": "a5609b1b3c8443758a8738421352382f",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "d64ac07efe3b495fb7007d00041ddb50",
+        "kind": "unmetered_native",
+        "parent_event_id": "d64ac07efe3b495fb7007d00041ddb50",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "0fc192781b7b45398fc5b3461158b20c",
+        "kind": "unmetered_native",
+        "parent_event_id": "0fc192781b7b45398fc5b3461158b20c",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      }
+    ],
+    "coordinator": {
+      "coverage": "recorded",
+      "included_in_reported_usd": "no",
+      "provider_reported_usd": null,
+      "self_reported": {
+        "minutes": 95.0,
+        "records": [
+          {
+            "minutes": 95.0,
+            "phase": "coordination",
+            "record_id": "fe61f12d2b9e491da13819d51b25519f",
+            "recorded_at": "2026-10-02T17:56:33.205150+00:00",
+            "source": "Arch estimate from session wall-clock 16:12-17:55 UTC less waits on the usage limit; USD not observable",
+            "usd": null
+          }
+        ],
+        "records_without_usd": 1,
+        "usd": null
+      },
+      "tool_measured": {
+        "basis": "wall time of gate commands run as arch; excludes interactive session time",
+        "effort_seconds": 369.7610306739807,
+        "elapsed_seconds": 369.7610306739807,
+        "events": 6
+      }
+    },
+    "coordinator_coverage": "recorded",
+    "end": "2026-10-02T17:54:29.370338+00:00",
+    "issue_id": "1DMIX-073",
+    "missing_timing_event_ids": [
+      "0def75188540415aa9c368408e14d17b",
+      "a5609b1b3c8443758a8738421352382f",
+      "d64ac07efe3b495fb7007d00041ddb50",
+      "0fc192781b7b45398fc5b3461158b20c"
+    ],
+    "outside_child_intervals_seconds": 6102.384744882584,
+    "phase_events": [
+      {
+        "event_id": "ea2475102b654d018a31d717f767f9b1",
+        "finished_at": "2026-10-02T16:13:04.855175+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.11021973501192406,
+        "started_at": "2026-10-02T16:13:04.744947+00:00"
+      },
+      {
+        "event_id": "ae8bb13e647846e38772b55ddac5c352",
+        "finished_at": "2026-10-02T16:35:17.836075+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "ab2c15d32621abb42",
+        "seconds": 57.547527075977996,
+        "started_at": "2026-10-02T16:34:20.288537+00:00"
+      },
+      {
+        "event_id": "fc0238e799fd4e498dc2bba9120fc5c4",
+        "finished_at": "2026-10-02T16:37:53.388564+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "ab2c15d32621abb42",
+        "seconds": 39.67073934999644,
+        "started_at": "2026-10-02T16:37:13.717822+00:00"
+      },
+      {
+        "event_id": "2fcb2595870740b2b05f509fec297f10",
+        "finished_at": "2026-10-02T16:47:21.834083+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.06520158099010587,
+        "started_at": "2026-10-02T16:47:21.768876+00:00"
+      },
+      {
+        "event_id": "90349cd93c6f46569d66d877741e3017",
+        "finished_at": "2026-10-02T16:48:52.237026+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.04182623600354418,
+        "started_at": "2026-10-02T16:48:52.195195+00:00"
+      },
+      {
+        "event_id": "657b03df7543440aa46e7cf99c68660e",
+        "finished_at": "2026-10-02T16:49:38.711876+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 42.14816461998271,
+        "started_at": "2026-10-02T16:48:56.563708+00:00"
+      },
+      {
+        "event_id": "7f43a54cb99d4ba98f0b0bcc72d00cf2",
+        "finished_at": "2026-10-02T16:56:48.334969+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "a526871690735493c",
+        "seconds": 40.1294429069967,
+        "started_at": "2026-10-02T16:56:08.205526+00:00"
+      },
+      {
+        "event_id": "aad307831fd14c378ce1f36e582bf657",
+        "finished_at": "2026-10-02T17:02:21.429063+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.03897899101139046,
+        "started_at": "2026-10-02T17:02:21.390078+00:00"
+      },
+      {
+        "event_id": "ec26b038c0754af7a29adfd0733c975a",
+        "finished_at": "2026-10-02T17:16:54.732917+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "ab2c15d32621abb42",
+        "seconds": 40.74884359200951,
+        "started_at": "2026-10-02T17:16:13.984072+00:00"
+      },
+      {
+        "event_id": "eba9828bf22040278311eb92d01278e7",
+        "finished_at": "2026-10-02T17:17:02.068096+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.03947379198507406,
+        "started_at": "2026-10-02T17:17:02.028621+00:00"
+      },
+      {
+        "event_id": "03afb3fe6cf8468f965cb0ba0f688aa7",
+        "finished_at": "2026-10-02T17:31:05.981244+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.14114457299001515,
+        "started_at": "2026-10-02T17:31:05.840104+00:00"
+      },
+      {
+        "event_id": "1d9bfc90f4af45e8a17141a3b5d38703",
+        "finished_at": "2026-10-02T17:31:21.715216+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 12.294539918977534,
+        "started_at": "2026-10-02T17:31:09.420670+00:00"
+      },
+      {
+        "event_id": "781cfdbe90684b1bbf40a52fb7035ae2",
+        "finished_at": "2026-10-02T17:33:07.980420+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "a526871690735493c",
+        "seconds": 39.802410967007745,
+        "started_at": "2026-10-02T17:32:28.178007+00:00"
+      },
+      {
+        "event_id": "f49be210e2f74c3a80fa9c00e62173b8",
+        "finished_at": "2026-10-02T17:37:22.227066+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "orientation",
+        "reason": null,
+        "seconds": 0.03919980599312112,
+        "started_at": "2026-10-02T17:37:22.187864+00:00"
+      },
+      {
+        "event_id": "6f4e5fbe3b944e9f82b4801c9589ffe4",
+        "finished_at": "2026-10-02T17:53:01.106509+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 312.5965302599943,
+        "started_at": "2026-10-02T17:47:48.509983+00:00"
+      },
+      {
+        "event_id": "75d40994a2b54af685dcf75e65ca8689",
+        "finished_at": "2026-10-02T17:53:27.628285+00:00",
+        "issue_id": "1DMIX-073",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 2.569733267009724,
+        "started_at": "2026-10-02T17:53:25.058553+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 6102.384744882584,
+    "start": "2026-10-02T16:12:46.985593+00:00",
+    "unknown_cost_event_ids": [
+      "0def75188540415aa9c368408e14d17b",
+      "a5609b1b3c8443758a8738421352382f",
+      "d64ac07efe3b495fb7007d00041ddb50",
+      "0fc192781b7b45398fc5b3461158b20c"
+    ]
+  }
+}
