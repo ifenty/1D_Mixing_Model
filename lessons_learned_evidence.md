@@ -282,3 +282,21 @@ Before acting on a status marker, spend the one cheap check that re-derives it:
 `review_signature` against the receipt's before trusting a prior PASS; for a
 resolved-looking ledger entry, confirm an accepted `closed_at` exists in `loop_state`;
 for a cited excerpt or stated mechanism, read the line it names.
+
+## [LL-007] References re-derived instead of measured put wrong figures in the record
+
+1DMIX-054 (2026-09-30): `test_global_ocean_90x40x15_dvsq_is_four_point_average` built its
+column-local reference as `0.5*(du**2+dv**2)`, while the port computes `du**2+dv**2`
+(`kpp_core_driver.py` line 669). The test's only assertion on that quantity was
+`median > 0.1`, which held either way. The reviewer's own recomputation on the same
+207,369 cells gave median 27% and 97.6% of cells above 1%, and the same slip was then
+found in the `shear_sq` figure (51% and 98.8%, previously stated as 96.4%). Cost: one
+correction round.
+
+1DMIX-069/070 (2026-09-30): `test_isomip_mixing_length_ksrf_plus_1` asserted a lower
+bound of 1e-4 on a "known gap" that was print quantization: 3.25e-4 at 16 significant
+digits, 1.07e-13 at 17. The reviewer's re-quantization of the 17-digit capture to 16
+digits reproduced the old residual exactly.
+
+Both were caught only by an independent recomputation from primary data, and in both
+the loose assertion had passed for the wrong reason.
