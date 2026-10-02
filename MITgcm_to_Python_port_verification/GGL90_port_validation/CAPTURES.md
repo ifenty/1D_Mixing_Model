@@ -35,7 +35,7 @@ reconstructed here from repo evidence only.
 | **G3** `global_ocean_90x40x15_idemix_10` (10 steps, 36 tiles, 90x40x15, IDEMIX) | documented (`mitgcm_verification_mods/global_ocean_90x40x15/README.md`, with one correction: its symlink list omits `data.diagnostics`, without which the run stops at `DIAGNOSTICS_READPARMS`) | `./experiment_compile.sh global_ocean.90x40x15 -mods <mods>/global_ocean_90x40x15/code_validation -build build_docker_ggl90_idemix90 -clean -j 8`; run directory `global_ocean.90x40x15/input_docker_idemix90` built as that README describes (symlinks of `input.idemix`'s files including `data.diagnostics`, the 8 forcing binaries from `tutorial_global_oce_latlon/input`, and a real copy of `input.idemix/data` with `useSingleCpuIO=.TRUE.,` added inside `&PARM01`); `./experiment_run_no_compile.sh global_ocean.90x40x15 input_docker_idemix90 -build build_docker_ggl90_idemix90 -output output_ggl90_idemix90_1dmix066` (7 s, `output.txt` 190,466,515 bytes, 347,250 `OUTPUT_IDEMIX` lines); parse as G1 with experiment name `global_ocean.90x40x15` (5 s, peak RSS 0.128 GB). |
 | **G4** `global_ocean_cs32x15_idemix_10` (10 steps, 12 tiles, `x=384,y=16,z=15` as captured, pressure coordinates) | documented (`mitgcm_verification_mods/global_ocean_cs32x15/README.md`; its manual `prepare_run`/symlink steps are no longer needed) | `./experiment_compile.sh global_ocean.cs32x15 -mods <mods>/global_ocean_cs32x15/code_validation -build build_docker_ggl90_idemixcs32 -clean -j 8`; `./experiment_run_no_compile.sh global_ocean.cs32x15 input.in_p -build build_docker_ggl90_idemixcs32 -output output_ggl90_idemixcs32_1dmix066` (12 s, `output.txt` 363,441,346 bytes, 663,000 `OUTPUT_IDEMIX` lines, 120 blocks); the current run script layers `input.in_p` on `input/` (which supplies `eedata`, `regMask_lat24.bin`, the `lev_surf*` and `trenberth_tau*` files) and runs `input.in_p/prepare_run` in the run directory, so no file inside the MITgcm checkout is created or edited; parse as G1 with experiment name `global_ocean.cs32x15` (9.5 s, peak RSS 0.142 GB). |
 | **G5** `1D_ocean_ice_column_11000` (11,000 steps, 1x23) | mods tree documented; **run-time namelists INFERRED** | `./experiment_compile.sh 1D_ocean_ice_column -mods <mods>/1D_ocean_ice_column/ggl90_code_validation -build build_docker_ggl90_1d -clean -j 8`; input dir `input_validation_ggl90_11k_vx` = `cp -r input ...` with (a) `data`: the `nTimeSteps= 10` / `# nTimeSteps= 11000` swap (same single edit as KPP recipe R2), (b) `data.pkg`: `useKPP=.FALSE.,` and `useGGL90=.TRUE.,` (KPP is compiled in but disabled at run time, per that mods tree's `packages.conf`), (c) a new `data.ggl90` that is a verbatim copy of MITgcm's `verification/vermix/input.ggl90/data.ggl90` (`GGL90writeState=.TRUE.`, `GGL90TKEmin=1.E-7`, `mxlMaxFlag=3`, `GGL90mixingLengthMin=3.`); `./experiment_run_no_compile.sh 1D_ocean_ice_column input_validation_ggl90_11k_vx -build build_docker_ggl90_1d -output output_ggl90_11k_vx_1dmix066` (20 s, `output.txt` 315,048,431 bytes, 11,000 blocks, 253,000 wet column-timesteps); parse as G1 with experiment name `1D_ocean_ice_column` (36.8 s, peak RSS 0.140 GB). |
-| **P** replays | — | cwd `MITgcm_to_Python_port_verification`: `python3 scripts/run_ggl90_from_netcdf_input.py GGL90_port_validation/inputs_from_mitgcm/mitgcm_ggl90_inputs_<tag>.nc -o GGL90_port_validation/outputs_from_python/python_ggl90_outputs_<tag>.nc` (`ulimit -v 8000000`; peak RSS at most 0.31 GB) for each of the five tags. |
+| **P** replays | — | cwd `MITgcm_to_Python_port_verification`: `python3 scripts/run_ggl90_from_netcdf_input.py GGL90_port_validation/inputs_from_mitgcm/mitgcm_ggl90_inputs_<tag>.nc -o GGL90_port_validation/outputs_from_python/python_ggl90_outputs_<tag>.nc` (`ulimit -v 8000000`; peak RSS at most 0.31 GB) for each of the five tags **except `global_ocean_cs32x15_idemix_10`: since 1DMIX-073 `GGL90Driver.compute_mixing` rejects that pressure-coordinate geometry with a `ValueError`, so this replay now fails by design** (its last port-side numbers are historical, see below). |
 
 **Why G5's namelist is inferred and how it was chosen.** No file in the repo
 records how the Mac-era `1D_ocean_ice_column_11000` GGL90 run enabled GGL90 in an
@@ -89,7 +89,7 @@ table are the 16-digit captures of 1DMIX-066; the current files replaced them in
 | `outputs_from_python/python_ggl90_outputs_global_ocean_90x40x15_idemix_10.nc` | G3+P | 17296185 | `58ace7f21a886cf6e545cdfe8ec7b57b4c8d5c0c8abd3047ed78fa164635290d` |
 | `inputs_from_mitgcm/mitgcm_ggl90_inputs_global_ocean_cs32x15_idemix_10.nc` | G4 | 23864246 | `221851597e6cd1c6d29263cc5cb8d75af31545a5306518bf9f02393516dc1f8f` |
 | `outputs_from_mitgcm/mitgcm_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4 | 30403765 | `2ddd3073f884a416f2c40014036f005601a895e5df85242b9668f3d41ec5df12` |
-| `outputs_from_python/python_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4+P | 29509545 | `fdfabba900879e64015db95624553ea0898754309ead11473fdd0aa1b91610cd` |
+| `outputs_from_python/python_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4+P (**HISTORICAL**: pre-1DMIX-073 port replay; `run` now raises on this capture, so the file cannot be regenerated) | 29509545 | `fdfabba900879e64015db95624553ea0898754309ead11473fdd0aa1b91610cd` |
 | `inputs_from_mitgcm/mitgcm_ggl90_inputs_1D_ocean_ice_column_11000.nc` | G5 (INFERRED) | 17967456 | `04deb3715d8e2e253d89d77a5375b75c98991a7042fe8241a5d9a6dd1b8666f8` |
 | `outputs_from_mitgcm/mitgcm_ggl90_outputs_1D_ocean_ice_column_11000.nc` | G5 (INFERRED) | 15698049 | `374e0ff7debba7554913cffff04fe5a41e41f7ba6d9f87588e33b5e19865d880` |
 | `outputs_from_python/python_ggl90_outputs_1D_ocean_ice_column_11000.nc` | G5+P | 8199209 | `a195f70524fd46e741e1c637f0bc658306f68b8544f437ee2867a44d7130acc3` |
@@ -97,7 +97,7 @@ table are the 16-digit captures of 1DMIX-066; the current files replaced them in
 Every statistic in `GGL90_VALIDATION_RESULTS.md` for these five captures
 reproduces to the printed digits from the regenerated files (`vermix` N=520
 table; `isomip` N=1,437,204; `global_ocean.90x40x15` N=485,840;
-`global_ocean.cs32x15` N=813,820; `1D_ocean_ice_column` N=253,000 absolute
+`global_ocean.cs32x15` N=813,820 non-NaN cells, of which 555,220 ocean cells (port side now historical, 1DMIX-073); `1D_ocean_ice_column` N=253,000 absolute
 maxima) — see `devel-loop/loop_state/bob-1DMIX-066-compare-stats.out`. One
 pre-existing unit slip surfaced and was corrected in `GGL90_VALIDATION_RESULTS.md`: the
 `1D_ocean_ice_column` table's relative maxima had been labelled `7.9e-7%` and `5.1e-9%` but are fractions
@@ -215,7 +215,7 @@ point and the same statistics the tests assert):
 | `isomip` `diff_kz` | 2.905e-3 (1102) | 2.905e-3 (1075) | real kSrf gap; 27 cells (rel 1.7%-51% at 16 digits, <= 0.26% at 17) were artifacts |
 | `isomip` `tke_after` | 9.081e-6 (17934) | 9.081e-6 (17934) | real, identical |
 | `global_ocean_90x40x15` (`visc_az`, `diff_kz`, `mixing_length`, `tke_after`) | 5.59 (183) / 2.75 (247456) / 15.5 (206) / 446 (264515) | identical | real (IDEMIX and a small tail) |
-| `global_ocean_cs32x15` (same order) | 100 (508739) / 2.01e9 (510536) / 1.45e7 (510393) / 4.20e5 (527111) | identical | real (pressure coordinates, out of scope) |
+| `global_ocean_cs32x15` (same order) | 100 (508739) / 2.01e9 (510536) / 1.45e7 (510393) / 4.20e5 (527111) | identical | **HISTORICAL port-side numbers** (pressure coordinates: since 1DMIX-073 the port raises `ValueError` on this capture, so these cannot be reproduced; re-measured on the pre-change code 2026-10-02 they are unchanged: 100 / 2.0149e9 / 1.4492e7 / 4.1995e5 max abs, 62.5-64.8% of 813,820 cells >1%) |
 
 Consequently only one test assertion was print-quantization-derived
 (`test_isomip_mixing_length_ksrf_plus_1`, lower bound `1e-4 < max_abs` with an upper bound of 0.01);
@@ -253,12 +253,46 @@ Replays regenerated on the 17-digit inputs (recipe P, `ulimit -v 8000000`):
 | `outputs_from_python/python_ggl90_outputs_vermix_20_1dmix024.nc` | G1+P | 32057 | `67ca61bd7e295e683466865b636606b8239822460c1eef166ef1ca4635f550cf` |
 | `outputs_from_python/python_ggl90_outputs_isomip_12.nc` | G2+P | 57616601 | `c812dfc6e87d0ee20ab9ee721e46bd88620019709b511a19b28a39098ee37b01` |
 | `outputs_from_python/python_ggl90_outputs_global_ocean_90x40x15_idemix_10.nc` | G3+P | 17296185 | `39a3ba8bcbb8040b5edfe16f5b435573bdf6c49ea1a08d86ee8d3da063d4502a` |
-| `outputs_from_python/python_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4+P | 29509545 | `899c7e745b403f38320946c794130264e1d3a6e7f4ea5e5f4525293909c14af5` |
+| `outputs_from_python/python_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` | G4+P (**HISTORICAL**, as above) | 29509545 | `899c7e745b403f38320946c794130264e1d3a6e7f4ea5e5f4525293909c14af5` |
 | `outputs_from_python/python_ggl90_outputs_1D_ocean_ice_column_11000.nc` | G5+P | 8199209 | `1a56afbdefd00adfe29128bb7cfb4e4708d15bbef2aa39403f0c5ea2bf1f0e10` |
 
 Standalone-driver Fortran outputs (`outputs_from_python_standalone/<scenario>/ggl90_standalone_output.txt`)
 were regenerated with the widened `ggl90_calc.F` prints from the unchanged
 `ggl90_standalone_input.txt`; see `CONVENTIONS_STANDALONE_DATA.md` ("Regenerated at 17 digits, 1DMIX-070").
+
+## `global_ocean_cs32x15_idemix_10` is MITgcm-side evidence only (1DMIX-073)
+
+Recipe G4 is a **pressure-coordinate** run (`input.in_p`, `buoyancyRelation='OCEANICP'`): the captured `depth` is
+positive Pa (4.9467e7 ... 2.5133e5, decreasing with level index) and `cell_thickness` 5.03e5 ... 7.11e6, the same Pa grid
+as the KPP cs32x15 capture. The port has no `coordFac` conversion (permanently out of scope, 1DMIX-040), and until
+1DMIX-073 `GGL90Driver.compute_mixing` accepted that geometry and returned **finite wrong values**. Since 1DMIX-073 it
+calls `main/column_grid.py::validate_zcoordinate_geometry` first and raises `ValueError`
+(`tests/test_ggl90_mitgcm_validation.py::test_global_ocean_cs32x15_port_rejects_pressure_coordinate_input`; no output is
+written by `run_ggl90_from_netcdf_input.py::run`). The capture stays declared (`esx/project.json:external_inputs`) because the MITgcm-side
+facts are still asserted (`::test_global_ocean_cs32x15_capture_geometry_is_pressure_coordinate`,
+`::test_global_ocean_cs32x15_mitgcm_ggl90_diffkz_is_in_coordfac_squared_units`).
+
+**Last measured port-side numbers (HISTORICAL; the port can no longer produce them).** Measured 2026-10-02 on the
+pre-change code (a `git archive` extraction of HEAD 65939cf, so the HEAD driver and replay script), full capture, all 10
+timesteps, N = 813,820 non-NaN cells, every one finite (0 NaN, 0 inf; N is 555,220 computed ocean cells with non-zero input temperature plus 258,600 zero-filled land-column cells that are zero on both sides and dilute the fractions; ocean-only fractions 0.9163 / 0.9195 / 0.9193 / 0.9494 with the same cell counts above 1%), statistics by the test module's own `_diff_and_rel`
+(`devel-loop/loop_state/scratch/ab2c15d32621abb42/measure_cs32x15_prechange.py`, `bob-1DMIX-073-evidence.md` unit 0):
+
+| field | fraction >1% rel | max abs diff | max port value |
+|---|---|---|---|
+| `visc_az` | 0.6251 | 99.99992 | 100 (`GGL90viscMax` cap) |
+| `diff_kz` | 0.6273 | 2.0149e9 | 100 (cap) |
+| `mixing_length` | 0.6272 | 1.4492e7 | 1.4493349e7 m |
+| `tke_after` | 0.6477 | 4.1995e5 | 4.1995e5 |
+
+Reading note found while measuring: the `diff_kz` "max abs diff" of 2.0149e9 is MITgcm's own captured `diff_kz`
+(maximum 2.0149e9; the port's value there is capped at 100). The instrumented source
+`mitgcm_verification_mods/ggl90_mods/ggl90_calc.F` explains it: `coordFac = gravity * rhoConst` for `usingPCoords` (line 257),
+the captured `visc_az` is `KappaM` (stored in `GGL90viscOutput`, lines 518-519) before any `coordFac` scaling, and lines 1088-1090 set
+`GGL90diffKr = MAX( MIN(visctmp/TKEPrandtlNumber, GGL90diffMax)*coordFac*coordFac, diffKrNrS )`. So the captured `diff_kz` carries
+`coordFac^2` (Pa^2/s scale) and is not a metres-scale diffusivity; that law (with `TKEPrandtlNumber` from the capture and
+`GGL90diffMax`, `diffKzS`, `gravity`, `rhoConst` from its attributes) reproduces `diff_kz` with maximum relative deviation 0.0 over all
+510,536 cells with `visc_az > 0` (`scratch/ab2c15d32621abb42/law_check.py`; the other 411,064 cells have `visc_az == 0` and `diff_kz == 0`). So the 2.0e9 listed as the `diff_kz` port-versus-MITgcm difference here
+and in `GGL90_VALIDATION_RESULTS.md` is MITgcm's own value in those units, not a port-side error of that size.
 
 ## Cross-scheme captures, 1DMIX-054 (2026-09-30): GGL90 on `lab_sea`
 

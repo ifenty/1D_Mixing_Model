@@ -8,8 +8,10 @@ error: overflow in `swfrac`'s `exp(-z/d)`). Pressure-coordinate support is
 permanently out of scope (1DMIX-040; `docs/model_contract.md` "z-coordinates
 only"), so the required behaviour, per the project profile's invalid-input rule,
 is an explicit `ValueError`. The guard is
-`KPP.kpp_core_driver.validate_zcoordinate_geometry`, called as step 0 of
-`KPPDriver.compute_mixing`; it is a pure pre-check and must not change any value
+`validate_zcoordinate_geometry`, called as step 0 of `KPPDriver.compute_mixing`;
+since 1DMIX-073 it lives in `main.column_grid` (shared with GGL90, whose own tests
+are `test_ggl90_zcoordinate_guard.py`) and `KPP.kpp_core_driver` re-exports it, which
+is the import path used below. It is a pure pre-check and must not change any value
 computed for valid input.
 
 These tests check: (1) Pa-scaled columns raise a `ValueError` naming the

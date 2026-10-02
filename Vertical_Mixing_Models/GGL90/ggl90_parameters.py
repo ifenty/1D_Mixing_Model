@@ -107,9 +107,13 @@ class GGL90Parameters:
             physics function in this module reads it; the port always uses
             the "shear of mean flow" formula regardless of this value. First
             observed to matter for `global_ocean.cs32x15` (the first capture
-            to set it `.TRUE.`), but that capture's comparison is dominated
-            by a separate, larger confound (see `use_idemix`'s own note)
-            before this flag's own standalone effect could be isolated.
+            to set it `.TRUE.`), but that capture's port comparison was
+            dominated by a separate, larger confound (pressure coordinates;
+            see `use_idemix`'s own note) before this flag's own standalone
+            effect could be isolated. That comparison no longer exists:
+            since 1DMIX-073 the port rejects that pressure-coordinate
+            geometry with a `ValueError`, so the flag's effect there stays
+            unisolated.
 
         Optional Features:
         -----------------

@@ -235,7 +235,7 @@ ENDIF
 # P-coordinates could be added with similar logic
 ```
 
-**Current Status:** Python version assumes Z-coordinates (depth). P-coordinates not implemented but straightforward to add.
+**Current Status:** Python version assumes Z-coordinates (depth). P-coordinates are not implemented and are permanently out of scope (1DMIX-040; the "straightforward to add" wording of earlier revisions is superseded); since 1DMIX-072 (KPP) and 1DMIX-073 (GGL90) both drivers reject non-z-coordinate geometry with a `ValueError` (`main/column_grid.py::validate_zcoordinate_geometry`).
 
 ### Coordinate Scaling Factor
 
@@ -391,7 +391,7 @@ ENDIF
 
 ### Easy Additions
 
-1. **P-coordinates support:**
+1. **P-coordinates support** (superseded: permanently out of scope, 1DMIX-040; both drivers now reject such geometry, 1DMIX-072/073):
    - Add `usingPCoords` flag
    - Implement coordinate scaling
    - Adjust loop directions

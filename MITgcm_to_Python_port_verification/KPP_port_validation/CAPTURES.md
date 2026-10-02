@@ -280,7 +280,7 @@ all 1,621 columns (99.26% exactly the surface layer's Pa value), its interior mi
 of cells and its `hbl` differed by a median 1.2e6, and the only close field, `ghat`, agreed because both sides evaluated the same
 formula on the same Pa-as-metres geometry (maximum identical to the last digit, `6.3275154945147095e10`) -- a shared
 unit error, not fidelity. Since 1DMIX-072 `KPPDriver.compute_mixing` raises `ValueError` on this geometry
-(`kpp_core_driver.py::validate_zcoordinate_geometry`; depth is positive Pa, max 4.9e7), so the capture serves as MITgcm-side
+(`main/column_grid.py::validate_zcoordinate_geometry`, shared with GGL90 since 1DMIX-073 and re-exported by `kpp_core_driver.py`; depth is positive Pa, max 4.9e7), so the capture serves as MITgcm-side
 evidence only and has no port replay. Details and the tests that encode each fact:
 `KPP_VALIDATION_RESULTS.md` ("`global_ocean_cs32x15` + KPP"),
 `tests/test_kpp_mitgcm_validation_extended.py::test_global_ocean_cs32x15_*`.

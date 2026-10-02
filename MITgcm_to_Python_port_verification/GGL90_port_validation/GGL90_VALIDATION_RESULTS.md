@@ -106,9 +106,11 @@ conversion anywhere in its own depth/thickness handling
 (`column_grid.py`'s grid spec assumes metres unconditionally). Because real
 MITgcm's own GGL90 Fortran *does* correctly convert and this port does not,
 feeding this port a genuine pressure-coordinate capture's grid geometry
-(which is then in pascals, not metres) produces a real, large, and fully
-explained disagreement rather than a silent one — see `global_ocean.cs32x15`
-below for the measured size of this effect. This is a different situation
+(which is then in pascals, not metres) used to produce finite but wrong values
+with no error (measured size: see `global_ocean.cs32x15` below); since 1DMIX-073
+`GGL90Driver.compute_mixing` rejects such geometry with a `ValueError`
+(`main/column_grid.py::validate_zcoordinate_geometry`, shared with KPP), so the
+effect is now an explicit refusal, not a number. This is a different situation
 from KPP's own real MITgcm package, which has no `coordFac` handling in its
 own Fortran source at all; the coordinate-conversion gap is a property of
 which real MITgcm package is being compared against, not just of this
@@ -317,7 +319,7 @@ TKE update (feeding `tke_after`) do. This is a known, decisively-quantified,
 by-design capability gap: implementing it would require porting MITgcm's
 own internal-wave energy budget, a real physics addition, not a bug fix.
 
-## `global_ocean.cs32x15` — the only pressure-coordinate capture
+## `global_ocean.cs32x15` — the only pressure-coordinate capture (port side rejected since 1DMIX-073)
 
 A 12-tile cubed-sphere (384×16×15) configuration, also `useIDEMIX=.TRUE.` —
 surveyed as this project's other candidate IDEMIX capture, but this
@@ -325,14 +327,54 @@ configuration sets `buoyancyRelation='OCEANICP'`, which MITgcm maps directly
 to `usingPCoords=.TRUE.`: its vertical grid spacing (`delR`) is genuinely
 expressed in pascals, not metres.
 
-| Field | Fraction >1% rel | Max abs. diff | N |
+**Status since 1DMIX-073.** `GGL90Driver.compute_mixing` now raises `ValueError`
+on this capture's geometry (positive `depth`, max 4.9467e7 Pa;
+`cell_thickness` 5.03e5 to 7.11e6), so there is no port replay of it any more
+and the table and root-cause paragraph below are **HISTORICAL** (what the port
+returned before the guard existed). The former test
+`test_global_ocean_cs32x15_pressure_coordinate_gap` asserted these finite wrong
+values as a "known gap"; it is replaced by
+`test_global_ocean_cs32x15_port_rejects_pressure_coordinate_input` plus two MITgcm-side
+tests (capture geometry; the `coordFac^2` factor in MITgcm's own `diff_kz`). The
+numbers were **re-measured for 1DMIX-073 on the pre-change code** (a `git archive`
+extraction of HEAD 65939cf; the full capture, 10 timesteps; statistics by the test module's
+own `_diff_and_rel`; `bob-1DMIX-073-evidence.md` unit 0): fraction >1% rel 0.6251 / 0.6273 /
+0.6272 / 0.6477 and max abs 99.99992 / 2.0149e9 / 1.4492e7 / 4.1995e5 for `visc_az` /
+`diff_kz` / `mixing_length` / `tke_after`, identical to the rounded table. **What N counts**:
+N = 813,820 is every cell the harness left non-NaN (all finite, 0 NaN, 0 inf). It is NOT
+all ocean: 555,220 are computed ocean cells (non-zero input temperature) and 258,600 are
+cells of land columns, which the harness zero-fills on the port side and which are zero in
+MITgcm too, so they never exceed 1% and dilute the fractions. Restricted to the 555,220
+ocean cells the same measurement gives fractions 0.9163 / 0.9195 / 0.9193 / 0.9494 (the
+same counts of 508,739 / 510,536 / 510,393 / 527,111 cells above 1%) and the same max abs
+(`frac_ocean_only.py`).
+**Reading note**: the `diff_kz` 2.0149e9 is MITgcm's own captured value (the port's
+`diff_kz` there is capped at 100). The instrumented MITgcm source says why
+(`mitgcm_verification_mods/ggl90_mods/ggl90_calc.F`): `coordFac = gravity * rhoConst` when
+`usingPCoords` (line 257); the captured `visc_az` is `KappaM`, stored in `GGL90viscOutput`
+(lines 518-519) before any `coordFac` scaling; and lines 1088-1090 set
+`GGL90diffKr = MAX( MIN(visctmp/TKEPrandtlNumber, GGL90diffMax)*coordFac*coordFac, diffKrNrS )`.
+So the captured `diff_kz` carries `coordFac^2` (Pa²/s scale) and is not a metres-scale
+diffusivity. Checked on the capture over all 510,536 cells with `visc_az > 0`: that law,
+with `TKEPrandtlNumber` from the capture and `GGL90diffMax`, `diffKzS`, `gravity`, `rhoConst` from
+its attributes, reproduces `diff_kz` with maximum relative deviation 0.0 (the other 411,064
+cells have `visc_az == 0` and `diff_kz == 0`; none reaches the `GGL90diffMax` cap); asserted
+by `test_global_ocean_cs32x15_mitgcm_ggl90_diffkz_is_in_coordfac_squared_units`. The port-versus-MITgcm
+`diff_kz` figure below therefore mostly records MITgcm's own units, not a port
+error of that size. The tracked report
+`reports/ggl90_validation_global_ocean_cs32x15_idemix_10.pdf` (and the gitignored
+`outputs_from_python/python_ggl90_outputs_global_ocean_cs32x15_idemix_10.nc` it was built from)
+are likewise pre-1DMIX-073 artefacts of the old port behaviour; `run_ggl90_from_netcdf_input.py::run`
+cannot regenerate them, so they are kept as historical records only.
+
+| Field | Fraction >1% rel (of N) | Max abs. diff | N (non-NaN cells, incl. 258,600 zero-filled land cells) |
 |---|---|---|---|
 | `visc_az` | 62.5% | 100 (at this port's `GGL90viscMax` cap) | 813,820 |
 | `diff_kz` | 62.7% | ~2.0e9 | 813,820 |
 | `mixing_length` | 62.7% | ~1.4e7 | 813,820 |
 | `tke_after` | 64.8% | ~4.2e5 | 813,820 |
 
-**Root cause.** As described under "Shared infrastructure" above, this
+**Root cause (historical, pre-1DMIX-073 behaviour).** As described under "Shared infrastructure" above, this
 port has no `coordFac`-equivalent unit conversion anywhere in its
 depth/thickness handling, while real MITgcm's own GGL90 Fortran does. Every
 length-based formula this port evaluates — mixing-length ceilings, the TKE
@@ -340,15 +382,15 @@ boundary condition, and so on — receives this capture's raw pressure values
 and treats them as if they were depths. Point-verified at one cell: real
 MITgcm computes `mixing_length = 1277 m` there; this port computes
 `14,493,349 m` (14,493 km — larger than Earth's radius) — a roughly
-10,000× error, which is why more than 62% of every field's cells exceed the
+10,000× error, which is why more than 62% of every field's N cells (91-95% of the 555,220 ocean cells, the rest of N being zero-filled land) exceed the
 1% relative-error threshold. This is *not* primarily an IDEMIX signal: the
 coordinate confound is roughly an order of magnitude larger than IDEMIX's
 own contribution, which is why `global_ocean.90x40x15` above, not this
 capture, is this project's clean IDEMIX-gap measurement. This capture's
 disagreement is not a candidate for a future fix: pressure-coordinate
 support is a permanent, deliberate scope boundary for this project (see
-"Limitations" below), so this gap is expected to persist unless that scope
-decision itself is revisited.
+"Limitations" below), so the port refuses this geometry (1DMIX-073) unless that
+scope decision itself is revisited.
 
 A smaller, related, and still-undeveloped gap from the same capture:
 `calc_mean_vert_shear`, a real, alternate vertical-shear formula this
@@ -409,7 +451,7 @@ replay semantic was changed (the replay script gained optional `first_timestep`/
 selected inputs once, numerically identical).
 
 **Consequence for the other multi-column GGL90 captures (1DMIX-071).** `isomip`, `global_ocean.90x40x15` and
-`global_ocean.cs32x15` are also replayed with column-local velocities; their `tke_after`/`diff_kz` residuals
+`global_ocean.cs32x15` (until 1DMIX-073 made the port reject it) were also replayed with column-local velocities; their `tke_after`/`diff_kz` residuals
 (attributed above to the kSrf floor, missing IDEMIX physics and pressure coordinates) may include
 this effect. It has not been separated there; a follow-up that rebuilds tracer-point velocities from the
 neighbouring columns for all multi-column replays would do so.
@@ -480,12 +522,14 @@ exercise and this port, not open action items:
   permanently, not merely untested: every one of this project's own
   captures and idealized scenarios is a z-coordinate ocean configuration,
   which is the only configuration this validation exercise is designed to
-  say anything meaningful about. The equivalent KPP limitation was expected
-  to produce a misleading close agreement; measured under 1DMIX-054 it does not (MITgcm's own KPP
-  aborts at iteration 1 and the port returned NaN in most interior cells before 1DMIX-072, which
-  now makes `KPPDriver` raise `ValueError` on such geometry instead; see
-  `KPP_VALIDATION_RESULTS.md`), so for both schemes a pressure-coordinate capture gives a large,
-  visible disagreement -- see `global_ocean.cs32x15` above for the measured size for GGL90.
+  say anything meaningful about. Both schemes now REJECT such geometry with a
+  `ValueError` (`main/column_grid.py::validate_zcoordinate_geometry`, step 0 of
+  `KPPDriver.compute_mixing` since 1DMIX-072 and of `GGL90Driver.compute_mixing`
+  since 1DMIX-073). Before the guards: the equivalent KPP limitation was expected
+  to produce a misleading close agreement; measured under 1DMIX-054 it did not (MITgcm's own KPP
+  aborts at iteration 1 and the port returned NaN in most interior cells; see
+  `KPP_VALIDATION_RESULTS.md`), and GGL90 returned finite but wrong values
+  (`global_ocean.cs32x15` above), the harder failure to notice.
 - **`calc_mean_vert_shear` is declared but not implemented.** This
   configuration flag (a real, alternate vertical-shear formula) has no
   consumer anywhere in the port, the same declared-but-dead pattern as
@@ -525,8 +569,13 @@ docstrings in
 `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`,
 which drive the same replay entry point
 (`scripts/run_ggl90_from_netcdf_input.py::run`). The `isomip`,
-`global_ocean.90x40x15`, `global_ocean.cs32x15` and (1DMIX-054) `lab_sea` statistics come from
-that same test module's own fresh measurements.
+`global_ocean.90x40x15` and (1DMIX-054) `lab_sea` statistics come from
+that same test module's own fresh measurements. The `global_ocean.cs32x15` statistics are
+**historical**: the test module no longer measures them (the port rejects that capture since
+1DMIX-073). They were measured once on 2026-10-02 on the pre-change code, by replaying the
+full capture through a `git archive` extraction of HEAD 65939cf with the same replay entry
+point and the module's own `_diff_and_rel` (section `global_ocean.cs32x15` above;
+`devel-loop/loop_state/bob-1DMIX-073-evidence.md` unit 0).
 
 **Print precision (1DMIX-070).** All five captures above were recaptured on
 2026-09-30 with the instrumented Fortran printing 17 significant digits
@@ -536,7 +585,8 @@ agrees with the previous 16-digit file to <= ~5.9e-16 relative (print
 quantization only; `vermix`, `isomip`, `global_ocean.90x40x15`,
 `global_ocean.cs32x15` and `1D_ocean_ice_column` all confirmed), so no MITgcm
 physics changed. Replaying the same port on the old and new captures: the
-`vermix`, `global_ocean.90x40x15` and `global_ocean.cs32x15` statistics are
+`vermix`, `global_ocean.90x40x15` and (historical: pre-1DMIX-073 port behaviour, not reproducible
+now) `global_ocean.cs32x15` statistics are
 identical at both precisions to the displayed digits (real gaps or clean
 agreement; nothing in them was print quantization); the `1D_ocean_ice_column`
 and `isomip` rows named above (`visc_az`, `mixing_length`, and the

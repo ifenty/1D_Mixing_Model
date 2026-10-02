@@ -19,7 +19,9 @@ already-captured NetCDF data for five experiments:
 - global_ocean_90x40x15 (`ALLOW_GGL90_IDEMIX`, 36-tile domain, 10 timesteps
   -- a real, characterized missing-physics gap, not a port defect)
 - global_ocean_cs32x15 (`usingPCoords`, 12-tile cubed-sphere domain, 10
-  timesteps -- a real, permanently out-of-scope structural gap, 1DMIX-040)
+  timesteps -- pressure coordinates, permanently out of scope, 1DMIX-040; since
+  1DMIX-073 the port REJECTS this geometry with a ValueError, so this capture is
+  tested MITgcm-side plus a rejection test, not replayed)
 - lab_sea (1DMIX-054: 20x16 single tile, 23 levels, sea ice, real land columns;
   the FIRST GGL90 capture of this KPP-native grid, a CONSTRUCTED all-defaults
   `data.ggl90`; a 999-timestep and a 4368-timestep/6-month run started from the
@@ -47,7 +49,7 @@ _VERIFICATION_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_VERIFICATION_ROOT / 'scripts'))
 sys.path.insert(0, str(_VERIFICATION_ROOT.parent / 'Vertical_Mixing_Models'))
 
-from run_ggl90_from_netcdf_input import run as run_python_ggl90_on_dataset  # noqa: E402
+from run_ggl90_from_netcdf_input import build_params, run as run_python_ggl90_on_dataset  # noqa: E402
 
 _INPUTS = _VERIFICATION_ROOT / 'GGL90_port_validation' / 'inputs_from_mitgcm'
 _OUTPUTS = _VERIFICATION_ROOT / 'GGL90_port_validation' / 'outputs_from_mitgcm'
@@ -358,49 +360,137 @@ def test_global_ocean_90x40x15_idemix_gap(result_90x40x15, field, max_abs_bound)
 # timesteps. 1DMIX-040: pressure-coordinate support is PERMANENTLY out of
 # scope for this project (Arch's explicit scope decision) -- this port has
 # no coordFac-equivalent conversion anywhere, so grid geometry captured in
-# Pa is fed through length-ceiling formulas that assume metres, producing
-# errors up to ~4 orders of magnitude. Asserting the known large bound
-# (not skipping) per this issue's own acceptance criterion that every
-# capture get at least one locked-in numeric assertion -- a silent
-# improvement here without a documented scope-decision reversal would be
-# at least as suspicious as a regression.
+# Pa fed through length-ceiling formulas that assume metres produced finite
+# but wrong values (errors up to ~4 orders of magnitude).
+#
+# 1DMIX-073: `GGL90Driver.compute_mixing` now REJECTS that geometry with a
+# ValueError (shared guard `main.column_grid.validate_zcoordinate_geometry`,
+# step 0), so there is no port replay of this capture any more; the former
+# port-side known-gap test (`test_global_ocean_cs32x15_pressure_coordinate_gap`,
+# which locked in the finite wrong values as a "known gap") is replaced by the
+# rejection test below. Every MITgcm-side fact is kept (capture geometry and
+# MITgcm's own outputs, read straight from the captures, no port involved).
+#
+# LAST MEASURED PORT-SIDE NUMBERS, HISTORICAL (the port no longer produces
+# them; measured 2026-10-02 on the PRE-change code = git archive of HEAD 65939cf,
+# full capture, 10 timesteps, N = 813,820 non-NaN cells (555,220 computed ocean cells plus
+# 258,600 zero-filled land-column cells that dilute the fractions), every one finite; statistics
+# by this module's own `_diff_and_rel`; scratch script
+# devel-loop/loop_state/scratch/ab2c15d32621abb42/measure_cs32x15_prechange.py,
+# numbers in bob-1DMIX-073-evidence.md unit 0):
+#     field          frac>1% rel   max abs diff   max port value
+#     visc_az        0.6251        99.99992       100 (GGL90viscMax cap)
+#     diff_kz        0.6273        2.0149e9       100 (cap)
+#     mixing_length  0.6272        1.4492e7       1.4493349e7 m
+#     tke_after      0.6477        4.1995e5       4.1995e5
+# (over the 555,220 ocean cells alone the fractions are 0.9163 / 0.9195 / 0.9193 / 0.9494)
+# No tolerance was involved in or changed by this conversion.
 # ========================================================================
 
 @pytest.fixture(scope='module')
-def result_cs32x15(tmp_path_factory):
+def cs32x15_capture():
+    """(inputs, MITgcm outputs) of the cs32x15 capture; no port replay exists."""
     _require(DATA_CS32X15)
     _require(OUTPUTS_CS32X15)
-    python_ds = _run_replay(DATA_CS32X15, tmp_path_factory, 'cs32x15')
-    mitgcm_ds = xr.open_dataset(OUTPUTS_CS32X15)
-    return python_ds, mitgcm_ds
+    return xr.open_dataset(DATA_CS32X15), xr.open_dataset(OUTPUTS_CS32X15)
 
 
-@pytest.mark.parametrize('field,min_max_abs,max_max_abs', [
-    ('visc_az', 90.0, 1e3),
-    ('diff_kz', 1e8, 1e12),
-    ('mixing_length', 1e6, 1e9),
-    ('tke_after', 1e4, 1e9),
-])
-def test_global_ocean_cs32x15_pressure_coordinate_gap(result_cs32x15, field, min_max_abs, max_max_abs):
-    """1DMIX-040's known, permanently-out-of-scope pressure-coordinate gap.
-    Measured fresh this round over 813,820 wet cells: 62.5-64.8% exceed 1%
-    rel on every field; max_abs 100 (visc_az, at its GGL90viscMax=100 cap)/
-    2.0e9 (diff_kz)/1.4e7 (mixing_length, matching 1DMIX-040's own cited
-    ~4-order-of-magnitude cell: 1277 m real vs. 14,493 km ported)/4.2e5
-    (tke_after). Lower bound keeps this a real, known, large gap (a drop
-    below it would mean the p-coordinate confound shrank, which -- absent a
-    scope-decision reversal implementing coordFac support -- would itself
-    need investigation, not silent acceptance); upper bound is a basic
-    finite-value sanity check.
-    """
-    python_ds, mitgcm_ds = result_cs32x15
-    diff, rel = _diff_and_rel(mitgcm_ds[field].values, python_ds[field].values)
-    frac = float((rel > 0.01).mean())
-    assert frac > 0.5, f"global_ocean_cs32x15 {field}: mismatch fraction {frac:.4f} below the known 1DMIX-040 bound"
-    assert min_max_abs < np.max(diff) < max_max_abs, (
-        f"global_ocean_cs32x15 {field} max_abs {np.max(diff):.3e} outside the known 1DMIX-040 bound "
-        f"[{min_max_abs:.1e}, {max_max_abs:.1e}]"
-    )
+def test_global_ocean_cs32x15_capture_geometry_is_pressure_coordinate(cs32x15_capture):
+    """MITgcm-side fact (input geometry, kept from 1DMIX-040/042): the capture's grid is
+    in Pa, not metres -- POSITIVE depth, deepest first, decreasing with level index.
+    Measured values of `depth`/`cell_thickness` (same Pa grid as the KPP cs32x15 capture)."""
+    inputs_ds, _ = cs32x15_capture
+    depth = inputs_ds['depth'].values
+    dz = inputs_ds['cell_thickness'].values
+    assert np.all(depth > 0.0) and np.all(np.diff(depth) < 0.0)
+    np.testing.assert_allclose([depth.max(), depth.min()], [4.94666946e7, 2.51327843e5], rtol=1e-6)
+    np.testing.assert_allclose([dz.min(), dz.max(), dz.sum()], [5.02655687e5, 7.10518163e6, 5.30192854e7], rtol=1e-6)
+
+
+def test_global_ocean_cs32x15_mitgcm_ggl90_diffkz_is_in_coordfac_squared_units(cs32x15_capture):
+    """MITgcm-side fact: MITgcm's own captured `diff_kz` is in Pa^2/s-scale units, not
+    comparable with its `visc_az`/`mixing_length` in metres. The instrumented source
+    `mitgcm_verification_mods/ggl90_mods/ggl90_calc.F` says why: `coordFac = gravity*rhoConst`
+    when `usingPCoords` (line 257); the captured `visc_az` is `KappaM`, stored in
+    `GGL90viscOutput` before any coordFac scaling (lines 518-519); and
+    `GGL90diffKr = MAX( MIN(visctmp/TKEPrandtlNumber, GGL90diffMax)*coordFac*coordFac, diffKrNrS )`
+    (lines 1088-1090). Asserted here as the full law over EVERY cell with `visc_az > 0`
+    (510,536 cells; the other 411,064 have `visc_az == 0` and must have `diff_kz == 0`),
+    with `TKEPrandtlNumber` from the capture's `tke_prandtl_number` and `GGL90diffMax`,
+    `diffKzS` (= diffKrNrS here, 0), `gravity`, `rhoConst` from the capture's attributes
+    (nothing hard-coded). `visctmp` equals `visc_az` here because the capture's `viscAz` and
+    `diffKzS` backgrounds are 0. Measured maximum relative deviation 0.0 (operation order of
+    the Fortran: `min(...)*coordFac*coordFac`); rtol 1e-12 is kept as the margin. The law's
+    consequence: MITgcm's `diff_kz` maximum is 2.0149e9 while its `visc_az` maximum is 19.545
+    and its `mixing_length` maximum is 1511.6 m."""
+    inputs_ds, mitgcm_ds = cs32x15_capture
+    attrs = inputs_ds.attrs
+    assert float(attrs['viscAz']) == 0.0 and float(attrs['diffKzS']) == 0.0   # visctmp == visc_az below
+    coord_fac = float(attrs['gravity']) * float(attrs['rhoConst'])
+    diff_max = float(attrs['GGL90diffMax'])
+    floor = float(attrs['diffKzS'])
+    visc = mitgcm_ds['visc_az'].values
+    kz = mitgcm_ds['diff_kz'].values
+    pr = mitgcm_ds['tke_prandtl_number'].values
+    sel = visc > 0.0
+    assert int(sel.sum()) == 510536 and int((~sel).sum()) == 411064
+    law = np.maximum(np.minimum(visc / pr, diff_max) * coord_fac * coord_fac, floor)
+    np.testing.assert_allclose(kz[sel], law[sel], rtol=1e-12, atol=0)
+    assert np.all(kz[~sel] == 0.0)
+    assert int(((visc / pr)[sel] > diff_max).sum()) == 0          # the GGL90diffMax cap is never reached
+    assert 2.0e9 < float(kz.max()) < 2.03e9
+    assert 19.0 < float(visc.max()) < 20.0
+    assert 1400.0 < float(mitgcm_ds['mixing_length'].max()) < 1600.0
+
+
+def test_global_ocean_cs32x15_port_rejects_pressure_coordinate_input(cs32x15_capture, tmp_path):
+    """1DMIX-073: the port must REFUSE this capture's geometry rather than return finite
+    wrong values (pre-change: 813,820 non-NaN cells, 555,220 of them ocean, all finite, see the historical numbers in
+    the section comment above). Three layers, all on the real capture:
+      (a) `GGL90Driver.compute_mixing` on a real fully-wet captured column with its
+          captured TKE/T/S/velocity/forcing raises ValueError naming GGL90, the value
+          max(depth)=4.94667e+07, the pressure-coordinate reason and 1DMIX-040;
+      (b) the replay entry point `run_ggl90_from_netcdf_input.run` on the whole capture
+          raises the same ValueError (it has no `except` clause, so the driver's error
+          propagates -- verified by reading the file, 1DMIX-073) and writes no output file;
+      (c) the shared guard `validate_zcoordinate_geometry` on the capture grid raises.
+    No tolerance is involved."""
+    from GGL90.ggl90_core_driver import GGL90Driver
+    from main.column_grid import validate_zcoordinate_geometry
+
+    inputs_ds, _ = cs32x15_capture
+    depth = inputs_ds['depth'].values
+    dz = inputs_ds['cell_thickness'].values
+
+    # (a) first fully-wet captured column at t=0 (small slice of the capture, one timestep)
+    theta0 = inputs_ds['temperature'].values[0]
+    full_wet = np.argwhere((theta0 != 0.0).all(axis=-1))
+    assert len(full_wet) > 0
+    i, j = (int(n) for n in full_wet[0])
+    col = {n: inputs_ds[n].values[0, i, j, :] for n in
+           ('tke_before', 'temperature', 'salinity', 'u_velocity', 'v_velocity')}
+    driver = GGL90Driver(build_params(inputs_ds))
+    with pytest.raises(ValueError) as exc:
+        driver.compute_mixing(
+            tke=col['tke_before'], u=col['u_velocity'], v=col['v_velocity'],
+            theta=col['temperature'], salt=col['salinity'], depth=depth, z=depth, dz=dz,
+            dt=float(inputs_ds.attrs['deltaT']), mask=np.ones(len(dz)),
+            u_star_sq=float(inputs_ds['u_star_sq'].values[0, i, j]),
+            gravity=float(inputs_ds.attrs['gravity']), rho_const=float(inputs_ds.attrs['rhoConst']))
+    msg = str(exc.value)
+    assert msg.startswith('GGL90 '), msg
+    assert f"max(depth)={float(depth.max()):.6g}" in msg and '4.94667e+07' in msg, msg
+    assert 'pressure-coordinate' in msg and '1DMIX-040' in msg, msg
+
+    # (b) the whole-capture replay raises and leaves no output behind
+    out_nc = tmp_path / 'python_ggl90_outputs_cs32x15.nc'
+    with pytest.raises(ValueError, match=r'GGL90 .*1DMIX-040'):
+        run_python_ggl90_on_dataset(DATA_CS32X15, out_nc)
+    assert not out_nc.exists()
+
+    # (c) the shared guard on the capture grid
+    with pytest.raises(ValueError, match=r'max\(depth\)=4\.94667e\+07'):
+        validate_zcoordinate_geometry(depth, dz, scheme='GGL90')
 
 
 # ========================================================================

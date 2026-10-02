@@ -114,7 +114,7 @@ port did **not** agree with it (NaN in 91% of interior cells, measured before
 1DMIX-072), and the only field that agreed closely (`ghat`) did so because both
 sides evaluate the same formula on the same unit-confused geometry. Since
 1DMIX-072 the port refuses such input with a `ValueError`
-(`kpp_core_driver.py::validate_zcoordinate_geometry`), so there is no port replay of
+(`main/column_grid.py::validate_zcoordinate_geometry`, moved there from `kpp_core_driver.py` under 1DMIX-073 and re-exported by it), so there is no port replay of
 that capture any more. That capture is a known-gap characterization, never a
 validation.
 
@@ -594,7 +594,7 @@ each part is stated here so that no number on this capture is mistaken for port 
    with the Pa-valued depth; whether that is the only NaN source was not traced further), and its
    `hbl` differed from MITgcm's by a median 1.2e6 with 76.6% of columns differing by more than 1
    (Pa-as-metres). That silent NaN output is what the project profile forbids for unsupported
-   input; 1DMIX-072 added `KPP/kpp_core_driver.py::validate_zcoordinate_geometry`, called first by
+   input; 1DMIX-072 added `validate_zcoordinate_geometry` (since 1DMIX-073 in `main/column_grid.py`, shared with GGL90 and re-exported by `KPP/kpp_core_driver.py`), called first by
    `KPPDriver.compute_mixing`, which raises `ValueError` (naming the offending quantity and value,
    the pressure-coordinate reason and 1DMIX-040) for geometry that cannot be a metres-scale
    z-coordinate column. This capture's geometry -- `depth` positive Pa (max 4.9466694605501e7),

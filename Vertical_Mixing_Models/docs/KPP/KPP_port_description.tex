@@ -621,6 +621,7 @@ Enhanced diffusivity:
     \item \textbf{depth}: the code variable \verb|depth| holds the signed $z$ of each cell centre: a negative number that becomes more negative downward (a cell centre 50\,m below the surface has \verb|depth| $= -50$). The physical distance below the surface is $-$\verb|depth|, a positive number that increases downward (MITgcm wording convention ``depth positive down'')
     \item \textbf{Vertical index k}: k=0 is shallowest (surface), k=nz-1 is deepest (bottom)
     \item \textbf{Vertical spacing}: \verb|dz[k]| or \verb|cell_thickness[k]| is thickness of cell k
+    \item \textbf{Supported grids}: metres-scale z-coordinate columns only; pressure-coordinate (\verb|usingPCoords|, grid in Pa) input is permanently unsupported (1DMIX-040; MITgcm's own KPP package has no \verb|coordFac| handling either). Step 0 of \verb|KPPDriver.compute_mixing| calls \verb|validate_zcoordinate_geometry| (\verb|main/column_grid.py|, shared by KPP and GGL90; 1DMIX-072 for KPP) and raises \verb|ValueError| for non-finite values, non-positive thickness, positive \verb|depth|, or any of \verb+max|depth|+, \verb+sum(dz)+ and \verb+max(dz)+ above 11,000\,m. It is a pure pre-check: valid input gives bit-identical output.
 \end{itemize}
 
 \textbf{Staggering Conventions}:
@@ -634,7 +635,7 @@ Enhanced diffusivity:
 
 \textbf{Python vertical arrays}:
 \begin{itemize}
-    \item \verb|depth[k]|: depth of cell center k [m], positive
+    \item \verb|depth[k]|: signed $z$ of cell center k [m], negative downward (see the depth convention above)
     \item \verb|cell_thickness[k]|: thickness of cell k [m]
     \item \verb|visc_az[k]|, \verb|diff_kz_s[k]|, \verb|diff_kz_t[k]|: mixing coefficients at top face of cell k [m²/s]
     \item \verb|ghat[k]|: nonlocal transport at bottom face of cell k [s/m²]

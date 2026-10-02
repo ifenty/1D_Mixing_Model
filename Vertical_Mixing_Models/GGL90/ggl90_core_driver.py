@@ -4,6 +4,8 @@ Main GGL90 driver class for column-wise mixing computations.
 This is the Python equivalent of GGL90_CALC in MITgcm.
 
 Orchestrates:
+  0. Input geometry guard (z-coordinate columns only, ``ValueError`` otherwise,
+     1DMIX-073) — from main.column_grid
   1. Stratification and shear diagnosis (N², S²) — from main.physics_basis
   2. Mixing length computation — from ggl90_scheme_specific
   3. Mixing coefficient assembly — from ggl90_mixing_coefficients
@@ -35,6 +37,7 @@ try:
         compute_vertical_shear_squared,
     )
     from main.shared_column_solver import solve_tridiagonal
+    from main.column_grid import validate_zcoordinate_geometry
 except ImportError:
     # Fallback: add parent directories to path
     parent_dir = Path(__file__).parent.parent
@@ -45,6 +48,7 @@ except ImportError:
         compute_vertical_shear_squared,
     )
     from main.shared_column_solver import solve_tridiagonal
+    from main.column_grid import validate_zcoordinate_geometry
 
 
 @dataclass
@@ -313,6 +317,7 @@ class GGL90Driver:
         Compute GGL90 mixing coefficients for a single column.
 
         Roadmap of this routine (calculations in order):
+            Step 0: Reject non-z-coordinate geometry (``ValueError``, 1DMIX-073) — main.column_grid
             Step 1: Compute stratification and shear (N², S²) — shared physics_basis
             Step 2: Compute mixing length (from TKE and N², with limits) — scheme_specific
             Step 3: Compute viscosity and diffusivity (κ_m, κ_h, κ_h_tendency) — mixing_coefficients
@@ -402,12 +407,27 @@ class GGL90Driver:
             above. Passed through unchanged to
             `compute_viscosity_diffusivity` and `step_tke_forward`.
 
+        Raises
+        ------
+        ValueError
+            (1DMIX-073) for ``depth``/``dz`` that cannot be a metres-scale
+            z-coordinate column -- non-finite, non-positive thickness, positive
+            depth, or any extent above ``MAX_ZCOORD_EXTENT_M`` (11,000 m) -- which
+            is how pressure-coordinate (Pa) geometry presents; see
+            ``main.column_grid.validate_zcoordinate_geometry``.  Pressure-
+            coordinate support is permanently out of scope (1DMIX-040); before
+            this check the port returned finite but wrong values there.
+
         Returns
         -------
         GGL90Output
             Updated TKE, mixing coefficients, and diagnostics
         """
         nz = len(tke)
+
+        # ===== Step 0: Reject non-z-coordinate geometry (1DMIX-073) =====
+        # Pure pre-check; raises ValueError, changes no computed value.
+        validate_zcoordinate_geometry(depth, dz, scheme="GGL90")
 
         # ===== Step 1: Compute stratification and shear =====
         # Compute N² using POTENTIAL density gradients (MITgcm's sigmaR).

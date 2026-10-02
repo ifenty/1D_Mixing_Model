@@ -83,8 +83,8 @@ FIELD_ORDER = ['visc_az', 'diff_kz', 'mixing_length', 'tke_after']
 # Cap the number of points actually drawn in a scatter plot. Statistics are
 # always computed over the full wet population; only the scatter plot's
 # rendering is subsampled, since isomip/global_ocean_90x40x15/
-# global_ocean_cs32x15 have wet-cell counts (1.4M/486K/814K respectively)
-# large enough that an unsampled matplotlib scatter would be slow to render
+# global_ocean_cs32x15 have cell counts (1.4M/486K/814K respectively; the cs32x15 count, from the
+# pre-1DMIX-073 replay, includes zero-filled land-column cells) large enough that an unsampled matplotlib scatter would be slow to render
 # and bloat the PDF without adding visual information over a subsample.
 _MAX_SCATTER_POINTS = 20000
 _SCATTER_SEED = 0

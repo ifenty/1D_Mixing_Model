@@ -1954,3 +1954,30 @@ Add an explicit input guard (e.g. depth units/sign/magnitude consistent with a z
 ### Gate acceptance
 
 Accepted by `loop_gate.py --check-done` at 2026-10-02T11:09:32.633049+00:00 for iteration 2026-09-30T14:48:37.065384+00:00. The KPP port now raises an explicit ValueError on geometry that cannot be a metres-scale z-coordinate column, instead of silently returning NaN. The check is validate_zcoordinate_geometry, a pure pre-check run as step 0 of KPPDriver.compute_mixing: values finite, dz > 0, depth <= 0, and max|depth|, sum(dz) and max(dz) each <= 11,000 m (deepest ocean ~10,935 m). The replay harness validates the grid up front, because it turns per-column exceptions into NaN. 15 guard unit tests. The cs32x15 port-side tests now assert the ValueError; the ghat shared-unit test is retired, with its last measured numbers kept as historical evidence, and the MITgcm-side unit-confusion assertions are unchanged. Docs updated, including the contract's signed negative-down depth convention. GGL90 has the same exposure (a declared GGL90 capture is pressure-coordinate), filed as 1DMIX-073. Richard: APPROVE after 1 documentation-only correction round. His HEAD-vs-candidate replays of 5 real captures are bit-identical, and no valid geometry is rejected. Final verification EXECUTED PASS: 177 passed, 3 skipped, 0 failed. Process note: --check-start was skipped after --prepare and replayed late on the stashed pre-change tree (filed as an ESX-Team issue).
+
+## 🟢 RESOLVED: the GGL90 port returns finite wrong values for pressure-coordinate input, and a declared GGL90 capture is pressure-coordinate
+
+**Date Identified**: 2026-09-30T15:30:00Z
+**Date Resolved**: 2026-10-02T17:54:29.370338+00:00
+**Status**: Resolved
+**UUID**: 1DMIX-073
+**Anchors**: `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_core_driver.py::validate_zcoordinate_geometry`; `MITgcm_to_Python_port_verification/scripts/run_ggl90_from_netcdf_input.py`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`
+
+### Issue or research question
+1DMIX-072 made KPP reject pressure-coordinate geometry. `GGL90Driver.compute_mixing` has no equivalent check. The declared GGL90 capture `global_ocean_cs32x15_idemix_10` (recipe G4, `OCEANICP`) is itself pressure-coordinate: positive Pa depths up to 4.95e7, `cell_thickness` 5.03e5 to 7.11e6. Its current tests therefore compare the port against MITgcm on geometry the port does not support (1DMIX-040).
+
+### Evidence
+Bob, 1DMIX-072 unit 4 (devel-loop/loop_state/bob-1DMIX-072-evidence.md): replaying steps 0-9 gives 813,820 wet cells, all finite, with `visc_az`/`diff_kz` capped at `GGL90viscMax`=100, `mixing_length` up to 1.449e7 m and `tke_after` up to 4.199e5. There is no raise and no geometry check anywhere in the GGL90 path.
+
+### Scientific or engineering impact
+It is the same silent-incorrect-result risk the contract records. Existing GGL90 cs32x15 known-gap assertions characterize unsupported input as if it were a port comparison.
+
+### Proposed action and acceptance
+Share the z-coordinate guard (move `validate_zcoordinate_geometry` to a common module) and call it from `GGL90Driver.compute_mixing`. Convert the GGL90 cs32x15 port-side tests to assert the ValueError, keeping MITgcm-side facts and recording historical numbers the way 1DMIX-072 did. Acceptance:
+- every z-coordinate GGL90 capture and scenario is unaffected, with outputs bit-identical;
+- the full suite passes;
+- no tolerance is widened.
+
+### Gate acceptance
+
+Accepted by `loop_gate.py --check-done` at 2026-10-02T17:54:29.370338+00:00 for iteration 2026-10-02T16:12:46.985593+00:00. GGL90Driver.compute_mixing now raises an explicit ValueError on geometry that cannot be a metres-scale z-coordinate column. The 1DMIX-072 guard moved unchanged to main/column_grid.py and both schemes call it (re-exported from kpp_core_driver; the caller passes its scheme name). The GGL90 cs32x15 port-side tests assert the ValueError; the pre-change port figures were re-measured on a HEAD extraction and recorded as historical, with the cell count stated (555,220 ocean plus 258,600 zero-filled land cells). New MITgcm-side fact, asserted over all 510,536 cells with nonzero viscosity and cited to ggl90_calc.F lines 257, 512-519 and 1088-1090: diff_kz = max(min(visc_az/Pr, GGL90diffMax)*coordFac^2, diffKzS), so the 2.0e9 diff_kz values are MITgcm's own pressure-coordinate scaling, not a port error. Richard APPROVE after 1 documentation round; his own runs show the guard statement-identical for KPP (20,000-geometry fuzz), GGL90 replays bit-identical to HEAD on lab_sea_999 (full), two lab_sea 6-month windows, isomip and vermix, and no valid geometry rejected. Final verification EXECUTED PASS: 192 passed, 3 skipped, 0 failed. Limits: .tex edits uncompiled and the two port-description PDFs stale (no LaTeX here).

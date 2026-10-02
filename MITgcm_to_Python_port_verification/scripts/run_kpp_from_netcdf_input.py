@@ -655,7 +655,8 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
         If the input grid (`depth`/`cell_thickness`) is not a metres-scale
         z-coordinate column (1DMIX-072; e.g. the pressure-coordinate
         `global_ocean.cs32x15` capture, 1DMIX-040), raised by
-        `KPP.kpp_core_driver.validate_zcoordinate_geometry` before any column is
+        `main.column_grid.validate_zcoordinate_geometry` (re-exported by
+        `KPP.kpp_core_driver`) before any column is
         run. (Per-column exceptions are otherwise recorded as NaN cells.)
     """
 
@@ -722,7 +723,7 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
     # into a NaN cell ("except Exception ... continue" / the worker's error dict),
     # which would re-create the silent all-NaN output the driver guard exists to
     # prevent (e.g. the pressure-coordinate global_ocean.cs32x15 capture, 1DMIX-040).
-    validate_zcoordinate_geometry(depth, cell_thickness)
+    validate_zcoordinate_geometry(depth, cell_thickness, scheme="KPP")
 
     # Allocate output arrays
     visc_az_out = np.full((n_time, nx, ny, nz), np.nan)

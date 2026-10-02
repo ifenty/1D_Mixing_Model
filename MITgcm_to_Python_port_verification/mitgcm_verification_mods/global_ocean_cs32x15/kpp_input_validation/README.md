@@ -26,7 +26,7 @@ KPP_VALIDATION_RESULTS.md`, `tests/test_kpp_mitgcm_validation_extended.py`):
   `visc_az`/`diff_kz` (the first floating-point error when one column is replayed is an overflow in
   `swfrac`'s `exp(-z/d)` with the Pa-valued depth) and its `hbl` differed from MITgcm's by a median 1.2e6.
   Since 1DMIX-072, `KPPDriver.compute_mixing` and the replay harness `run_python_kpp_on_dataset` raise
-  `ValueError` on this geometry (`KPP/kpp_core_driver.py::validate_zcoordinate_geometry`), so the port
+  `ValueError` on this geometry (`main/column_grid.py::validate_zcoordinate_geometry`, re-exported by `KPP/kpp_core_driver.py`), so the port
   can no longer be replayed on this capture and those port-side numbers are historical.
   Only `ghat` was close (median abs diff 0, 87% of active cells within 1%, maximum 6.3275154945147095e10
   identical on both sides): **that agreement is shared unit-confused arithmetic, not port fidelity**,

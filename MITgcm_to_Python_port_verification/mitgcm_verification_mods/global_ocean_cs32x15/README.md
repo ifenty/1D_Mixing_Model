@@ -61,10 +61,14 @@ This experiment sets `buoyancyRelation='OCEANICP'` → MITgcm's own
 `usingPCoords=.TRUE.` (pressure coordinates). This project's GGL90 (and
 KPP) Python port has no pressure-coordinate support at all — see
 `open_issues.md` 1DMIX-040 for the full evidence. The captured grid
-geometry (`rC`/`rF`/`drF`) is genuinely in Pa here, not metres; any
-Python-port comparison against this capture's `mixing_length`/`diff_kz`/
-`tke_after` is dominated by that confound, not by the IDEMIX gap this
-capture was originally built to test. Use `global_ocean.90x40x15`'s own
+geometry (`rC`/`rF`/`drF`) is genuinely in Pa here, not metres. Before
+1DMIX-073 a Python-port comparison against this capture's `mixing_length`/
+`diff_kz`/`tke_after` was dominated by that confound (the port returned
+finite wrong values), not by the IDEMIX gap this capture was originally
+built to test; since 1DMIX-073 `GGL90Driver.compute_mixing` raises a
+`ValueError` on this geometry (as `KPPDriver.compute_mixing` has since
+1DMIX-072), so there is no port replay of it and the capture serves as
+MITgcm-side evidence only. Use `global_ocean.90x40x15`'s own
 capture (a real z-coordinate experiment) for a clean IDEMIX-gap
 quantification instead.
 

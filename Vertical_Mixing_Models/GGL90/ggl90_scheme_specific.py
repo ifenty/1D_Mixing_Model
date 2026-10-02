@@ -290,8 +290,10 @@ class GGL90MixingLength:
         this project has no p-coordinate/atmosphere path; confirmed a real,
         not just theoretical, gap by 1DMIX-040 -- feeding a genuine
         `usingPCoords=.TRUE.` MITgcm capture's grid geometry (in Pa, not m)
-        through this method's `dz`-based ceiling produces mixing lengths
-        wrong by ~4 orders of magnitude, not an error):
+        through this method's `dz`-based ceiling produced mixing lengths
+        wrong by ~4 orders of magnitude, with no error; since 1DMIX-073
+        `GGL90Driver.compute_mixing` rejects such geometry with a
+        `ValueError` before this method is reached):
         1. Downward sweep: mxl_down(k) = min(L_raw(k), mxl_down(k-1) + dz(k-1))
         2. Bottom special treatment (Fortran "extra treatment of k=Nr because
            level Nr+1 is not available", ggl90_mixinglength.F:260-267):
