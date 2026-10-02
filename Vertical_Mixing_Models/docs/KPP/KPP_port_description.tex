@@ -618,7 +618,7 @@ Enhanced diffusivity:
 \textbf{Coordinate Conventions (both implementations)}:
 \begin{itemize}
     \item \textbf{z-axis}: Positive upward, z = 0 at surface
-    \item \textbf{depth}: Positive downward (depth = $-z$)
+    \item \textbf{depth}: the code variable \verb|depth| holds the signed $z$ of each cell centre: a negative number that becomes more negative downward (a cell centre 50\,m below the surface has \verb|depth| $= -50$). The physical distance below the surface is $-$\verb|depth|, a positive number that increases downward (MITgcm wording convention ``depth positive down'')
     \item \textbf{Vertical index k}: k=0 is shallowest (surface), k=nz-1 is deepest (bottom)
     \item \textbf{Vertical spacing}: \verb|dz[k]| or \verb|cell_thickness[k]| is thickness of cell k
 \end{itemize}
@@ -734,7 +734,7 @@ Enhanced diffusivity:
 \verb|bosol| & \verb|bosol| & Radiative buoyancy forcing [m²/s³] \\
 \verb|Rib| & \verb|Rib| & Bulk Richardson number [-] \\
 \verb|kbl| & \verb|kbl| & Index of first level below hbl \\
-\verb|depth| & \verb|-rC| & Depth (positive downward) [m] \\
+\verb|depth| & \verb|rC| & Signed cell-centre $z$ [m]: negative, more negative downward; distance below the surface is $-$\verb|depth| (MITgcm wording convention ``depth positive down'') \\
 \verb|cell_thickness| & \verb|drF| & Cell thickness [m] \\
 \midrule
 \multicolumn{3}{l}{\textbf{Parameters:}} \\
@@ -767,7 +767,7 @@ All variables use consistent units between Python and Fortran:
 \textbf{No sign convention differences} between Python and Fortran implementations. Both use:
 \begin{itemize}
     \item z-axis positive upward (z = 0 at surface, z < 0 below surface)
-    \item depth positive downward (depth = $-z$)
+    \item the code variable \verb|depth| is the signed cell-centre $z$ (negative, more negative downward); the distance below the surface is $-$\verb|depth|, positive and increasing downward (MITgcm wording convention ``depth positive down'')
     \item hbl positive (represents positive depth below surface)
     \item Positive buoyancy forcing = destabilizing (heating or freshening)
     \item Negative buoyancy forcing = stabilizing (cooling or salting)

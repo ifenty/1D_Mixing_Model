@@ -8,10 +8,12 @@ explicitly justified in a code comment and, if uncertain, opened as an issue
 
 ## Coordinate and unit conventions
 
-- `z` positive **up**; the physical depth below the surface is positive **down**
-  (`z = -depth_below_surface`). The port's `depth` arguments are **signed
-  cell-centre depths, negative downward, i.e. they are `z` itself** (surface near 0,
-  deeper cells more negative): `main/column_grid.py::ColumnGrid.depth` (its
+- `z` is height, positive **up**, with `z = 0` at the sea surface, so every point in
+  the ocean has `z <= 0`. The port's `depth` arguments are **the signed `z` of each
+  cell centre: negative numbers that become more negative downward** (a cell centre
+  50 m below the surface has `depth = -50.0`; this is MITgcm's `rC`). The physical
+  distance below the surface is `-depth`, a positive number that increases downward
+  (MITgcm wording convention "depth positive down"). Where this applies: `main/column_grid.py::ColumnGrid.depth` (its
   `z_positive_up` property is an alias for it), and the `depth` argument of
   `KPPDriver.compute_mixing` and `GGL90Driver.compute_mixing`, whose docstrings say
   "negative, increasing downward". This is what

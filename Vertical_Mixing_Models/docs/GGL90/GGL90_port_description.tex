@@ -448,7 +448,7 @@ where Richardson number:
 \textbf{Coordinate Conventions (both implementations)}:
 \begin{itemize}
     \item \textbf{z-axis}: Positive upward, z = 0 at surface
-    \item \textbf{depth}: Positive downward (depth = $-z$)
+    \item \textbf{depth}: the code variable \verb|depth| holds the signed $z$ of each cell centre: a negative number that becomes more negative downward (a cell centre 50\,m below the surface has \verb|depth| $= -50$). The physical distance below the surface is $-$\verb|depth|, a positive number that increases downward (MITgcm wording convention ``depth positive down'')
     \item \textbf{Vertical index k}: k=0 is shallowest (surface), k=nz-1 is deepest (bottom)
     \item \textbf{Vertical spacing}: \verb|dz[k]| is thickness of cell k
 \end{itemize}
@@ -556,7 +556,7 @@ See Section 3.6 for detailed boundary condition implementation. Summary:
 \verb|u_star_sq| & \verb|uStarSquare| & Friction velocity squared [m²/s²] \\
 \verb|kappa_e| & \verb|KappaE| & TKE diffusivity [m²/s] \\
 \verb|z| & \verb|rC| (cell centers) & Vertical coordinate [m] \\
-\verb|depth| & \verb|-rC| & Depth (positive downward) [m] \\
+\verb|depth| & \verb|rC| & Signed cell-centre $z$ [m]: negative, more negative downward; distance below the surface is $-$\verb|depth| (MITgcm wording convention ``depth positive down'') \\
 \verb|dz| & \verb|drF| & Cell thickness [m] \\
 \midrule
 \multicolumn{3}{l}{\textbf{Parameters:}} \\
@@ -591,7 +591,7 @@ No unit conversions are needed between the Python and Fortran implementations. B
 \textbf{No sign convention differences} between Python and Fortran implementations. Both use:
 \begin{itemize}
     \item z-axis positive upward (z = 0 at surface, z < 0 below surface)
-    \item depth positive downward (depth = $-z$)
+    \item the code variable \verb|depth| is the signed cell-centre $z$ (negative, more negative downward); the distance below the surface is $-$\verb|depth|, positive and increasing downward (MITgcm wording convention ``depth positive down'')
     \item Vertical gradients computed consistently
     \item Buoyancy term B = $-\kappa_h N^2$ (negative for stable stratification)
 \end{itemize}

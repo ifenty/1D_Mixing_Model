@@ -115,7 +115,9 @@ def linear_eos(
     salt : np.ndarray
         Salinity [psu or g/kg]
     depth : np.ndarray
-        Depth (positive down) [m]
+        Signed cell-centre z [m], negative and more negative downward, as
+        ColumnGrid.depth (MITgcm wording convention "depth positive down"
+        refers to -depth). Unused by this linear formula.
     rho_const : float
         Reference density [kg/m^3]
     tref : float
