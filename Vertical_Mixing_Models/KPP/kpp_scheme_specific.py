@@ -40,6 +40,8 @@ def diagnose_bl_depth(
     boplume: float = 0.0,
     sp_depth: float = 0.0,
     hbl_override: float = None,
+    zgrid_below: np.ndarray = None,
+    hwide_below: np.ndarray = None,
 ) -> Tuple[float, float, float, float, int, np.ndarray]:
     """
     Diagnose boundary layer depth using bulk Richardson criterion.
@@ -93,6 +95,12 @@ def diagnose_bl_depth(
         -- every existing caller is unaffected and the default code path
         remains bit-identical (see `KPPDriver.compute_mixing`'s own
         `hbl_override` passthrough and `tests/test_kpp_hbl_override.py`).
+    zgrid_below, hwide_below : np.ndarray, shape (m,), optional
+        (1DMIX-075) centre depths and thicknesses of the m model levels below the
+        supplied wet column (MITgcm kmtj < Nr). The final `kbl` scan runs over the whole
+        model axis (wet levels then these), which reproduces MITgcm's sentinel aliasing
+        (kpp_routines.F:818-824, see below). Default None = the column is the full model
+        depth (kmtj = Nr).
 
     Returns
     -------
@@ -105,11 +113,21 @@ def diagnose_bl_depth(
     casea : float
         Case flag (1 = case A, 0 = case B)
     kbl : int
-        Index of first grid level below hbl
+        0-based index, on the model axis (supplied wet column followed by
+        `zgrid_below`), of MITgcm's `kbl` (= Fortran kbl - 1): the first level
+        below hbl, or the bottom wet level (nz-1) when none is found with no
+        dry level below; may be >= nz (a dry level, MITgcm's kbl = kmtj+1).
     Rib : np.ndarray, shape (nz,)
         Bulk Richardson number profile
     """
     nz = len(zgrid)
+    # Model axis (1DMIX-075): the supplied wet column, then the dry levels below it.
+    if zgrid_below is not None and len(zgrid_below):
+        zg_ext = np.concatenate([zgrid, np.asarray(zgrid_below, dtype=np.float64)])
+        hw_ext = np.concatenate([hwide, np.asarray(hwide_below, dtype=np.float64)])
+    else:
+        zg_ext, hw_ext = zgrid, hwide
+    n_model = len(zg_ext)          # MITgcm Nr
 
     # Initialize
     Rib = np.zeros(nz)
@@ -161,10 +179,10 @@ def diagnose_bl_depth(
         # kl+1 level, so mirror MITgcm's ghost point zgrid(Nrp1)=zgrid(Nr)*100
         # (a deep dummy level) rather than clamping the index, which would
         # make the denominator zero.
-        zgrid_below = zgrid[kl + 1] if kl + 1 < nz else zgrid[-1] * 100.0
+        zgrid_next = zg_ext[kl + 1] if kl + 1 < n_model else zg_ext[-1] * 100.0
         bvsq = 0.5 * (
             dbloc[kl-1] / (zgrid[kl-1] - zgrid[kl]) +
-            dbloc[kl] / (zgrid[kl] - zgrid_below)
+            dbloc[kl] / (zgrid[kl] - zgrid_next)
         )
 
         if bvsq == 0.0:
@@ -195,9 +213,9 @@ def diagnose_bl_depth(
                 print(f"         zgrid[0] = {zgrid[0]:.15e}")
                 print(f"         zgrid[1] = {zgrid[1]:.15e}")
                 print(f"         zgrid[2] = {zgrid[2]:.15e}")
-                print(f"         zgrid_below = {zgrid_below:.15e}")
+                print(f"         zgrid_next = {zgrid_next:.15e}")
                 print(f"         term1 = dbloc[0]/(zgrid[0]-zgrid[1]) = {dbloc[0]/(zgrid[0]-zgrid[1]):.15e}")
-                print(f"         term2 = dbloc[1]/(zgrid[1]-zgrid_below) = {dbloc[1]/(zgrid[1]-zgrid_below):.15e}")
+                print(f"         term2 = dbloc[1]/(zgrid[1]-zgrid_next) = {dbloc[1]/(zgrid[1]-zgrid_next):.15e}")
                 print(f"         bvsq = 0.5*(term1 + term2) = {bvsq:.15e}")
                 print(f"       ws calculation:")
                 print(f"         sigma = {sigma:.15e}")
@@ -268,7 +286,7 @@ def diagnose_bl_depth(
         if config.limit_hbl_stable and bfsfc > 0.0:
             hekman = config.cekman * ustar / max(abs(coriol), config.phepsi)
             hmonob = config.cmonob * ustar**3 / config.vonk / bfsfc
-            hlimit = stable * min(hekman, hmonob) + (stable - 1.0) * (-zgrid[-1])
+            hlimit = stable * min(hekman, hmonob) + (stable - 1.0) * (-zg_ext[-1])
             hbl = min(hbl, hlimit)
 
         # Apply minimum hbl
@@ -287,10 +305,20 @@ def diagnose_bl_depth(
         # recomputed AT this hbl exactly as for a diagnosed value.
         hbl = hbl_override
 
-    # Find new kbl for the (possibly limited) final hbl.
-    kbl = nz
-    for kl in range(1, nz):
-        if kbl == nz and (-zgrid[kl]) > hbl:
+    # Find new kbl for the (possibly limited) final hbl -- MITgcm bldepth, kpp_routines.F:805-824:
+    #     kbl(i) = kmtj(i)                                                  (:807)
+    #     DO kl = 2, Nr
+    #        IF ( kbl(i).EQ.kmtj(i) .AND. (-zgrid(kl)).GT.hbl(i) ) kbl(i) = kl   (:818-824)
+    # kmtj (the bottom wet level) is both the "none found yet" value and a legitimate result, so
+    # when the first level below hbl IS the bottom wet level, or hbl is deeper than it, the scan
+    # keeps going over the dry levels below (zgrid(kl), kl > kmtj, the model grid) and ends with
+    # kbl = kmtj+1 whenever such a level exists (kmtj < Nr). This reproduces that exactly (it is
+    # MITgcm's behaviour, not a port choice). 0-based: sentinel = nz-1 (kmtj-1), model axis zg_ext.
+    # With no dry level below (the column is the full model depth, kmtj = Nr) "none found"
+    # therefore returns nz-1 (MITgcm: kbl = Nr), not nz as before 1DMIX-075.
+    kbl = nz - 1
+    for kl in range(1, n_model):
+        if kbl == nz - 1 and (-zg_ext[kl]) > hbl:
             kbl = kl
 
     # BUG FIX (Finding 7, Python porting error): recompute the surface buoyancy
@@ -321,10 +349,11 @@ def diagnose_bl_depth(
     # The Fortran level kl=kbl_F maps to Python index kbl (= kbl_F - 1), NOT
     # kbl-1. The previous port used zgrid[kbl-1]/hwide[kbl-1], one cell too
     # shallow, which flipped the caseA/caseB decision near the boundary and
-    # corrupted the interior-vs-BL matching. When bottomed out (kbl==nz) the
-    # Fortran references zgrid(kmtj); clamp the index to stay in-bounds.
-    kbl_idx = min(kbl, nz - 1)
-    casea = 0.5 + np.sign(-zgrid[kbl_idx] - 0.5*hwide[kbl_idx] - hbl) * 0.5
+    # corrupted the interior-vs-BL matching.
+    # (1DMIX-075: kbl is a model-axis index (see the scan above), so zg_ext/hw_ext are indexed
+    # directly -- no clamp is needed; when kbl is the first dry level these are MITgcm's
+    # zgrid(kmtj+1)/hwide(kmtj+1).)
+    casea = 0.5 + np.sign(-zg_ext[kbl] - 0.5*hw_ext[kbl] - hbl) * 0.5
 
     return hbl, bfsfc, stable, casea, kbl, Rib
 
@@ -342,6 +371,8 @@ def compute_bl_mixing(
     wmt: np.ndarray,
     wst: np.ndarray,
     config: KPPParameters,
+    zgrid_below: np.ndarray = None,
+    hwide_below: np.ndarray = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Tuple[float, float, float]]:
     """
     Compute boundary layer mixing coefficients.
@@ -363,7 +394,8 @@ def compute_bl_mixing(
     diffus_interior : tuple of np.ndarray
         Interior diffusivities (visc, salt, temp)
     kbl : int
-        Index of first level below hbl
+        0-based model-axis index of MITgcm's kbl (see `diagnose_bl_depth`); may be
+        >= nz (the first dry level below the column)
     zgrid : np.ndarray
         Vertical grid
     hwide : np.ndarray
@@ -372,6 +404,14 @@ def compute_bl_mixing(
         Velocity scale lookup tables
     config : KPPParameters
         KPP configuration
+    zgrid_below, hwide_below : np.ndarray, optional
+        (1DMIX-075) grid of the model levels below the supplied wet column, as in
+        `diagnose_bl_depth`; None = the column is the full model depth.
+
+    The interior coefficients in `diffus_interior` are read the way MITgcm's blmix reads
+    `diffus(i,0:Nrp1,*)` (kpp_routines.F:1534-1548): entry 0 (surface) is 0, the entries at
+    and below the bottom wet interface (kpp_routines.F:208: `IF (k.GE.kmtj(i)) diffus = 0`)
+    are 0 whatever the caller passes in `diffus_interior[nz-1]`, and `hwide(Nrp1)` is `phepsi`.
 
     Returns
     -------
@@ -393,6 +433,22 @@ def compute_bl_mixing(
     """
     nz = len(zgrid)
     diffus_visc, diffus_s, diffus_t = diffus_interior
+    # Model axis and MITgcm's diffus(0:Nrp1) layout (1DMIX-075). dext[f] is Fortran's diffus(f)
+    # (f = 1-based level; dext[0] is the surface entry = 0): the wet interfaces 1..kmtj-1
+    # hold the passed values, kmtj..Nrp1 are 0 (kpp_routines.F:208).
+    if zgrid_below is not None and len(zgrid_below):
+        zg_ext = np.concatenate([zgrid, np.asarray(zgrid_below, dtype=np.float64)])
+        hw_ext = np.concatenate([hwide, np.asarray(hwide_below, dtype=np.float64)])
+    else:
+        zg_ext, hw_ext = zgrid, hwide
+    n_model = len(zg_ext)          # MITgcm Nr
+    hw_ext = np.append(hw_ext, config.phepsi)    # hwide(Nrp1) = phepsi (kpp_init_fixed.F:181)
+
+    def _diffus_ext(d):
+        e = np.zeros(n_model + 2)
+        e[1:nz] = d[:nz - 1]
+        return e
+    dext_visc, dext_s, dext_t = _diffus_ext(diffus_visc), _diffus_ext(diffus_s), _diffus_ext(diffus_t)
 
     # NOTE: MITgcm does not regularize hbl itself in BLMIX (kpp_routines.F:1556-1562).
     # Instead, it relies on BLDEPTH to never produce zero or extremely small hbl values.
@@ -445,37 +501,40 @@ def compute_bl_mixing(
     else:
         ws_one = np.copysign(ws_one_mag, ws_one[0])
 
-    # Find interior viscosities and derivatives at hbl
+    # Find interior viscosities and derivatives at hbl (kpp_routines.F:1510-1555).
+    # kn is a 0-based model-axis index (Fortran kn - 1); Fortran's diffus(kn) is dext[kn+1].
     kn = int(casea + config.phepsi) * (kbl - 1) + (1 - int(casea + config.phepsi)) * kbl
-    # Ensure kn is within valid bounds [0, nz-1]
-    kn = max(0, min(kn, nz - 1))
+    # kn < 0 only for a single-wet-level column with no level below (kbl = 0, casea = 1), where
+    # MITgcm would read zgrid(0)/hwide(0) = phepsi; nothing observable depends on it there
+    # (ghat(1) is zeroed by `k.LT.kbl` and there is no interface), so keep the old clamp.
+    kn = max(0, min(kn, n_model - 1))
 
     if config.match_diffusivities:
         if config.match_derivatives:
             # Match both value and derivative
-            delhat = 0.5 * hwide[kn] - zgrid[kn] - hbl
-            R = 1.0 - delhat / hwide[kn]
+            delhat = 0.5 * hw_ext[kn] - zg_ext[kn] - hbl
+            R = 1.0 - delhat / hw_ext[kn]
 
-            dvdzup = (diffus_visc[kn-1] - diffus_visc[kn]) / hwide[kn]
-            dvdzdn = (diffus_visc[kn] - diffus_visc[min(kn+1, nz-1)]) / hwide[min(kn+1, nz-1)]
+            dvdzup = (dext_visc[kn] - dext_visc[kn + 1]) / hw_ext[kn]
+            dvdzdn = (dext_visc[kn + 1] - dext_visc[kn + 2]) / hw_ext[kn + 1]
             viscp = 0.5 * ((1.0 - R) * (dvdzup + abs(dvdzup)) + R * (dvdzdn + abs(dvdzdn)))
 
-            dvdzup = (diffus_s[kn-1] - diffus_s[kn]) / hwide[kn]
-            dvdzdn = (diffus_s[kn] - diffus_s[min(kn+1, nz-1)]) / hwide[min(kn+1, nz-1)]
+            dvdzup = (dext_s[kn] - dext_s[kn + 1]) / hw_ext[kn]
+            dvdzdn = (dext_s[kn + 1] - dext_s[kn + 2]) / hw_ext[kn + 1]
             difsp = 0.5 * ((1.0 - R) * (dvdzup + abs(dvdzup)) + R * (dvdzdn + abs(dvdzdn)))
 
-            dvdzup = (diffus_t[kn-1] - diffus_t[kn]) / hwide[kn]
-            dvdzdn = (diffus_t[kn] - diffus_t[min(kn+1, nz-1)]) / hwide[min(kn+1, nz-1)]
+            dvdzup = (dext_t[kn] - dext_t[kn + 1]) / hw_ext[kn]
+            dvdzdn = (dext_t[kn + 1] - dext_t[kn + 2]) / hw_ext[kn + 1]
             diftp = 0.5 * ((1.0 - R) * (dvdzup + abs(dvdzup)) + R * (dvdzdn + abs(dvdzdn)))
         else:
-            delhat = 0.5 * hwide[kn] - zgrid[kn] - hbl
+            delhat = 0.5 * hw_ext[kn] - zg_ext[kn] - hbl
             viscp = 0.0
             difsp = 0.0
             diftp = 0.0
 
-        visch = diffus_visc[kn] + viscp * delhat
-        difsh = diffus_s[kn] + difsp * delhat
-        difth = diffus_t[kn] + diftp * delhat
+        visch = dext_visc[kn + 1] + viscp * delhat
+        difsh = dext_s[kn + 1] + difsp * delhat
+        difth = dext_t[kn + 1] + diftp * delhat
     else:
         visch = 0.0
         difsh = 0.0
@@ -583,8 +642,8 @@ def compute_bl_mixing(
     # (-zgrid[kl-1]), NOT the +0.5*hwide interface offset used in the interface
     # loop above -- this matches the Fortran (line 1655 vs line 1596).
     kl = kbl
-    klm1 = max(0, min(kl - 1, nz - 1))
-    sig_km1 = -zgrid[klm1] / hbl
+    klm1 = max(0, min(kl - 1, n_model - 1))
+    sig_km1 = -zg_ext[klm1] / hbl
     sigma_km1 = stable * sig_km1 + (1.0 - stable) * min(sig_km1, config.epsilon)
 
     wm_km1, ws_km1 = wscale(
@@ -620,6 +679,8 @@ def enhance_at_interface(
     hwide: np.ndarray,
     blmc: Tuple[np.ndarray, np.ndarray, np.ndarray],
     ghat: np.ndarray,
+    zgrid_below: np.ndarray = None,
+    hwide_below: np.ndarray = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Enhance diffusivity at kbl-0.5 interface.
@@ -633,7 +694,7 @@ def enhance_at_interface(
     hbl : float
         Boundary layer depth [m]
     kbl : int
-        Index of first level below hbl
+        0-based model-axis index of MITgcm's kbl (see `diagnose_bl_depth`)
     diffus_interior : tuple of np.ndarray
         Interior diffusivities
     casea : float
@@ -646,6 +707,12 @@ def enhance_at_interface(
         BL mixing coefficients
     ghat : np.ndarray
         Nonlocal transport
+    zgrid_below, hwide_below : np.ndarray, optional
+        (1DMIX-075) grid of the model levels below the supplied wet column; None = the
+        column is the full model depth. `kbl-1` may be the bottom wet level (MITgcm
+        kbl = kmtj+1); the interface below it is then the first dry level. When
+        `kbl-1` is itself a dry level only dry-level entries would change, which the
+        output drops (kpp_calc.F:585-592 mask), so nothing is done.
 
     Returns
     -------
@@ -655,19 +722,24 @@ def enhance_at_interface(
     diffus_visc, diffus_s, diffus_t = diffus_interior
 
     nz = len(zgrid)
+    if zgrid_below is not None and len(zgrid_below):
+        zg_ext = np.concatenate([zgrid, np.asarray(zgrid_below, dtype=np.float64)])
+    else:
+        zg_ext = zgrid
+    n_model = len(zg_ext)          # MITgcm Nr
     ki = kbl - 1
     # BUG FIX (Finding 8, Python porting error / off-by-one guard):
     # MITgcm enhance (kpp_routines.F:1739-1741) guards with
     #     ki = kbl_F - 1;  IF ((ki .ge. 1) .AND. (ki .LT. Nr))
     # With the 0-based convention (Python index p <-> Fortran level p+1, so
     # Python kbl = kbl_F - 1), the enhanced level is ki = kbl - 1 and the guard
-    # maps to  ki >= 0  AND  ki < nz - 1.  The previous port used `ki >= 1`,
+    # maps to  ki >= 0  AND  ki < Nr - 1  (Nr = model levels, 1DMIX-075; = nz for a
+    # full-depth column). The previous port used `ki >= 1`,
     # which skipped enhancement of the SHALLOWEST boundary layers (kbl==1,
     # i.e. ki==0) -- exactly the thin mixed layers where the kbl-0.5 interface
-    # enhancement matters most. The array accesses (zgrid[ki], zgrid[ki+1],
-    # diffus[ki], blmc[ki]) are already consistent with the Fortran and unchanged.
-    if ki >= 0 and ki < nz - 1:
-        delta = (hbl + zgrid[ki]) / (zgrid[ki] - zgrid[ki+1])
+    # enhancement matters most. ki >= nz would only modify dry-level entries (dropped).
+    if ki >= 0 and ki < n_model - 1 and ki < nz:
+        delta = (hbl + zgrid[ki]) / (zgrid[ki] - zg_ext[ki+1])
 
         # Viscosity
         dkmp5 = casea * diffus_visc[ki] + (1.0 - casea) * blmc_visc[ki]
@@ -684,7 +756,7 @@ def enhance_at_interface(
         dstar = (1.0 - delta)**2 * dkm1[2] + delta**2 * dkmp5
         blmc_t[ki] = (1.0 - delta) * diffus_t[ki] + delta * dstar
 
-        # Nonlocal transport (turn off in case B)
+        # Nonlocal transport: (1 - casea) is 0 in case A, so ghat(kbl-1) is zeroed in case A and kept in case B
         ghat[ki] = (1.0 - casea) * ghat[ki]
 
     return blmc_visc, blmc_s, blmc_t, ghat

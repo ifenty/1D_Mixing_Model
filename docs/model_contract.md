@@ -585,7 +585,10 @@ override needed) collapsed `hbl` to floating-point roundoff (max_abs
 2.8e-14 m) and `visc_az`/`diff_kz_s`/`diff_kz_t`'s `n_gt_1pct` to 2-4/600,
 confined to the two deepest grid cells at the two timesteps where `hbl` has
 deepened to the full column depth (`kbl==nz`) — a small residual left
-unexplained. `combined_storm`'s extreme cooling+wind forcing is, among this
+unexplained until **1DMIX-075**, which found it: MITgcm's "none found" `kbl` is
+`Nr` (`kpp_routines.F:807,818-824`), not `nz`; with that and the zeroed bottom
+interior coefficients (see the 1DMIX-075 subsection below) the residual is exactly 0.
+`combined_storm`'s extreme cooling+wind forcing is, among this
 project's 6 idealized scenarios, the only one whose excursion is large
 enough for the clamp-vs-no-clamp difference to change the *result*, though
 `arctic_convection` (25/2350 `wscale` evaluation points) and `hurricane_wind`
@@ -701,6 +704,48 @@ see the neighbours, so the contract is:
   captured values (`MITgcm_to_Python_port_verification/tests/test_tracer_point_inputs.py`); the smoothed `dbloc` is not captured and is
   validated only through its effect on KPP outputs. Where the periodic-wrap rule is actually verified (wrap and zero-fill give different reconstructions and wrap matches the capture; counts from this issue and from Richard's review): x on `global_ocean.90x40x15` (GGL90 2,790 of 3,830 domain-edge interfaces; KPP 6,039 of 10,220), `global_oce_latlon` (1,610 cells, review) and `seaice_obcs` (245); y only on `seaice_obcs` and the 1x1 single-column captures. NOT verified: y on the global grids and on every GGL90 capture, and both axes on `lab_sea` and `isomip`, because wrap and zero-fill give identical reconstructions there (closed basins whose edge columns are land). Options not reproduced (replay raises `NotImplementedError`):
   `KPP_ESTIMATE_UREF`, `KPP_SMOOTH_DVSQ`, `KPP_SMOOTH_DENS`, `KPP_SMOOTH_VISC`, `KPP_SMOOTH_DIFF`.
+
+### KPP `kbl` scan, bottom and surface interior coefficients: MITgcm conventions the port reproduces (1DMIX-075)
+
+Three MITgcm behaviours in the boundary-layer code (`kpp_mods/kpp_routines.F`, identical in stock `pkg/kpp`) that a
+single-column port reproduces only if it is told about the model levels below a truncated (partial-depth) column.
+The port reproduces all three; none is a port choice, and none is gated by `keep_mitgcm_bugs` (that flag, by its own definition in
+`KPP/kpp_parameters.py`, gates only places where the stock Fortran is documented as hazardous AND a never-activated
+fix exists in the source, i.e. the `wscale` extrapolation; MITgcm has no alternative to this behaviour, so
+there is no non-MITgcm path and no switch).
+
+1. **The `kbl` scan** (`bldepth`, `:807` and `:818-824`): `kbl(i) = kmtj(i)`, then `DO kl = 2, Nr` with
+   `IF (kbl(i).EQ.kmtj(i) .AND. (-zgrid(kl)).GT.hbl(i)) kbl(i) = kl`. `kmtj` (the bottom wet level) is both the "none found"
+   value and a legitimate result. So if the first level below `hbl` is the bottom wet level, or `hbl` is deeper than it,
+   the scan keeps going over the dry levels below it (`zgrid(kl)`, `kl > kmtj`, the model grid) and ends with `kbl = kmtj+1`
+   whenever `kmtj < Nr`; if the column is the whole model column (`kmtj = Nr`) the result is `Nr`. `casea` then uses that level
+   (`:917-921`, `-zgrid(kbl) - 0.5*hwide(kbl) - hbl`, i.e. whether the bottom of the wet column is deeper than `hbl`),
+   `blmix` uses `kn = kbl-1` (case A) or `kbl` (case B) (`:1510`), and `enhance` (`:1748-1762`) works at `ki = kbl-1`, which for
+   `kbl = kmtj+1` is the bottom wet level, so the interface above it is not enhanced; `ghat(ki) = (1-casea)*ghat(ki)` is 0 in
+   case A, and the combine loop (`IF (k .LT. kbl(i))`) leaves `ghat(Nr) = 0` for `kbl = Nr`.
+2. **Zeroed bottom coefficients** (KPPMIX, `:208`): after `Ri_iwmix`, `IF (k.GE.kmtj(i)) diffus(i,k,md) = 0.0` for `k = 1..Nrp1`.
+   `blmix` reads `diffus(kn+1)` (`:1535`, `:1543`, `:1548`) and `hwide(Nrp1) = phepsi` (`kpp_init_fixed.F:181`).
+3. **Zero surface entry** (`Ri_iwmix`, `:1224-1228`): `diffus(i,0,*) = 0`, read by `blmix` as `diffus(kn-1)` when `kn = 1`.
+   The port used to read Python index -1 there, the BOTTOM entry.
+
+**Driver contract.** `KPPDriver.compute_mixing(..., *, depth_below=None, cell_thickness_below=None)`: the cell-centre depths
+(<= 0, negative down) and thicknesses (> 0) of the `m` model levels below the supplied column, which is then the wet part
+`kmtj = nz` of an `Nr = nz+m` model column. Default `None` (or empty arrays) = the column is the full model depth. Both or neither
+(`ValueError` otherwise); 1-D, same length, finite, `cell_thickness_below > 0`, `depth_below <= 0` and strictly deeper than the last supplied
+level and strictly deepening, and the combined column must pass `validate_zcoordinate_geometry`, else `ValueError`.
+`diagnose_bl_depth`/`compute_bl_mixing`/`enhance_at_interface` take the same two arrays as `zgrid_below`/`hwide_below`; `kbl` is a 0-based index on
+the model axis (wet column then dry levels) and may be `>= nz`. Behaviour that is **not** changed by the inputs: a full-depth column whose
+boundary-layer base is in the interior (Fortran `kn` in `[1, nz-3]`, 0-based) is bit-identical to before (golden digests in
+`Vertical_Mixing_Models/tests/test_kpp_levels_below.py`); `KPPAdapter` and the scenario path never pass the inputs (full-depth columns).
+What changes for a full-depth column: "none found" (`hbl` fills the column) now gives `kbl = nz-1` (MITgcm `Nr`) instead of `nz`, `kn` at the bottom
+reads the zeroed bottom coefficient, and `kn = 0` reads zero for the surface entry. Of the six scenarios only `combined_storm` (`hbl` = full column at 3 of 12
+output times) changes.
+
+**Measured effect** (real replay, cells above 1% relative error `visc_az` / `diff_kz_s`): `global_ocean_90x40x15` 456 / 520 -> 7 / 27 (max_abs 0.0481 / 0.0521 -> 0.0050),
+`global_oce_latlon` first 5 steps 306 / 1,461 -> 62 / 1,136, `lab_sea` 999 steps 3,678 / 10,609 -> 2,941 / 9,943, `11k_1D` 134 / 156 -> 130 / 152,
+`seaice_obcs` and `1D_10` bit-identical, `lab_sea` first 20 steps and `lab_sea_6mo` (100 steps) with unchanged counts (their cells do change); cells where MITgcm's `ghat` is exactly 0 and the port's is not
+(hidden from the ">1% on active cells" statistic): 285 / 149 / 571 / 7,650 -> 0 on 90x40x15 / latlon (5 steps) / lab_sea_6mo (100) / lab_sea (999). Residual
+(7 / 27 cells on 90x40x15) is recorded in `KPP_port_validation/KPP_VALIDATION_RESULTS.md` and not chased. The `combined_storm` standalone-Fortran residual is exactly 0.
 
 ## Invariants
 

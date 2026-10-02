@@ -51,6 +51,9 @@ port and the Python GGL90 port.
      (`run_python_kpp_on_dataset(..., tracer_point_inputs=True)`) passes `shsq`, `dVsq` and the smoothed
      `dbloc` through `KPPDriver.compute_mixing`'s keyword-only `shsq_forcing`/`dvsq_forcing`/
      `dbloc_smooth_forcing`. `--column-local` (CLI) / `False` restores the former column-local replay.
+     Both KPP modes also pass the model levels below each truncated column (`depth_below`/`cell_thickness_below`, 1DMIX-075), because MITgcm's
+     `bldepth` scans `kbl` over all `Nr` levels (`kpp_routines.F:807,818-824`); `make_kpp_075_witnesses.py` rebuilds the reduced witnesses
+     of `Vertical_Mixing_Models/tests/test_kpp_levels_below.py` from the captures.
      The GGL90 replay raises `ValueError` for a capture with calcMeanVertShear=1, the KPP replay
      `NotImplementedError` for captures built with KPP_ESTIMATE_UREF/SMOOTH_DVSQ/SMOOTH_DENS/SMOOTH_VISC/
      SMOOTH_DIFF. Where the periodic-wrap rule is actually verified (wrap and zero-fill give different reconstructions and wrap matches the capture; counts from this issue and from Richard's review): x on `global_ocean.90x40x15` (GGL90 2,790 of 3,830 domain-edge interfaces; KPP 6,039 of 10,220), `global_oce_latlon` (1,610 cells, review) and `seaice_obcs` (245); y only on `seaice_obcs` and the 1x1 single-column captures. NOT verified: y on the global grids and on every GGL90 capture, and both axes on `lab_sea` and `isomip`, because wrap and zero-fill give identical reconstructions there (closed basins whose edge columns are land). See the two `*_VALIDATION_RESULTS.md` documents and `tests/test_tracer_point_inputs.py`.

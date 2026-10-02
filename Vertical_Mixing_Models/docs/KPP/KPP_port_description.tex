@@ -222,6 +222,7 @@ Surface buoyancy difference (numerator of bulk Ri):
     \item Key computation: lines 94-144 (Rib loop and comparison to Ricr)
     \item Interpolation: lines 146-180+ (linear interpolation to find exact hbl)
     \item Returns: \verb|hbl|, \verb|bfsfc|, \verb|stable|, \verb|casea|, \verb|kbl|, \verb|Rib|
+    \item 1DMIX-075: optional \verb|zgrid_below|, \verb|hwide_below| (the dry model levels below a truncated column); the final \verb|kbl| scan runs over the whole model axis exactly as \verb|kpp_routines.F:807,818-824| (the value $k_{mtj}$ is both ``not found'' and a legitimate result, so the scan ends at $k_{mtj}+1$ when a dry level exists below the bottom wet level; with no dry level ``not found'' is $N_r$); \verb|casea| uses that level's grid
 \end{itemize}
 
 \textbf{Fortran Source}:
@@ -734,7 +735,7 @@ Enhanced diffusivity:
 \verb|bo| & \verb|bo| & Surface buoyancy forcing [m²/s³] \\
 \verb|bosol| & \verb|bosol| & Radiative buoyancy forcing [m²/s³] \\
 \verb|Rib| & \verb|Rib| & Bulk Richardson number [-] \\
-\verb|kbl| & \verb|kbl| & Index of first level below hbl \\
+\verb|kbl| & \verb|kbl| & 0-based model-axis index of Fortran \verb|kbl|$-1$: first level below hbl; MITgcm's scan (\verb|kpp_routines.F:807,818-824|) continues below the bottom wet level and ends at $k_{mtj}+1$ (1DMIX-075, \verb|docs/model_contract.md|) \\
 \verb|depth| & \verb|rC| & Signed cell-centre $z$ [m]: negative, more negative downward; distance below the surface is $-$\verb|depth| (MITgcm wording convention ``depth positive down'') \\
 \verb|cell_thickness| & \verb|drF| & Cell thickness [m] \\
 \midrule

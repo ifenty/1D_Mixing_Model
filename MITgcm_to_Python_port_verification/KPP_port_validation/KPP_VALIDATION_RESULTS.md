@@ -140,14 +140,49 @@ unsmoothed, against the full tracer-point replay).** The `dVsq` reconstruction d
 statistics are identical with and without the `dbloc` smoothing: e.g. `90x40` max 0.3915 m, `lab_sea_1000`
 max 0.0287 m, `seaice_obcs` max 0.2065 m), while the smoothed `dbloc` drives the mixing-coefficient improvement: `visc_az`
 cells above 1% relative error, without versus with the smoothing: `lab_sea_1000` (first 20 steps) 3,652 vs 4,
-`global_ocean_90x40x15` 4,060 vs 456, `seaice_obcs` 426 vs 110. (I re-checked these against the review's
+`global_ocean_90x40x15` 4,060 vs 456 (7 after 1DMIX-075, below), `seaice_obcs` 426 vs 110. (I re-checked these against the review's
 `q5_ablate.out` and against my own Phase 1 runs of the same two variants.)
 
 Two causal mechanisms account for the great majority of the non-roundoff
 discrepancy that remains in the per-experiment sections that follow; a third,
 the replay-input effect (1DMIX-071, "Replay inputs" above), explained much of
 the tail the Rib/Ricr mechanism used to be credited with and is now removed from the
-replay. Each is stated once here rather than re-derived per experiment.
+replay; a fourth, MITgcm's `kbl` scan and its zeroed bottom/surface interior coefficients
+(1DMIX-075), explained the k=1 cells of the two-wet-level columns and is now reproduced. Each is stated
+once here rather than re-derived per experiment.
+
+**MITgcm's `kbl` scan below the bottom and its zeroed bottom/surface interior coefficients (1DMIX-075), now
+reproduced.** Three MITgcm behaviours the port lacked (file and line in `kpp_mods/kpp_routines.F`, identical in stock
+`pkg/kpp`): (1) `bldepth` ends with `kbl(i) = kmtj(i)` and `DO kl = 2, Nr: IF (kbl.EQ.kmtj .AND. -zgrid(kl).GT.hbl) kbl = kl`
+(`:807`, `:818-824`). `kmtj` is both the "not found" value and a legitimate result, so when the first level below `hbl`
+is the bottom wet level (or `hbl` is deeper than it) the scan continues over the dry levels below and ends at
+`kbl = kmtj+1` whenever `kmtj < Nr` (for a full-depth column, `kmtj = Nr`, "none found" stays `Nr`); `casea`, `blmix`
+and `enhance` then use that level (`:917-921`, `:1510`, `:1748-1762`: `enhance` does not touch the interface above the
+bottom, and its `ghat(i,ki) = (1.-casea)*ghat(i,ki)` zeroes `ghat(kbl-1)` in case A). (2) After `Ri_iwmix`, KPPMIX sets
+`diffus(i,k,md) = 0` for `k >= kmtj` (`:208`), so `blmix` reads zero for `diffus(kn+1)` at the bottom. (3) `diffus(i,0,*) = 0`
+(`:1224-1228`) is what `blmix` reads for `diffus(kn-1)` when `kn = 1`; the port used to wrap to its bottom entry.
+The replay truncates each column to its wet levels, so the port now takes the dry levels below as the optional
+keyword-only `depth_below` / `cell_thickness_below` of `KPPDriver.compute_mixing` (default None = the column is the full
+model depth) and the replay passes them. Measured through the real replay (cells above 1% relative error, `visc_az` /
+`diff_kz_s`; the full old-versus-new table is in `devel-loop/loop_state/bob-1DMIX-075-evidence.md`):
+
+| Capture / window | Before 1DMIX-075 | After |
+|---|---|---|
+| `global_ocean_90x40x15` (10 steps) | 456 / 520, max_abs 0.0481 / 0.0521 | 7 / 27, max_abs 0.0050 |
+| `global_oce_latlon` (first 5 steps) | 306 / 1,461, max_abs 0.0957 / 0.110 | 62 / 1,136, max_abs 0.0770 / 0.0945 |
+| `lab_sea` 999 steps (all) | 3,678 / 10,609 | 2,941 / 9,943 (max_abs 0.0302 / 0.0743 unchanged) |
+| `lab_sea` first 20 steps | 4 / 37 | 4 / 37 |
+| `lab_sea_6mo` first 100 steps | 24 / 189 | 24 / 189 |
+| `11k_1D` all 11,000 steps | 134 / 156 | 130 / 152 |
+| `seaice_obcs`, `1D_10` | 110 / 131 ; 0 / 0 | bit-identical |
+
+Cells where MITgcm's `ghat` is exactly 0 and the port's is not (invisible to the ">1% on active cells" statistic):
+`global_ocean_90x40x15` 285 -> 0 (max port value 39.6), `global_oce_latlon` 149 -> 0, `lab_sea_6mo` 571 -> 0,
+`lab_sea` 999 steps 7,650 -> 0, `lab_sea` first 20 steps 105 -> 0; `seaice_obcs`, `11k_1D`, `1D_10` 0 -> 0. The reverse
+class (port exactly 0, MITgcm not; open issue 1DMIX-076): `global_oce_latlon` 3 -> 2, `seaice_obcs` 8 -> 8, `lab_sea_6mo` 2 -> 2,
+`lab_sea` 999 steps 127 -> 127, `11k_1D` 13 -> 13, `global_ocean_90x40x15` 0 -> 0. Of the six scenarios only `combined_storm` changes
+(`hbl` reaches the full column, so MITgcm's "none found" `kbl = Nr` replaces the port's old `nz`): `visc_az`/`diff_kz` in 147 of 600
+cells (largest 2.8e-3), `ghat` in 150 (largest 0.86), then theta/salt/u by feedback; its standalone-Fortran residual is now exactly 0.
 
 **The replay-input effect (1DMIX-071), now removed.** Until 1DMIX-071 the replay fed
 the port column-local `du^2+dv^2` and an unsmoothed `dbloc`, so on every multi-column
@@ -258,9 +293,14 @@ they fall on.
 
 | Field | Median abs. diff | Max abs. diff | Fraction >1% rel. err. | N (active) |
 |---|---|---|---|---|
-| `visc_az` | 0 (exact) | 7.60e-3 | 0.055% (134 cells) | 242,000 |
-| `diff_kz_s` | 2.30e-7 | 1.73e-2 | 0.80% (156 cells) | 19,603 |
-| `diff_kz_t` | 2.30e-7 | 1.73e-2 | 0.80% (156 cells) | 19,603 |
+| `visc_az` | 0 (exact) | 7.60e-3 | 0.054% (130 cells) | 242,000 |
+| `diff_kz_s` | 2.30e-7 | 1.73e-2 | 0.78% (152 cells) | 19,603 |
+| `diff_kz_t` | 2.30e-7 | 1.73e-2 | 0.78% (152 cells) | 19,603 |
+
+(1DMIX-075, 2026-10-02: 134 / 156 cells before. Five cells changed, `visc_az` and `diff_kz_s/t` at k=1 of t=55, 70, 99,
+121 and 385, where the boundary layer lies in the surface cell and MITgcm reads `diffus(i,0,*) = 0` instead of the port's
+former wrap to the bottom entry; e.g. t=70: MITgcm `visc_az` 2.1219e-5, port 4.6325e-5 -> 2.1219e-5. `max_abs`, `hbl`
+and `ghat` unchanged.)
 
 (Refreshed by 1DMIX-070 on the 17-digit capture with the current port. The
 earlier 0.087% / 1.19% / median 2.38e-7 were the 1DMIX-065 measurement; they
@@ -375,6 +415,10 @@ above are the column-local ones; with tracer-point inputs, same 15,000 column-ti
 p99 `0.025 m`, max `21.71 m`, ONE column-timestep above 5 m (t=90, i=17, j=6: MITgcm 66.71 m, port 45.00 m)
 against 71, so most of that tail was the replay-input effect. The one remaining column is not root-caused here;
 141 of the 189 `diff_kz_s` cells above 1% sit in 8-wet-level columns.)
+(1DMIX-075: unchanged counts; 2,353 `visc_az` and 571 `ghat` cells changed (largest 4.5e-5 and 28.2), because MITgcm's
+`kbl` scan below the bottom of this capture's 4-wet-level columns is now reproduced. The 571 `ghat` cells were all cells
+where MITgcm's `ghat` is exactly 0 and the port's was not; that class is now 0. The class with the port exactly 0 and
+MITgcm not stays at 2.)
 
 With MITgcm's tracer-point inputs (1DMIX-071) the fraction exceeding 1% relative
 error is 0.014% (`visc_az`) and 0.110% (`diff_kz_s/_t`), below the single-column
@@ -502,7 +546,8 @@ With tracer-point inputs the 209 active cells give median `0.337`, max `99.5` (w
 above 1% (57), 8 cells with the port's `ghat` exactly `0.0` (12), carrying 90.8% of the total absolute difference
 (75.8%); no column has an `hbl` difference above 0.3 m (57 had), so the `hbl`-driven member is gone and what
 remains is the not-yet-explained exact-zero behaviour of the shape-function evaluation described above
-(a follow-up candidate, not root-caused here).
+(a follow-up candidate, not root-caused here). (1DMIX-075 measured that MITgcm's `kbl`/`diffus` conventions do not reach
+this capture: its replay is bit-identical before and after, so the 8 cells stay.)
 
 ## `global_oce_latlon` — a real global, multi-tile, seasonally-complete capture
 
@@ -540,9 +585,13 @@ exceeding a 1 m/5 m difference.
 
 | Field | Median abs. diff | Max abs. diff | Fraction >1% rel. err. |
 |---|---|---|---|
-| `visc_az` | 0 (exact) | 0.096 | 0.23% |
-| `diff_kz_s` | 0 (exact) | 0.110 | 1.11% |
-| `diff_kz_t` | 0 (exact) | 0.110 | 1.11% |
+| `visc_az` | 0 (exact) | 0.077 (0.096) | 0.046% (0.23%) |
+| `diff_kz_s` | 0 (exact) | 0.0945 (0.110) | 0.84% (1.11%) |
+| `diff_kz_t` | 0 (exact) | 0.0945 (0.110) | 0.84% (1.11%) |
+
+(Bracketed: before 1DMIX-075, which reproduced MITgcm's `kbl` scan below the bottom of the partial-depth columns:
+306 -> 62 and 1,461 -> 1,136 cells above 1%; 515 / 546 cells changed, largest change 0.041. 244 / 325 cells are explained by
+it; the remainder is not that cause and is not chased.)
 
 This experiment's own forcing-validation gate falls back to MITgcm's own
 captured `ustar`/`bo`/`bosol` for the actual mixing computation, so the
@@ -580,7 +629,11 @@ timesteps (11,575 column-timesteps) are essentially unchanged: `hbl` median `1.2
 (same), none above 5 m; `visc_az` max_abs `0.0957` (same), 306 cells above 1% relative error (310);
 `diff_kz_s`/`_t` max_abs `0.110` (same), 1,461 cells (1,495); `ghat` max `116.0` (same), 9 cells above 1% (10), 3
 exact-zero cells carrying 97.6% of the total absolute difference (same 3 cells). These are REAL gaps, not replay
-artifacts, and are not root-caused here; the attributions of this section stand.
+artifacts, and are not root-caused here; the attributions of this section stand. **1DMIX-075 (2026-10-02)**: the
+`kbl`-scan/`diffus` conventions above change the mixing coefficients (`visc_az` 306 -> 62, `diff_kz_s/_t` 1,461 -> 1,136
+cells above 1%; max_abs 0.0957 -> 0.0770 and 0.110 -> 0.0945), not `hbl` (max 3.0916 m, same) and not the 9 `ghat` cells above 1%
+(same). Of the 3 cells where the port's `ghat` is exactly 0, one was this regime (now 2); cells where MITgcm's `ghat` is exactly 0 and
+the port's is not: 149 (max 26.9) -> 0.
 
 ## `global_ocean_90x40x15` + KPP — the first geometry-matched cross-scheme capture (1DMIX-054)
 
@@ -608,11 +661,20 @@ with the smoothing MITgcm used.
 3 above 0.3 m); `visc_az` max_abs `0.0481`, 456 cells (0.169%) above 1% relative error, p99 `1.7e-7`;
 `diff_kz_s`/`_t` max_abs `0.0521`, 520 cells (0.193%), p99 `2.5e-7`; `ghat` median `4.0e-5`, max `0.104`, no cell above
 1%, no exact-zero cell. These replace the column-local figures in the next paragraph and table (kept below
-as the old-mode record, executable in `test_global_ocean_90x40x15_*_column_local_*`). Residual, not shear-driven
-and not root-caused here: 367 of the 456 `visc_az` cells (80%) are at k=1 of the 610 two-wet-level columns
-(e.g. t=5, i=72, j=35: MITgcm `0.0491`, port `0.0010`, `hbl` difference 0); 450 of the 456 lie in columns whose
-`hbl` agrees to 0.05 m. The `hbl` maximum and the `visc_az`/`diff_kz` max_abs now meet the existing
-8 m and 0.06 / 0.1 conventions, so the labelled known gaps below are closed (the tests assert the conventions
+as the old-mode record, executable in `test_global_ocean_90x40x15_*_column_local_*`). **The `visc_az`/`diff_kz` counts and
+max_abs in this paragraph are the pre-1DMIX-075 ones**: 367 of the 456 `visc_az` cells (and 345 of the 520 `diff_kz`
+cells) were at k=1 of the 610 two-wet-level columns (e.g. t=5, i=72, j=35: MITgcm `0.0491172`, port `0.0010462`, `hbl`
+difference 0), which 1DMIX-075 traced to MITgcm's `kbl` scan below the bottom wet level and its zeroed bottom/surface
+interior coefficients (see "MITgcm's `kbl` scan ..." above). **Now (1DMIX-075, 2026-10-02): `visc_az` 7 cells (0.0026%) and
+`diff_kz_s`/`_t` 27 cells (0.010%) above 1% relative error, max_abs `0.0050001` (one cell, = `difm0`) for all three; at k=1 of the 610
+two-wet-level columns 0 cells above 1%, max abs `1.23e-6` (the columns whose `hbl` differs), `ghat` max abs `3.9e-13`; cells where
+MITgcm's `ghat` is exactly 0 and the port's is not 285 -> 0 (max 39.6), the reverse 0 -> 0.** The 7 / 27 left are not this cause and
+are not chased: 6 / 9 are in columns whose `hbl` differs from MITgcm by 0.05-0.39 m (1DMIX-071's hbl-straddling), 17 `diff_kz_s` cells
+are 1-3% apart (max abs 1.4e-5) in columns with `hbl` difference < 1e-4 m, and one cell (t=5, i=1, j=39, k=6: MITgcm 6.0e-3,
+port 1.0e-3) is unexplained -- its tracer-point `shsq` equals the captured `shear_sq` to the last digit and its smoothed `dbloc`
+is the same for periodic and non-periodic y, so a y-edge effect of the replay inputs, which was this document's earlier guess,
+is ruled out; the smoothed `dbloc` itself is not captured. The `hbl` maximum and the `visc_az`/`diff_kz` max_abs now meet the existing
+8 m and the tightened 0.015 / 0.03 (11k_1D) conventions, so the labelled known gaps below are closed (the tests assert the conventions
 directly) -- they were replay-input artifacts.
 
 Column-local replay (the figures the paragraph and table below report):
@@ -752,8 +814,13 @@ in "Two mechanisms" above. Under this port's actual default
 scenarios), and the fraction of mixing-coefficient cells exceeding 1%
 relative error drops to 2–4 of 600 per field — confined to the two deepest
 grid cells (of 50) at the two timesteps where the boundary layer has
-deepened to the full column depth. That small residual is not further
-characterized here. If `keep_mitgcm_bugs` is instead set to its non-default
+deepened to the full column depth. **That residual was explained and removed by
+1DMIX-075**: where the boundary layer fills the column MITgcm's `bldepth` leaves `kbl = kmtj = Nr`
+(`kpp_routines.F:807`, `:818-824`), whereas the port's "none found" value was `nz`; with the port's `kbl` now `Nr`
+(0-based `nz-1`) and the bottom interior coefficients zeroed as in `kpp_routines.F:208`, every field of `combined_storm` agrees
+with the standalone Fortran driver exactly (max absolute difference 0.0; 4 / 2 / 2 / 3 of 600 cells and 2.7e-3 / 0.86 before; the check
+re-runs the port on the stored diagnostics, `kpp_hbl_substitution_experiment.py::run_variant`, because the Fortran
+driver itself cannot be rebuilt on this host). If `keep_mitgcm_bugs` is instead set to its non-default
 `False` (available as an explicit opt-out, trading exact correspondence for
 protection against the documented extrapolation hazard), the same scenario
 shows a real, much larger disagreement: 45–51% of cells exceed 1% relative

@@ -39,11 +39,14 @@ keep_mitgcm_bugs at its default, only partially helps: the same root
 mechanism is still active inside diagnose_bl_depth's and compute_bl_mixing's
 OWN wscale calls regardless of what hbl value is fed in.
 
-A small residual remains even with keep_mitgcm_bugs=True: 4 of 600 visc_az
-cells (0.7%), confined to the two deepest grid cells (k=48,49 of 50) at the
-two timesteps where hbl has bottomed out to the full column depth
-(kbl==nz) -- not further root-caused in this issue; see the report update
-for the exact numbers. This script does not change any default -- it is a
+A small residual remained with keep_mitgcm_bugs=True when this experiment was
+written: 4 of 600 visc_az cells (0.7%), confined to the two deepest grid cells
+(k=48,49 of 50) at the timesteps where hbl has bottomed out to the full column
+depth (the port's 'none found' kbl==nz). 1DMIX-075 identified it: MITgcm's
+bldepth leaves kbl = kmtj = Nr there (kpp_routines.F:807,818-824), not nz, and
+the port now does the same; the residual is exactly 0 (max_abs 0.0 in every
+field; `rederive_mixing` mirrors the driver's new zeroing of the bottom
+interior coefficients). This script does not change any default -- it is a
 read-only investigation tool; `keep_mitgcm_bugs` is passed explicitly by the
 caller and was not touched here (it already existed, gated `False` by
 default, before this issue).
@@ -142,6 +145,11 @@ def rederive_mixing(npz, params, wmt, wst, depth, cell_thickness, t, hbl_overrid
         shsq, dbloc, dbloc.copy(), bg_diff_s, bg_diff_t, params,
         zgrid=depth, visc_nr_bg=bg_visc,
     )
+    # Mirror KPPDriver.compute_mixing (1DMIX-075): MITgcm KPPMIX zeroes the interior coefficients
+    # at and below the bottom wet interface before bldepth/blmix read them (kpp_routines.F:208).
+    diffus_visc_int = diffus_visc_int.copy(); diffus_visc_int[nz - 1:] = 0.0
+    diffus_s_int = diffus_s_int.copy(); diffus_s_int[nz - 1:] = 0.0
+    diffus_t_int = diffus_t_int.copy(); diffus_t_int[nz - 1:] = 0.0
     hbl, bfsfc, stable, casea, kbl, bulk_ri = diagnose_bl_depth(
         dvsq, dbloc, Ritop, ustar, bo, bosol, CORIOL,
         depth, cell_thickness, wmt, wst, params, hbl_override=hbl_override,

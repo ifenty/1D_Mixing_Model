@@ -118,6 +118,44 @@ def _validate_column_input(name: str, arr, nz: int, nonnegative: bool):
     return a
 
 
+def _validate_levels_below(depth, cell_thickness, depth_below, cell_thickness_below):
+    """Validate the optional model levels below the supplied column (1DMIX-075).
+
+    Returns ``(depth_below, cell_thickness_below)`` as float64 arrays; both are empty when
+    neither input is given or both are empty (the column is then the full model depth).
+    Raises ``ValueError`` if only one of the two is given, if they are not 1-D arrays of the
+    same length, if any value is non-finite, if a thickness is not > 0, if a depth is > 0,
+    if the levels are not strictly deeper than the column and strictly deepening, or if the
+    combined column fails ``validate_zcoordinate_geometry``.
+    """
+    if depth_below is None and cell_thickness_below is None:
+        return np.zeros(0), np.zeros(0)
+    if depth_below is None or cell_thickness_below is None:
+        raise ValueError("depth_below and cell_thickness_below must be given together "
+                         "(got only one of them)")
+    zb = np.array(depth_below, dtype=np.float64)
+    hb = np.array(cell_thickness_below, dtype=np.float64)
+    if zb.ndim != 1 or hb.ndim != 1 or zb.shape != hb.shape:
+        raise ValueError("depth_below and cell_thickness_below must be 1-D arrays of the same "
+                         f"length, got shapes {zb.shape} and {hb.shape}")
+    if zb.size == 0:
+        return zb, hb
+    if not (np.all(np.isfinite(zb)) and np.all(np.isfinite(hb))):
+        raise ValueError("depth_below and cell_thickness_below must be finite")
+    if np.any(hb <= 0.0):
+        raise ValueError(f"cell_thickness_below must be > 0 (min={hb.min():.6g})")
+    if np.any(zb > 0.0):
+        raise ValueError(f"depth_below must be <= 0 (negative downward; max={zb.max():.6g})")
+    deeper = np.concatenate([[np.asarray(depth, dtype=np.float64)[-1]], zb])
+    if np.any(np.diff(deeper) >= 0.0):
+        raise ValueError("depth_below must be strictly deeper than the last supplied level and "
+                         "strictly deepening (negative-down centres)")
+    validate_zcoordinate_geometry(
+        np.concatenate([np.asarray(depth, dtype=np.float64), zb]),
+        np.concatenate([np.asarray(cell_thickness, dtype=np.float64), hb]), scheme="KPP")
+    return zb, hb
+
+
 class KPPDriver:
     """
     Main driver for KPP mixing scheme.
@@ -185,6 +223,8 @@ class KPPDriver:
         shsq_forcing: Optional[np.ndarray] = None,
         dvsq_forcing: Optional[np.ndarray] = None,
         dbloc_smooth_forcing: Optional[np.ndarray] = None,
+        depth_below: Optional[np.ndarray] = None,
+        cell_thickness_below: Optional[np.ndarray] = None,
     ) -> KPPOutput:
         """
         Compute KPP mixing coefficients for a single column.
@@ -194,6 +234,7 @@ class KPPDriver:
             Step 2: Compute surface forcing (ustar, buoyancy forcing bo/bosol)
             Step 3: Compute velocity shear (shsq, dvsq)
             Step 4: Interior mixing from Richardson number (Ri-based) — kpp_routines.ri_iwmix
+                    (then the bottom interior entry is zeroed as in KPPMIX, kpp_routines.F:208; 1DMIX-075)
             Step 5: Diagnose boundary-layer depth (hbl) — kpp_scheme_specific.diagnose_bl_depth
             Step 6: Compute boundary-layer mixing profiles + nonlocal transport — kpp_scheme_specific.compute_bl_mixing
             Step 7: Enhance mixing at the boundary-layer base interface — kpp_scheme_specific.enhance_at_interface
@@ -278,6 +319,21 @@ class KPPDriver:
             term of ``ri_iwmix`` (kpp_routines.F:1133-1137). Finite; may be negative.
             Default None = ``dbloc.copy()`` (no horizontal smoothing in a single column,
             exact no-op).
+        depth_below, cell_thickness_below : np.ndarray, shape (m,), optional
+            (1DMIX-075, keyword-only, given together) cell-centre depths (<= 0, negative
+            down) and thicknesses (> 0) of the ``m`` MODEL levels that lie below the supplied
+            column and are dry there (MITgcm's ``kmtj < Nr``). The supplied column is the
+            wet part of the model column (``nz = kmtj``); the model has ``Nr = nz + m``
+            levels. MITgcm's ``bldepth`` scans ``kl = 2..Nr`` for the new ``kbl`` with the
+            condition ``kbl.EQ.kmtj`` (kpp_routines.F:818-824), so when the first level below
+            ``hbl`` is the bottom wet level (or ``hbl`` is deeper than it) the scan continues
+            below the bottom and ends with ``kbl = kmtj+1``, the first dry level; ``casea``,
+            ``blmix`` and ``enhance`` then use that level's grid. The port reproduces this, and
+            this needs the dry levels' grid. Default None (or empty) = the column IS the full
+            model depth (``kmtj = Nr``): the scan then ends with ``kbl = Nr`` when no level
+            is found, exactly as in MITgcm. The MITgcm-capture replays pass the dry levels of
+            each truncated column. ``ValueError`` if only one is given, for a shape/finite/sign
+            violation, or if the combined column fails ``validate_zcoordinate_geometry``.
 
         Notes
         -----
@@ -320,6 +376,13 @@ class KPPDriver:
         # ===== Step 0: Reject non-z-coordinate geometry (1DMIX-072) =====
         # Pure pre-check; raises ValueError, changes no computed value.
         validate_zcoordinate_geometry(depth, cell_thickness, scheme="KPP")
+        # Model levels below the supplied (wet) column, if any (1DMIX-075); validated like the
+        # 1DMIX-071 inputs, plus the combined-column z-coordinate guard.
+        depth_below_v, thk_below_v = _validate_levels_below(
+            depth, cell_thickness, depth_below, cell_thickness_below)
+        below_kw = {}
+        if depth_below_v.size:
+            below_kw = {'zgrid_below': depth_below_v, 'hwide_below': thk_below_v}
 
         # ===== Step 1: Compute density and buoyancy =====
         rho_surf, dbloc, dbsfc, ttalpha, ssbeta = compute_buoyancy_gradients(
@@ -458,6 +521,13 @@ class KPPDriver:
             shsq, dbloc, dbloc_smooth, bg_diff_s, bg_diff_t, self.params,
             zgrid=depth, visc_nr_bg=bg_visc
         )
+        # MITgcm KPPMIX sets the interior coefficients at and below the bottom wet interface to
+        # zero before bldepth/blmix read them: `IF (k.GE.kmtj(i)) diffus(i,k,md) = 0.0`
+        # (kpp_routines.F:208). 0-based k >= nz-1 is the single bottom entry of this column.
+        # Copies: ri_iwmix's own return value is left untouched.
+        diffus_visc_int = diffus_visc_int.copy(); diffus_visc_int[nz - 1:] = 0.0
+        diffus_s_int = diffus_s_int.copy(); diffus_s_int[nz - 1:] = 0.0
+        diffus_t_int = diffus_t_int.copy(); diffus_t_int[nz - 1:] = 0.0
 
         # ===== Step 5: Diagnose boundary layer depth =====
         # Compute Ritop (numerator of bulk Richardson number).
@@ -473,14 +543,14 @@ class KPPDriver:
             dvsq, dbloc, Ritop, ustar, bo, bosol, coriol,
             depth, cell_thickness, self.wmt, self.wst, self.params,
             boplume=boplume_forcing, sp_depth=sp_depth_forcing,
-            hbl_override=hbl_override,
+            hbl_override=hbl_override, **below_kw,
         )
 
         # ===== Step 6: Boundary layer mixing =====
         blmc_visc, blmc_s, blmc_t, ghat, dkm1 = compute_bl_mixing(
             ustar, bfsfc, hbl, stable, casea,
             (diffus_visc_int, diffus_s_int, diffus_t_int),
-            kbl, depth, cell_thickness, self.wmt, self.wst, self.params
+            kbl, depth, cell_thickness, self.wmt, self.wst, self.params, **below_kw
         )
 
         # ===== Step 7: Enhance at interface =====
@@ -488,7 +558,7 @@ class KPPDriver:
             dkm1, hbl, kbl,
             (diffus_visc_int, diffus_s_int, diffus_t_int),
             casea, depth, cell_thickness,
-            (blmc_visc, blmc_s, blmc_t), ghat
+            (blmc_visc, blmc_s, blmc_t), ghat, **below_kw
         )
 
         # ===== Step 8: Combine interior and BL mixing =====

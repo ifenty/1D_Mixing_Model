@@ -8,9 +8,13 @@ residual survives, proving hbl alone does not explain it. The actual root
 cause is `KPP.kpp_routines.py::wscale`'s pre-existing `keep_mitgcm_bugs`
 validation-mode switch (kpp_routines.F:980 vs the commented-out :990 fix):
 setting it True (no hbl override needed) collapses the disagreement to
-floating-point-roundoff `hbl` and a small residual in
-visc_az/diff_kz_s/diff_kz_t/ghat, confined to the two deepest grid cells at
-the two timesteps where the boundary layer has deepened to the full column.
+floating-point-roundoff `hbl`. Until 1DMIX-075 a small residual remained in
+visc_az/diff_kz_s/diff_kz_t/ghat (4 / 2 / 2 / 3 of 600 cells, max 2.7e-3 /
+2.7e-3 / 2.7e-3 / 0.858) at the timesteps where the boundary layer has deepened
+to the full column; 1DMIX-075 found its cause (the port's 'none found' `kbl`
+was `nz` where MITgcm's is `Nr`, kpp_routines.F:807,818-824, with its
+consequences for `blmix`/`enhance`/`ghat(Nr)`) and the residual is now exactly
+0 (max_abs 0.0, every field).
 
 See `MITgcm_to_Python_port_verification/scripts/
 kpp_hbl_substitution_experiment.py` for the experiment itself (reused here,
@@ -95,20 +99,23 @@ def test_keep_mitgcm_bugs_explains_the_residual(variants):
     unmodified Fortran KPPMIX's own wscale lookup-table extrapolation, no
     hbl override needed at all) collapses hbl to floating-point roundoff and
     drops visc_az/diff_kz_s/diff_kz_t/ghat's >1%-cell count from ~270-308/600
-    to single digits. Tolerances have headroom over the measured values
-    (hbl roundoff ~2.8e-14 m; visc_az n_gt_1pct measured 4/600).
-    """
+    to ZERO since 1DMIX-075 (it was 4/2/2/3 of 600 before: those cells were
+    the full-column 'none found' `kbl`, fixed there). Measured 2026-10-02:
+    hbl max_abs 0.0 m (was 2.8e-14), every mixing field max_abs 0.0 (bit-exact against
+    the standalone Fortran KPPMIX). Tolerances: the file's existing 1e-9
+    convention for hbl, applied to the four fields too (before: n_gt_1pct <= 20,
+    max_abs < 0.01)."""
     k = variants["keep_mitgcm_bugs"]
     assert k["hbl"]["max_abs"] < 1e-9, (
         f"hbl max_abs={k['hbl']['max_abs']:.3e} m with keep_mitgcm_bugs=True is far above "
         "floating-point roundoff -- the wscale root-cause finding may no longer hold"
     )
-    for name in ("visc_az", "diff_kz_s", "diff_kz_t"):
-        assert k[name]["n_gt_1pct"] <= 20, (
-            f"{name} n_gt_1pct={k[name]['n_gt_1pct']}/600 with keep_mitgcm_bugs=True exceeds "
-            "the measured small residual (~2-4/600) with generous headroom"
+    for name in ("visc_az", "diff_kz_s", "diff_kz_t", "ghat"):
+        assert k[name]["n_gt_1pct"] == 0, (
+            f"{name} n_gt_1pct={k[name]['n_gt_1pct']}/600 with keep_mitgcm_bugs=True: the combined_storm "
+            "standalone-Fortran disagreement was 0 after 1DMIX-075 (full-column kbl)"
         )
-        assert k[name]["max_abs"] < 0.01, (
+        assert k[name]["max_abs"] < 1e-9, (
             f"{name} max_abs={k[name]['max_abs']:.3e} with keep_mitgcm_bugs=True exceeds the "
-            "measured small residual (~2.7e-3) with generous headroom"
+            "measured bit-exact agreement (0.0) beyond the 1e-9 convention"
         )

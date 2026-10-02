@@ -160,6 +160,13 @@ class KPPParameters:
     # Currently gated bug(s):
     #   - wscale zdiff linear-extrapolation hazard (kpp_routines.F:980 vs :990)
     #
+    # Deliberately NOT gated (1DMIX-075): MITgcm's `kbl` scan sentinel aliasing (kpp_routines.F:807,
+    # 818-824, the scan ends at kmtj+1 when the first level below hbl is the bottom wet level), its
+    # zeroed bottom interior coefficients (:208) and zero surface entry (:1224-1228). They are MITgcm
+    # behaviour with no never-activated fix in its source and no hazard documented by its authors, so
+    # this flag's definition above does not cover them; the port reproduces them unconditionally and has
+    # no non-MITgcm alternative (see docs/model_contract.md, "KPP kbl scan ...").
+    #
     # Default changed False -> True by 1DMIX-057 (was False since the port's
     # earliest version; see closed_issues.md 1DMIX-056/1DMIX-057 and
     # docs/model_contract.md's KPP section for the full evidence). Measured,

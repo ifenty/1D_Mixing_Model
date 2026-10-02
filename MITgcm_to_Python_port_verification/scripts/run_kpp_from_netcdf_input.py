@@ -24,6 +24,12 @@ built with KPP_ESTIMATE_UREF, KPP_SMOOTH_DVSQ, KPP_SMOOTH_DENS, KPP_SMOOTH_VISC 
 raises NotImplementedError in the default mode. The smoothed dbloc is not captured, so its
 reconstruction is validated only through its effect on the KPP outputs (docs: KPP_VALIDATION_RESULTS.md).
 
+Dry levels below truncated columns (1DMIX-075): every column is truncated to its wet levels, but MITgcm's
+bldepth scans for kbl over ALL Nr model levels (kpp_routines.F:807,818-824: the condition kbl.EQ.kmtj lets the scan
+run on below the bottom wet level and end at kmtj+1), so both replay modes pass the grid of the levels below each
+truncated column as KPPDriver.compute_mixing's keyword-only depth_below / cell_thickness_below
+(`_levels_below_kwargs`; nothing is passed for a full-depth column).
+
 Usage:
   python run_kpp_from_netcdf_input.py <input_file.nc> [output_dir] [options]
 
@@ -574,6 +580,19 @@ def _tracer_point_kwargs(tp: Optional[Dict], t_out_idx: int, i: int, j: int,
     return kw
 
 
+def _levels_below_kwargs(depth: np.ndarray, cell_thickness: np.ndarray, wet_end: int) -> Dict[str, np.ndarray]:
+    """The model levels below a column's wet range, for `KPPDriver.compute_mixing` (1DMIX-075).
+
+    The replay truncates every column to its wet levels, but MITgcm's `bldepth` scans for `kbl`
+    over ALL `Nr` model levels (kpp_routines.F:818-824: the scan condition `kbl.EQ.kmtj` lets
+    it run on below the bottom wet level and end at `kbl = kmtj+1`), so the driver needs the
+    grid of the dry levels. Empty ({}) for a full-depth column (`kmtj = Nr`).
+    """
+    if wet_end >= len(depth):
+        return {}
+    return {'depth_below': depth[wet_end:], 'cell_thickness_below': cell_thickness[wet_end:]}
+
+
 def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
     """
     Worker function to process one (t, i, j) column.
@@ -663,6 +682,7 @@ def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
             boplume_forcing=boplume_val,
             sp_depth_forcing=sp_depth_val,
             **_tracer_point_kwargs(_worker_tracer_point, t_out_idx, i, j, wet_start, wet_end),
+            **_levels_below_kwargs(depth, cell_thickness, wet_end),
         )
 
         # Pad profile fields back to the full grid depth with zeros outside
@@ -997,6 +1017,8 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                             sp_depth_forcing=sp_depth_val,   # Salt plume penetration depth [m] (1DMIX-034)
                             # MITgcm's neighbour-dependent shsq/dVsq/smoothed dbloc (1DMIX-071; {} = column-local)
                             **_tracer_point_kwargs(tracer_point, t_out_idx, i, j, wet_start, wet_end),
+                            # MITgcm's dry model levels below the truncated column (1DMIX-075; {} = full depth)
+                            **_levels_below_kwargs(depth, cell_thickness, wet_end),
                             # Note: Mode determined automatically based on which params provided
                             # - If raw fluxes present → Mode 3 (forcing validation)
                             # - If only pre-computed → Mode 1 (use pre-computed)

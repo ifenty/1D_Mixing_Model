@@ -110,6 +110,16 @@ identical to printed precision in both modes (the reconstructed shear equals MIT
 column-local one differs by ~4e-16, which moves no measured figure). Residual real gaps
 that are not shear-driven are recorded with cell counts in the individual docstrings (not root-caused here).
 
+**1DMIX-075 update (2026-10-02)**: the k=1 cells of the two-wet-level columns (367 of the 456 90x40x15 `visc_az`
+cells above 1%) and a class of `ghat` cells the ">1% on active cells" statistic cannot see (MITgcm exactly 0, port
+not) came from three MITgcm conventions the port lacked: `bldepth`'s `kbl` scan that runs on over the dry levels below
+the bottom wet level (`kpp_routines.F:807,818-824`), KPPMIX's zeroed interior coefficients at and below the bottom
+interface (`:208`) and `diffus(i,0,*) = 0` (`:1224-1228`). `KPPDriver.compute_mixing` now reproduces them and takes the dry
+model levels below a truncated column as the keyword-only `depth_below` / `cell_thickness_below`, which
+`run_python_kpp_on_dataset` passes. Figures marked 1DMIX-075 in the docstrings below are the new ones; the other figures
+are the 1DMIX-071-era ones (unchanged where the captures never enter these regimes: `seaice_obcs`, `1D_10`). Witnesses with
+MITgcm expected values: `Vertical_Mixing_Models/tests/test_kpp_levels_below.py`.
+
 Given this, the tests below:
 - Always test `hbl` (unaffected by the truncation defect even before this
   refresh: `OUTPUT_HBL` is a separate, always-unconditional write path --
@@ -343,9 +353,13 @@ def test_11k_ocean_ice_column_mixing(result_11k, ocean_mask_11k, field,
     """Mixing-coefficient agreement over the FULL, now-clean 11,000-timestep
     sample (1DMIX-050 refresh -- no clean-subset filtering needed anymore).
     Measured fresh this round: `visc_az` median_abs 0 (exact), max_abs
-    7.60e-3, 0.055% of active cells exceed 1% rel (134 of n=242,000); `diff_kz_s`/
+    7.60e-3, 0.054% of active cells exceed 1% rel (130 of n=242,000); `diff_kz_s`/
     `diff_kz_t` (identical values in this configuration) median_abs 2.30e-7,
-    max_abs 1.73e-2, 0.80% exceed 1% rel (156 of n=19,603). (Refreshed in
+    max_abs 1.73e-2, 0.78% exceed 1% rel (152 of n=19,603). (1DMIX-075, 2026-10-02: 134 / 156 before; five
+    cells changed, `visc_az`/`diff_kz_s`/`_t` at k=1 of t=55, 70, 99, 121, 385, where the boundary layer is in
+    the surface cell (MITgcm kn = 1) and MITgcm reads `diffus(i,0,*)` = 0 instead of the port's former wrap to
+    the bottom entry; e.g. t=70: MITgcm visc_az 2.1219e-5, port 4.6325e-5 -> 2.1219e-5. Max_abs and `ghat`
+    unchanged.) (Refreshed in
     1DMIX-070 on the 17-digit capture: the 1DMIX-050/065-era 0.087% / 1.19% /
     2.38e-7 were superseded by 1DMIX-068's MITgcm-order `jmd95_eos`; identical
     to within 0.056% / 0.81% / 2.30e-7 at 16 digits. Bounds unchanged.) -- tighter bounds than
@@ -605,6 +619,18 @@ def test_lab_sea_6mo_ghat(result_labsea_6mo, ocean_mask_labsea_6mo):
     max_abs = float(np.max(diff))
     assert median < 0.03, f"lab_sea_6mo ghat: median abs diff {median:.4g} regressed"
     assert max_abs < 120.0, f"lab_sea_6mo ghat: max abs diff {max_abs:.4g} regressed"
+
+
+def test_lab_sea_6mo_ghat_exact_zero_classes(result_labsea_6mo, ocean_mask_labsea_6mo):
+    """Cells where MITgcm's `ghat` is exactly 0 and the port's is not: 0 (was 571 before 1DMIX-075, max 28.2:
+    the `kbl = kmtj+1` regime of this capture's 4-wet-level columns). Cells where the port's is exactly 0 and
+    MITgcm's is not: 2 (unchanged; 1DMIX-076). Measured 2026-10-02 over all wet cells of the first 100 steps."""
+    _inputs_ds, python_ds, mitgcm_ds = result_labsea_6mo
+    wet = ocean_mask_labsea_6mo[..., None] & np.ones(mitgcm_ds['ghat'].shape, dtype=bool)
+    mit = mitgcm_ds['ghat'].values
+    py = python_ds['ghat'].values
+    assert int(((mit == 0.0) & (py != 0.0) & wet).sum()) == 0
+    assert int(((mit != 0.0) & (py == 0.0) & wet).sum()) == 2
 
 
 # ========================================================================
@@ -890,9 +916,9 @@ def test_global_oce_latlon_hbl(result_global_oce_latlon, ocean_mask_global_oce_l
 
 
 @pytest.mark.parametrize('field,median_bound,max_abs_bound,frac_gt1pct_bound', [
-    ('visc_az', 1e-5, 0.15, 0.01),
-    ('diff_kz_s', 1e-5, 0.15, 0.02),
-    ('diff_kz_t', 1e-5, 0.15, 0.02),
+    ('visc_az', 1e-5, 0.1, 0.001),
+    ('diff_kz_s', 1e-5, 0.1, 0.01),
+    ('diff_kz_t', 1e-5, 0.1, 0.01),
 ])
 def test_global_oce_latlon_mixing(result_global_oce_latlon, ocean_mask_global_oce_latlon,
                                    field, median_bound, max_abs_bound, frac_gt1pct_bound):
@@ -919,6 +945,15 @@ def test_global_oce_latlon_mixing(result_global_oce_latlon, ocean_mask_global_oc
     (same), 306 cells above 1% rel (0.227%; was 310), `diff_kz_s`/`_t` max_abs 0.110 (same), 1,461 cells
     (1.08%; was 1,495), p99_abs 1.8e-6 / 3.5e-6 (was 2.3e-6 / 4.4e-6). REAL gap (smoothing is off in this
     capture, so the replay-input effect is only the 4-term shear), not root-caused here.
+
+    **1DMIX-075 (2026-10-02)**: MITgcm's `kbl` scan over the dry model levels below each truncated column, the
+    zeroed bottom `diffus` and `diffus(0)` = 0 are now reproduced: `visc_az` 306 -> 62 cells above 1% rel
+    (0.046%), max_abs 0.0957 -> 0.0770; `diff_kz_s`/`_t` 1,461 -> 1,136 (0.84%), max_abs 0.110 -> 0.0945
+    (515 / 546 cells changed, largest change 0.041). 244 / 325 cells are explained; the rest (and `hbl`, max
+    3.09 m, unchanged) is not this cause and not chased. Bounds tightened (never widened): `max_abs` 0.15 ->
+    0.1 (an existing convention of this file; measured 0.0770 / 0.0945 beside it), fractions 0.01 / 0.02 ->
+    0.001 (lab_sea_6mo's `visc_az` convention; measured 4.6e-4) and 0.01 (this test's former `visc_az` bound;
+    measured 8.4e-3).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff, rel = _mixing_diff_rel(mitgcm_ds[field].values, python_ds[field].values,
@@ -959,7 +994,7 @@ def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_
     `hbl` matches MITgcm's captured `hbl` exactly (25.0 == 25.0) -- no `hbl`
     misdiagnosis at that cell at all. The 394 active cells instead split into
     two distinct groups: 391 cells with a small genuine residual (median
-    1.48e-3), and exactly 3 cells where Python's `ghat` is exactly `0.0` --
+    1.48e-3), and exactly 3 cells (2 since 1DMIX-075) where Python's `ghat` is exactly `0.0` --
     those 3 cells alone carry the entire 57.98-115.97 magnitude range and are
     the entire `max_abs`. At the worst of the 3, the identified driver is a
     stable/unstable regime disagreement -- the two models land on opposite
@@ -987,6 +1022,11 @@ def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_
     flip, and its exact numerical trigger is left unestablished rather
     than asserted. None of the three still borrows this docstring's own
     mechanism verbatim.
+
+    **1DMIX-075 (2026-10-02)**: the active-cell statistics are unchanged (9 cells above 1%, max_abs 115.97). The
+    exact-zero classes the ">1% on active cells" statistic cannot see moved: cells where MITgcm's `ghat` is exactly
+    0 and the port's is not 149 -> 0 (max port value 26.9; the `kbl = kmtj+1` regime), cells where the port's is
+    exactly 0 and MITgcm's is not 3 -> 2 (one of the three is that regime; the other two are not this cause).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff, _rel = _mixing_diff_rel(mitgcm_ds['ghat'].values, python_ds['ghat'].values,
@@ -995,6 +1035,18 @@ def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_
     max_abs = float(np.max(diff))
     assert median < 0.01, f"global_oce_latlon ghat: median abs diff {median:.4g} regressed"
     assert max_abs < 140.0, f"global_oce_latlon ghat: max abs diff {max_abs:.4g} regressed"
+
+
+def test_global_oce_latlon_ghat_exact_zero_classes(result_global_oce_latlon, ocean_mask_global_oce_latlon):
+    """Cells where MITgcm's `ghat` is exactly 0 and the port's is not: 0 (was 149 before 1DMIX-075, max 26.9).
+    Cells where the port's is exactly 0 and MITgcm's is not: 2 (was 3; 1DMIX-076 tracks them). Measured
+    2026-10-02 over all wet cells of the first 5 steps."""
+    _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
+    wet = ocean_mask_global_oce_latlon[..., None] & np.ones(mitgcm_ds['ghat'].shape, dtype=bool)
+    mit = mitgcm_ds['ghat'].values
+    py = python_ds['ghat'].values
+    assert int(((mit == 0.0) & (py != 0.0) & wet).sum()) == 0
+    assert int(((mit != 0.0) & (py == 0.0) & wet).sum()) == 2
 
 
 # ========================================================================
@@ -1164,7 +1216,7 @@ def test_global_ocean_90x40x15_dvsq_is_four_point_average(result_global_ocean_90
 
 
 @pytest.mark.parametrize('field,median_bound,frac_gt1pct_bound', [
-    ('visc_az', 1e-5, 0.005),
+    ('visc_az', 1e-5, 0.001),
     ('diff_kz_s', 1e-5, 0.005),
     ('diff_kz_t', 1e-5, 0.005),
 ])
@@ -1172,15 +1224,18 @@ def test_global_ocean_90x40x15_mixing(result_global_ocean_90x40x15, ocean_mask_g
                                        field, median_bound, frac_gt1pct_bound):
     """Mixing-coefficient agreement, 269,940 active interior cells, with MITgcm's tracer-point inputs
     (shsq, dVsq and the smoothed dbloc of KPP_SMOOTH_SHSQ/KPP_SMOOTH_DBLOC reconstructed from the
-    neighbouring columns, 1DMIX-071; measured 2026-10-02): `visc_az` median_abs 0 (exact), p99_abs 1.7e-7,
-    456 cells (0.169%) above 1% rel; `diff_kz_s`/`diff_kz_t` (identical here) p99_abs 2.5e-7, 520 cells
-    (0.193%). The column-local replay (1DMIX-054) gave 4,516 (1.67%) / 5,444 (2.02%) and p99_abs 5.0e-3.
-    The old note that the global_oce_latlon bounds were exceeded "because the port has no horizontal
-    smoothing" is confirmed: all three fractions now meet the strictest existing bound (11k's 0.005 for
-    `visc_az`; tightened from 0.2 / 0.03 to 0.005 for all three, never widened). Residual real gap, not
-    root-caused here: 367 of the 456 `visc_az` cells (80%) are at k=1 of the 610 two-wet-level columns
-    (e.g. t=5, i=72, j=35: MITgcm 0.0491, port 0.0010, `hbl` difference 0), 450 of the 456 lie in columns
-    whose `hbl` agrees to 0.05 m.
+    neighbouring columns, 1DMIX-071) and, since 1DMIX-075, MITgcm's `kbl` scan over the dry model levels
+    below each truncated column plus its zeroed bottom/surface `diffus` (measured 2026-10-02, 1DMIX-075):
+    `visc_az` median_abs 0 (exact), 7 cells (0.0026%) above 1% rel; `diff_kz_s`/`diff_kz_t` (identical
+    here) 27 cells (0.0100%). Before 1DMIX-075: 456 (0.169%) / 520 (0.193%), of which 367 / 345 sat at
+    k=1 of the 610 two-wet-level columns (the mechanism: `test_global_ocean_90x40x15_two_wet_level_columns`
+    and `tests/test_kpp_levels_below.py`). The column-local replay (1DMIX-054) gave 4,516 (1.67%) / 5,444
+    (2.02%). Fractions tightened (never widened) from 0.005 to 0.001 for `visc_az` (lab_sea_6mo's existing
+    `visc_az` convention; measured 2.6e-5 beside it); `diff_kz_s`/`_t` stay at 0.005 (the strictest existing
+    convention for them; measured 1.0e-4). Residual, not chased: the 7 / 27 cells are in columns whose `hbl`
+    differs from MITgcm by 0.05-0.39 m (6 of 7 and 9 of 27, 1DMIX-071's hbl-straddling), one cell (t=5, i=1,
+    j=39, k=6: MITgcm 6.0e-3, port 1.0e-3) whose cause is unexplained, and 17 `diff_kz_s` cells in columns
+    with `hbl` difference < 1e-4 m, 1-3% apart (max abs 1.4e-5).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
     diff, rel = _mixing_diff_rel(mitgcm_ds[field].values, python_ds[field].values,
@@ -1192,18 +1247,18 @@ def test_global_ocean_90x40x15_mixing(result_global_ocean_90x40x15, ocean_mask_g
 
 
 @pytest.mark.parametrize('field,convention_max_abs', [
-    ('visc_az', 0.06),
-    ('diff_kz_s', 0.1),
-    ('diff_kz_t', 0.1),
+    ('visc_az', 0.015),
+    ('diff_kz_s', 0.03),
+    ('diff_kz_t', 0.03),
 ])
 def test_global_ocean_90x40x15_mixing_max_abs(result_global_ocean_90x40x15,
                                                ocean_mask_global_ocean_90x40x15, field,
                                                convention_max_abs):
-    """With MITgcm's tracer-point inputs max_abs is 0.04807 (`visc_az`) and 0.05211 (`diff_kz_s`/`_t`)
-    (measured 2026-10-02), below the lab_sea_6mo conventions (0.06 / 0.1) that the column-local
-    replay's 0.218 / 0.438 exceeded (they were the single hbl-misdiagnosed column of the former
-    known-gap test, a replay-input artifact). The convention bounds are asserted directly (they are the
-    file's existing ones; the former 0.3 / 0.6 known-gap bounds are removed, not widened)."""
+    """max_abs is 0.0050001 for all three fields (one cell; = `difm0`, measured 2026-10-02, 1DMIX-075;
+    it was 0.04807 (`visc_az`) and 0.05211 (`diff_kz_s`/`_t`) before: those were the two-wet-level k=1
+    cells). The bounds are tightened (never widened) from the lab_sea_6mo conventions (0.06 / 0.1) to the
+    11k_1D conventions (0.015 for `visc_az`, 0.03 for `diff_kz_s`/`_t`), the strictest existing ones; the
+    former 0.3 / 0.6 known-gap bounds were removed under 1DMIX-071."""
     _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
     ocean = ocean_mask_global_ocean_90x40x15
     diff = np.abs(python_ds[field].values - mitgcm_ds[field].values)
@@ -1261,6 +1316,47 @@ def test_global_ocean_90x40x15_ghat(result_global_ocean_90x40x15, ocean_mask_glo
                                    ocean_mask_global_ocean_90x40x15, skip_surface=False)
     assert float(np.median(diff)) < 1e-3, f"90x40x15 ghat: median abs diff {np.median(diff):.4g} regressed"
     assert float(np.max(diff)) < 0.2, f"90x40x15 ghat: max abs diff {np.max(diff):.4g} regressed"
+
+
+def test_global_ocean_90x40x15_ghat_exact_zero_classes_are_clean(
+        result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15):
+    """The two classes the ">1% on active cells" statistic cannot see (active = MITgcm > 1e-6): cells where
+    MITgcm's `ghat` is exactly 0 and the port's is not, and the reverse (every wet cell of every wet column,
+    measured 2026-10-02, 1DMIX-075). Before 1DMIX-075: 285 cells with MITgcm 0 / port nonzero (max port
+    value 39.6; all in the kbl = kmtj+1 regime: MITgcm's `enhance` zeroes ghat(kbl-1) in case A,
+    kpp_routines.F:1762, and its combine loop leaves ghat(Nr) = 0 for kbl = Nr) and 0 the other way.
+    Now 0 and 0."""
+    _inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    wet = ocean_mask_global_ocean_90x40x15[..., None] & np.ones(mitgcm_ds['ghat'].shape, dtype=bool)
+    mit = mitgcm_ds['ghat'].values
+    py = python_ds['ghat'].values
+    assert int(((mit == 0.0) & (py != 0.0) & wet).sum()) == 0
+    assert int(((mit != 0.0) & (py == 0.0) & wet).sum()) == 0
+
+
+def test_global_ocean_90x40x15_two_wet_level_columns(
+        result_global_ocean_90x40x15, ocean_mask_global_ocean_90x40x15):
+    """The 610 two-wet-level column-timesteps (61 columns x 10 steps), k=1 (their only interior interface),
+    measured 2026-10-02 (1DMIX-075). Before: `visc_az` 367 and `diff_kz_s`/`_t` 345 cells above 1%, max abs
+    0.0481 / 0.0521 (t=5, i=72, j=35: MITgcm 0.0491172, port 0.0010462), and `ghat` max abs 39.6 with 274
+    cells MITgcm 0 / port nonzero. Now 0 cells above 1%, max abs 1.23e-6 for all three (the cells whose
+    `hbl` differs from MITgcm), median 0, `ghat` max abs 3.9e-13 and no exact-zero mismatch either way.
+    Mechanism: MITgcm's `kbl` scan runs on below the bottom wet level (kpp_routines.F:807,818-824), which
+    the replay now feeds through `depth_below` / `cell_thickness_below`; the single-column witnesses with
+    their MITgcm values are in `Vertical_Mixing_Models/tests/test_kpp_levels_below.py`."""
+    inputs_ds, python_ds, mitgcm_ds = result_global_ocean_90x40x15
+    two = (inputs_ds['temperature'].values != 0).sum(axis=-1) == 2
+    two &= ocean_mask_global_ocean_90x40x15
+    assert int(two.sum()) == 610
+    for field in ('visc_az', 'diff_kz_s', 'diff_kz_t'):
+        mit = mitgcm_ds[field].values[..., 1][two]
+        py = python_ds[field].values[..., 1][two]
+        diff = np.abs(py - mit)
+        assert int((diff > 0.01 * mit).sum()) == 0, field
+        assert float(diff.max()) < 2e-6, f"{field}: max abs {diff.max():.3g} (measured 1.23e-6)"
+    mit = mitgcm_ds['ghat'].values[two]
+    py = python_ds['ghat'].values[two]
+    assert float(np.abs(py - mit).max()) < 1e-9          # measured 3.9e-13
 
 
 # ========================================================================
@@ -1418,12 +1514,28 @@ import hashlib  # noqa: E402
 # SHA-256 of (visc_az, diff_kz_s, diff_kz_t, ghat, hbl) of the replay, taken BEFORE the 1DMIX-071 edit of
 # `run_kpp_from_netcdf_input.py` / `KPPDriver` (git HEAD c6d8ffb). `tracer_point_inputs=False` must reproduce
 # them bit for bit: (capture stem, first step, last step) -> digest.
+# 1DMIX-075 changed three of the five on purpose (the replay now passes the dry model levels below each
+# truncated column and the driver reproduces MITgcm's kbl scan, bottom/surface diffus zeros; see
+# `_KPP_REPLAY_GOLDEN_075`). The two that did NOT change are the ones whose columns never enter the changed
+# regimes: `1D_10_kppmix_extend_rawflux_fix` (one full-depth column, boundary layer in the interior) and
+# `seaice_obcs_1dmix034` (full-depth columns): `_KPP_REPLAY_GOLDEN` keeps only those.
 _KPP_REPLAY_GOLDEN = {
     ('seaice_obcs_1dmix034', 0, 4): '266fdf02a74e12b5bd8f10443217a0eac2891578ba83701c5bccb83464875174',
-    ('lab_sea_1000_0820T0946', 0, 1): '6a01df133f26182f8fa9a8153fde65f7e7fb52aa0ddee70792dcf42da3ceab35',
-    ('global_ocean_90x40x15_10', 0, 1): '2a2da3966e8120bbdd1c459d2feb64331c209188ad7df9360ee9ccd3044ba97f',
-    ('global_oce_latlon_720', 0, 0): '14b93c784ac2b15b6daea7e53d81f8989d24482c81bf615b3b8a488d85b59757',
     ('1D_10_kppmix_extend_rawflux_fix', 0, 9): '325356b021446188294a6b98ab8b978cd60902208b831056385d01bb723e1b20',
+}
+# Column-local replays whose digest 1DMIX-075 changed on purpose: key -> (digest before 1DMIX-075 =
+# the 1DMIX-071 golden, digest after, measured 2026-10-02 at the 1DMIX-075 edit). They contain columns with
+# dry model levels below the wet column (partial depth), the regime of MITgcm's kbl = kmtj+1 scan.
+_KPP_REPLAY_GOLDEN_075 = {
+    ('lab_sea_1000_0820T0946', 0, 1): (
+        '6a01df133f26182f8fa9a8153fde65f7e7fb52aa0ddee70792dcf42da3ceab35',
+        '674b7c6b41a89c1a70571fa8dab90696474a5257a032e7b617cd2359a74ac1ff'),
+    ('global_ocean_90x40x15_10', 0, 1): (
+        '2a2da3966e8120bbdd1c459d2feb64331c209188ad7df9360ee9ccd3044ba97f',
+        '5e0c8bda3a8abafc5bf1889bc04b1f72028d0d072bab2da65490b815e1d7e210'),
+    ('global_oce_latlon_720', 0, 0): (
+        '14b93c784ac2b15b6daea7e53d81f8989d24482c81bf615b3b8a488d85b59757',
+        '77dd722b9693d31cab9a86bd4d7c639c912e8946e764f26db5f3a333fb1a01a6'),
 }
 
 
@@ -1441,17 +1553,31 @@ def _kpp_replay_digest(stem, lo, hi, **kw):
 
 @pytest.mark.parametrize('key', sorted(_KPP_REPLAY_GOLDEN))
 def test_column_local_replay_is_bit_identical_to_pre_1dmix071(key):
+    """The two captures whose columns never enter the 1DMIX-075 regimes still reproduce the pre-1DMIX-071
+    column-local replay bit for bit."""
     digest, _out = _kpp_replay_digest(*key, tracer_point_inputs=False)
     assert digest == _KPP_REPLAY_GOLDEN[key]
 
 
+@pytest.mark.parametrize('key', sorted(_KPP_REPLAY_GOLDEN_075))
+def test_column_local_replay_changed_only_by_1dmix075(key):
+    """Captures with dry model levels below partial-depth columns: the column-local replay differs from the
+    pre-1DMIX-071 digest (the 1DMIX-075 change: MITgcm's kbl scan, zeroed bottom/surface `diffus`) and is
+    pinned to the digest measured at the 1DMIX-075 edit. Digest values are in `_KPP_REPLAY_GOLDEN_075`."""
+    before, after = _KPP_REPLAY_GOLDEN_075[key]
+    digest, _out = _kpp_replay_digest(*key, tracer_point_inputs=False)
+    assert digest != before
+    assert digest == after
+
+
 def test_tracer_point_replay_changes_multi_column_results_but_not_the_cold_start_step():
     """Default mode differs from the pre-edit digest on the multi-column captures with velocity
-    (seaice_obcs) and is identical where velocities are all zero (latlon step 0, cold start)."""
+    (seaice_obcs) and is identical to the column-local replay where velocities are all zero (latlon step 0,
+    cold start; since 1DMIX-075 both are the post-1DMIX-075 digest, not the 1DMIX-071 one)."""
     d_new, _ = _kpp_replay_digest('seaice_obcs_1dmix034', 0, 4)
     assert d_new != _KPP_REPLAY_GOLDEN[('seaice_obcs_1dmix034', 0, 4)]
     d0, _ = _kpp_replay_digest('global_oce_latlon_720', 0, 0)
-    assert d0 == _KPP_REPLAY_GOLDEN[('global_oce_latlon_720', 0, 0)]
+    assert d0 == _KPP_REPLAY_GOLDEN_075[('global_oce_latlon_720', 0, 0)][1]
 
 
 @pytest.mark.parametrize('flag', ['estimate_uref', 'smooth_dvsq', 'smooth_dens', 'smooth_visc', 'smooth_diff'])

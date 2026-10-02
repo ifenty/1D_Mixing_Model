@@ -45,25 +45,6 @@ A silent-ignore of a physics switch. With `True`, MITgcm sums four separate squa
 ### Proposed action and acceptance
 Decide between rejecting `calc_mean_vert_shear=True` with a ValueError (the project profile's unsupported-input rule) and supporting it through an optional precomputed-shear input like the KPP one from 1DMIX-071. Acceptance: `True` either raises with a clear message or is implemented and tested against a MITgcm capture built with calcMeanVertShear=1; default behaviour is bit-identical.
 
-## UNRESOLVED: KPP mixing coefficients disagree with MITgcm at k=1 of two-wet-level columns (global_ocean_90x40x15)
-
-**Date Identified**: 2026-10-02T20:35:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-075
-**Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_scheme_specific.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
-
-### Issue or research question
-With tracer-point replay inputs (1DMIX-071) the 90x40x15 KPP capture still has 456 `visc_az` and 520 `diff_kz_s` cells differing by more than 1%. 367 of the 456 `visc_az` cells sit at k=1 of the 610 columns that have exactly two wet levels. Example: t=5, i=72, j=35, MITgcm 0.0491 against port 0.0010, with an `hbl` difference of 0.
-
-### Evidence
-Bob 1DMIX-071 Phase 2 (devel-loop/loop_state/bob-1DMIX-071-evidence.md, bob-1DMIX-071-remeasure-kpp.json.txt). Richard's review: at k=1 of those columns `visc_az` has the same maximum 4.807e-2 and median 3.87e-4 with column-local and tracer-point inputs, and the same 367 cells, so it does not depend on the replay inputs.
-
-### Scientific or engineering impact
-A real port-versus-MITgcm difference in very shallow columns. It bounds the 90x40 KPP mixing agreement at 0.048 where the rest of the capture agrees far more closely.
-
-### Proposed action and acceptance
-Reduce one two-wet-level column to a single-column witness, trace `visc_az` at k=1 through the boundary-layer and interior branches in MITgcm (`kpp_routines.F`) and in the port, and find where they diverge. Acceptance: the mechanism is identified with file and line on both sides, and either the port is corrected to match MITgcm (the bound tightens) or the difference is shown to be a capture or replay limitation and documented.
-
 ## UNRESOLVED: residual KPP differences after tracer-point inputs: `ghat` exactly zero where MITgcm is nonzero, one `hbl` column, and global_oce_latlon
 
 **Date Identified**: 2026-10-02T20:35:00Z
@@ -72,13 +53,13 @@ Reduce one two-wet-level column to a single-column witness, trace `visc_az` at k
 **Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation.py`
 
 ### Issue or research question
-Three KPP differences remain that 1DMIX-071 showed are not replay-input artifacts:
-- The port returns `ghat` exactly 0 in a few cells where MITgcm is nonzero: 8 cells in seaice_obcs (90.8% of the `ghat` absolute difference), 3 in global_oce_latlon (97.6%), 2 in the lab_sea 6-month window.
+Three KPP differences remain that are neither replay-input artifacts (1DMIX-071) nor the boundary-layer bottom handling fixed in 1DMIX-075:
+- The port returns `ghat` exactly 0 in a few cells where MITgcm is nonzero: 8 cells in seaice_obcs, 2 in global_oce_latlon (first 5 steps), 2 in the lab_sea 6-month window (first 100 steps), 127 in the lab_sea 999-step capture and 13 in 11k_1D.
 - One lab_sea 6-month column-timestep (t=90, i=17, j=6) has `hbl` 66.71 m in MITgcm against 45.00 m in the port.
-- global_oce_latlon (built with no smoothing) is unchanged by the new inputs: `hbl` max 3.09 m, `ghat` max 116, and 306 `visc_az`, 1,461 `diff_kz_s` and 9 `ghat` cells above 1% in the first 5 steps.
+- global_oce_latlon (built with no smoothing), first 5 steps: `hbl` max 3.09 m, `ghat` max 116 with 9 cells above 1%, and 62 `visc_az` and 1,136 `diff_kz_s` cells above 1%.
 
 ### Evidence
-Bob 1DMIX-071 Phase 2 re-measurement; Richard's review reproduced the global_oce_latlon figures in both replay modes (`hbl` max 3.0916 m and `ghat` max 115.97 in both).
+Bob 1DMIX-071 Phase 2 re-measurement, reproduced by Richard in both replay modes. Bob 1DMIX-075 Phase 2 (devel-loop/loop_state/bob-1DMIX-075-evidence.md, unit P2-6) measured what that fix changed: of the exact-zero `ghat` cells it explained 1 of 3 in global_oce_latlon and none in seaice_obcs or lab_sea 6-month; it explained 244 of 306 `visc_az` and 325 of 1,461 `diff_kz_s` latlon cells; the `hbl` column and the latlon `hbl` and `ghat` figures did not change, because `hbl` is computed before the changed code.
 
 ### Scientific or engineering impact
 These are now the leading KPP port-versus-MITgcm differences on multi-column captures. The exact-zero `ghat` cells suggest a gate or index-offset difference rather than a tolerance effect.
