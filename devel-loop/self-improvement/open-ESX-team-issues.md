@@ -995,6 +995,8 @@ Validation-report passages are covered by the sealed documentation contract.
 ### Issue
 The owner ran `/esx-loop cancel` while Bob was implementing 1DMIX-072. The command text says "drain the queued cancellation notification, and stop". `loop_control.cancel` archives the state immediately and queues "Loop ending: cancelled ... Unfinished work remains recorded on disk". Arch took this as abandonment: it stopped its wait monitors and offered to stop the running implementer. The owner's intended semantics: "/esx-loop cancel should only stop the NEXT loop cycle, not stop work in progress". After cancel, the Stop hook also no longer holds Arch in-turn for the running dispatch, although `loop_gate.py --next` still reports the active iteration.
 
+Notifications are also lost. `notifications.synchronize` returns early when no loop session is active, so after the cancel neither the 1DMIX-072 closeout nor the 1DMIX-073 issue_opened notice was queued. Arch had to post them to Slack directly, with no notification-event receipt (2026-10-02, ts 1790939420.335889 / .691769).
+
 ### Evidence
 Session 377c3c70, 2026-09-30 ~15:05 UTC. The loop_end notice was sent while native_inflight/a4085c6d408956115.json existed and issue-start.json named 1DMIX-072.
 
@@ -1095,3 +1097,40 @@ The owner can't tell progress from a hang without interrupting, and has no remai
 
 ### Expected Effect
 The owner always knows the loop is alive, where it is, and roughly how long remains, without interrupting.
+
+---
+
+## 🔴 PROPOSED: a skipped `--check-start` cannot be recovered once work has started, and nothing stops dispatch without it
+
+**Date Identified**: 2026-10-02  11:15
+**Status**: Proposed
+**UUID**: TEAM-LOOP-CHECK-START-RECOVERY-001
+**Category**: loop_control
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-072-retrospective/assessment.md
+**Anchors**: tools/esx/loop_gate.py:Gate.check_start; tools/esx/final_verification.py; tools/esx/doc_contract.py:validate_orientation
+
+### Issue
+In 1DMIX-072, Arch ran `--prepare` and then dispatched Bob without running `--check-start`. `--next` said only "finish active iteration 1DMIX-072 and run --check-done", and nothing refused the dispatch. At closeout, `final_verification.py` / the final review packet refused with FINAL_EVIDENCE_INVALID: "successful --check-start receipt required before final verification".
+
+`--check-start` then failed with "stale arch orientation", because it validates the orientation frozen in issue-start.json at `--prepare` time, and the approved candidate had changed every target it recorded. The error suggests `navigate --reuse-args`, but that cannot help: check_start always reads `start['maintenance']['orientation']`, and no supported command refreshes it. The only exits are:
+- re-prepare, which means a new iteration timestamp and invalidates the approved Bob/Richard rounds;
+- stash the candidate and run `--check-start` on the pre-change tree, which is what the owner approved here.
+
+### Evidence
+Session 377c3c70. On 2026-09-30, 1DMIX-072 was prepared at 14:48 with no check-start. On 2026-10-02 the final packet was blocked and `--check-start` reported stale orientation (receipt 75ca8669...). The owner chose the stash/replay route; the receipt was produced with the candidate stashed, and signature 3be215c6 was confirmed restored afterwards.
+
+### Potential Impact
+An approved, verified candidate cannot close without a workaround that bypasses the gate's timing intent, or without discarding review work.
+
+### Proposed Fix
+1. Make it impossible to skip. Either `--prepare` runs the `--check-start` validation itself, or `--next` returns "NEXT: run --check-start" whenever issue-start.json has no start receipt. Native SubagentStart (or workflow_records dispatch) for bob/richard should also refuse while the receipt is missing.
+2. Provide a supported late path. For example, `--check-start --at-baseline` validates the frozen orientation against the baseline snapshot (be4794... here) instead of the live tree, and records `late: true` with the reason in the receipt so the retrospective sees it.
+3. Fix the stale-orientation remedy text so it names a command that actually clears this gate.
+
+### Acceptance Criteria
+- Dispatching a role after `--prepare` without `--check-start` is refused with a clear NEXT instruction.
+- A late check-start against the baseline succeeds without touching the working tree, and is flagged in the receipt and the retrospective draft.
+
+### Expected Effect
+No stranded approved candidates and no stash workarounds.
