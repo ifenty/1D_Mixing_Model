@@ -1173,3 +1173,63 @@ With the loop paused, ending the turn changes no state and produces no block; af
 
 ### Expected Effect
 No iterations lost to usage-limit pauses.
+
+---
+
+## 🔴 PROPOSED: final verification runs the whole suite before checking that the packet names each reviewer's latest completion event
+
+**Date Identified**: 2026-10-02  20:30
+**Status**: Proposed
+**UUID**: TEAM-FINAL-PACKET-LATEST-EVENT-001
+**Category**: packet_tooling
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-071-retrospective/assessment.md
+**Anchors**: tools/esx/final_verification.py; tools/esx/workflow_records.py; tools/esx/hooks.py
+
+### Issue
+A native reviewer agent can stop more than once at the end of a turn (its hand-back, then again when background work it started completes). Each stop records a completion event with the same footer. A final packet built from the first event passes `review-packet --stage final` ("ready"), and `final_verification.py run` then executes the full scientific suite before reporting "final review must reference the latest completion event; current candidate has 0 independent approvals".
+
+### Evidence
+1DMIX-071, 2026-10-02: Richard events 93b6794b and 42e4f0f0 (round 1, APPROVE, identical candidate signature); first final verification exit 1 after "260 passed, 3 skipped ... 435.63s"; second run with the rebuilt packet passed.
+
+### Potential Impact
+One wasted full-suite run per occurrence (7 minutes here, far longer on a project with a slow suite), and a confusing refusal after a pass.
+
+### Proposed Fix
+Run the acceptance checks (`ready()`) before executing the suite, so a packet that cannot be accepted is refused in seconds. Have `review-packet --stage final` refuse or warn when a selected reviewer has a later completion event for the same issue, iteration and round. Consider recording a second stop of the same agent with an unchanged footer as a duplicate of the first rather than a new event.
+
+### Acceptance Criteria
+A final packet that names a superseded completion event is refused before any suite command runs; a repeated stop with an identical footer does not invalidate a packet built from the first.
+
+### Expected Effect
+No full-suite run is spent on a packet that cannot be accepted.
+
+---
+
+## 🔴 PROPOSED: the stale-claim sweep finds symbol mentions, not superseded figures and readings
+
+**Date Identified**: 2026-10-02  20:30
+**Status**: Proposed
+**UUID**: TEAM-STALE-FIGURE-SWEEP-001
+**Category**: documentation_coverage
+**Severity**: Medium
+**Assessment**: devel-loop/self-improvement/assessments/2026-10-02-1dmix-071-retrospective/assessment.md
+**Anchors**: tools/esx/brief.py; devel-loop/documentation_contract.md
+
+### Issue
+When a change re-measures a result, the statements it makes stale are old numbers and old readings of them, often in passages the change does not edit. `brief.py --sweep-symbol` lists mentions of a name, and the working rule asks the implementer to search, but neither is driven by the figures being superseded. Three consecutive issues (1DMIX-072, 073, 071) were rejected in round 0 for exactly this kind of statement.
+
+### Evidence
+1DMIX-071 round-0 must_fix 1-4 (model_contract.md, GGL90 CAPTURES.md, README.md, KPP_VALIDATION_RESULTS.md); found in round 1 by grepping "17934", "1075", "26-41", "Rib/Ricr", "kSrf gap".
+
+### Potential Impact
+A documentation-only correction round on most issues that change a measured result.
+
+### Proposed Fix
+Have the implementer record an old-versus-new table of every figure and reading the change supersedes, and make the sweep take it: `brief.py --sweep-figure OLD` (repeatable, exact-string search over the documentation inventory) for correction briefs, and a `doc_contract.py stale --figures FILE` command the implementer runs before sealing, which lists every inventory line still containing a superseded figure. The reviewer brief lists the same table.
+
+### Acceptance Criteria
+On a change that supersedes N figures, the tool lists every inventory line that still contains one, and a sealed plan cannot be reported while that list is non-empty without a stated reason per line.
+
+### Expected Effect
+Round-0 rejections for superseded figures stop recurring.
