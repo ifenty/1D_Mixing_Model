@@ -26,21 +26,21 @@ A closed dependency prompts reconsideration; it does not automatically unblock w
 <Hypothesis, bounded change/inquiry, independent oracle, tolerances and completion criteria>
 ```
 
-## UNRESOLVED: multi-column MITgcm replays give the port column-local velocities, while MITgcm forms tracer-point shear from neighbour-averaged velocities
+## UNRESOLVED: `GGL90Parameters.calc_mean_vert_shear` is accepted but never read, so `True` is silently ignored
 
-**Date Identified**: 2026-09-30T14:20:00Z
+**Date Identified**: 2026-10-02T18:45:00Z
 **Status**: Unresolved
-**UUID**: 1DMIX-071
-**Anchors**: `MITgcm_to_Python_port_verification/scripts/run_ggl90_from_netcdf_input.py`; `MITgcm_to_Python_port_verification/scripts/run_kpp_from_netcdf_input.py`; `MITgcm_to_Python_port_verification/tests/test_ggl90_mitgcm_validation.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
+**UUID**: 1DMIX-074
+**Anchors**: `Vertical_Mixing_Models/GGL90/ggl90_parameters.py::GGL90Parameters`; `Vertical_Mixing_Models/GGL90/ggl90_core_driver.py::GGL90Driver.compute_mixing`; `esx/project_profile.md`
 
 ### Issue or research question
-MITgcm computes shear at a tracer point from velocities averaged over (i,i+1) and (j,j+1) (`ggl90_calc.F`, `kpp_calc.F`, `kpp_forcing_surf.F`); the replay scripts hand the single-column port only `uVel(i,j)`, `vVel(i,j)`. Every multi-column comparison therefore feeds the port a different shear than MITgcm used.
+MITgcm's `calcMeanVertShear` selects between two shear formulas in `ggl90_calc.F` (lines 526-540 and 541-556). The port's `GGL90Parameters.calc_mean_vert_shear` (`ggl90_parameters.py` line 176) is accepted and stored but no code reads it, so a configuration that sets it to `True` runs the `False` formula without any error.
 
 ### Evidence
-Bob, 1DMIX-054 (dispatch 893d4f73; devel-loop/loop_state/bob-1DMIX-054-evidence.md): for lab_sea GGL90, rebuilding ubar/vbar from neighbouring capture columns reproduces MITgcm's `vertical_shear` to median 1.25e-16 while column-local shear is off by a median 64%; for KPP 90x40x15 (no-smoothing rerun) the 4-point formula reproduces `shear_sq` exactly while column-local is off by a median 50%.
+Bob, 1DMIX-071 Phase 1 (devel-loop/loop_state/bob-1DMIX-071-evidence.md): source inspection of the parameter and its uses. All six z-coordinate GGL90 captures have calcMeanVertShear=0, so no declared comparison is affected.
 
 ### Scientific or engineering impact
-High for interpretation: the documented "known gaps" on multi-column captures (isomip diff_kz/tke_after, 90x40x15 GGL90, global_oce_latlon, lab_sea KPP and the new 1DMIX-054 lab_sea GGL90 and 90x40 KPP gaps; the cs32x15 captures are pressure-coordinate and are rejected by the port since 1DMIX-072/073, so they are not port comparisons) may be partly or wholly this replay-input artifact rather than port disagreement. Single-column captures are unaffected.
+A silent-ignore of a physics switch. With `True`, MITgcm sums four separate squared differences, which a single column cannot reproduce from one velocity profile.
 
 ### Proposed action and acceptance
-Make the replays reconstruct MITgcm's tracer-point velocities from neighbouring columns (with MITgcm's masks/halo conventions) and re-measure every multi-column comparison; separate the replay artifact from real gaps per field (as 1DMIX-070 did for print precision), updating known-gap assertions only with 16-vs-averaged evidence and never widening an upper tolerance. Acceptance: shear inputs reproduce MITgcm's captured shear to roundoff on every multi-column capture; each known-gap assertion is re-justified or removed.
+Decide between rejecting `calc_mean_vert_shear=True` with a ValueError (the project profile's unsupported-input rule) and supporting it through an optional precomputed-shear input like the KPP one from 1DMIX-071. Acceptance: `True` either raises with a clear message or is implemented and tested against a MITgcm capture built with calcMeanVertShear=1; default behaviour is bit-identical.

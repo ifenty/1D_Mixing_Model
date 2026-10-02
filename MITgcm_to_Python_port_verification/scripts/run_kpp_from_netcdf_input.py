@@ -12,6 +12,18 @@ This script:
 4. Creates Python port Dataset with UUID provenance tracking
 5. Optionally compares with MITgcm outputs if available
 
+Tracer-point inputs (1DMIX-071): MITgcm forms KPP's shsq (kpp_calc.F:459-495), dVsq
+(kpp_forcing_surf.F:463-504) and the horizontally smoothed dbloc (kpp_calc.F:276-289,
+smooth_horiz kpp_routines.F:1318-1398) from the NEIGHBOURING columns, which the single-column
+port cannot see. By default (`tracer_point_inputs=True`) this replay rebuilds them from the
+neighbouring columns of the whole capture (scripts/tracer_point_inputs.py; periodic wrap =
+MITgcm's default exchange) and passes them to `KPPDriver.compute_mixing` through its keyword-only
+`shsq_forcing` / `dvsq_forcing` / `dbloc_smooth_forcing`. `tracer_point_inputs=False` / `--column-local`
+restores the former column-local replay (du**2 + dv**2, no horizontal smoothing). A capture
+built with KPP_ESTIMATE_UREF, KPP_SMOOTH_DVSQ, KPP_SMOOTH_DENS, KPP_SMOOTH_VISC or KPP_SMOOTH_DIFF
+raises NotImplementedError in the default mode. The smoothed dbloc is not captured, so its
+reconstruction is validated only through its effect on the KPP outputs (docs: KPP_VALIDATION_RESULTS.md).
+
 Usage:
   python run_kpp_from_netcdf_input.py <input_file.nc> [output_dir] [options]
 
@@ -25,6 +37,7 @@ Options:
   --first N, --first-timestep N   First timestep to process (0-indexed, default: 0)
   --last N, --last-timestep N     Last timestep to process (0-indexed, inclusive, default: all)
   -j N, --jobs N                  Number of parallel workers (default: 1 = serial)
+  --column-local                  Column-local shear/dVsq/dbloc (pre-1DMIX-071 replay)
 
 Output location logic:
 - If input from inputs_from_mitgcm/: saves to outputs_from_python/ with matching name
@@ -44,6 +57,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'Vertical_Mixing_Mo
 
 from KPP.kpp_core_driver import KPPDriver, validate_zcoordinate_geometry
 from KPP.kpp_parameters import KPPParameters
+from main.eos import compute_buoyancy_gradients
+
+sys.path.insert(0, str(Path(__file__).parent))
+import tracer_point_inputs as tpi  # noqa: E402
 
 # Try to import tqdm for progress bar
 try:
@@ -58,6 +75,7 @@ _worker_driver = None
 _worker_background_params = None
 _worker_depth = None
 _worker_cell_thickness = None
+_worker_tracer_point = None  # dict of (n_time, x, y, nz) arrays or None (1DMIX-071)
 
 
 def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tuple[Dict, Dict, List, List]:
@@ -293,7 +311,8 @@ def extract_parameters_from_inputs(ds: xr.Dataset, verbose: bool = True) -> Tupl
     return kpp_params, background_params, found_params, missing_params
 
 
-def _init_worker(inputs_file_str: str, kpp_params_dict: Dict, background_params: Dict):
+def _init_worker(inputs_file_str: str, kpp_params_dict: Dict, background_params: Dict,
+                 tracer_point: Optional[Dict] = None):
     """
     Initialize worker process with shared data.
 
@@ -301,7 +320,7 @@ def _init_worker(inputs_file_str: str, kpp_params_dict: Dict, background_params:
     This avoids reloading the dataset for every column.
     """
     global _worker_inputs_ds, _worker_driver, _worker_background_params
-    global _worker_depth, _worker_cell_thickness
+    global _worker_depth, _worker_cell_thickness, _worker_tracer_point
 
     # Need to set up path again in worker process
     sys.path.insert(0, str(Path(__file__).parent.parent / '1D_Mixing_Model'))
@@ -316,6 +335,7 @@ def _init_worker(inputs_file_str: str, kpp_params_dict: Dict, background_params:
     _worker_background_params = background_params
     _worker_depth = _worker_inputs_ds.depth.values
     _worker_cell_thickness = _worker_inputs_ds.cell_thickness.values
+    _worker_tracer_point = tracer_point
 
 
 def derive_raw_flux_forcing(
@@ -494,6 +514,66 @@ def _wet_level_range(theta: np.ndarray) -> Tuple[int, int]:
     return start, count
 
 
+def build_tracer_point_arrays(inputs_ds: xr.Dataset, kpp_params: KPPParameters,
+                              first_timestep: int, last_timestep: int,
+                              periodic_x: bool = True, periodic_y: bool = True,
+                              chunk: int = 8) -> Dict[str, Optional[np.ndarray]]:
+    """MITgcm's neighbour-dependent KPP inputs for timesteps first..last (1DMIX-071).
+
+    Returns {'shsq', 'dvsq', 'dbloc_smooth'}, each (n_time, x, y, nz) (index 0 = `first_timestep`);
+    'dbloc_smooth' is None when the capture was built without KPP_SMOOTH_DBLOC (the driver's own
+    unsmoothed dbloc is then exactly what MITgcm used). Formulas and their MITgcm line
+    numbers: scripts/tracer_point_inputs.py. The raw dbloc of every wet column is the port's own
+    `compute_buoyancy_gradients` on the column's wet range (the same call the driver makes).
+    Processes `chunk` timesteps at a time (bounded memory; the arrays only couple columns of one
+    timestep). Raises NotImplementedError for capture options this does not reproduce.
+    """
+    tpi.check_supported_kpp_options(inputs_ds.attrs)
+    smooth_shsq = bool(int(inputs_ds.attrs.get('smooth_shsq', 0)))
+    smooth_dbloc = bool(int(inputs_ds.attrs.get('smooth_dbloc', 0)))
+    n_time = last_timestep - first_timestep + 1
+    nx, ny, nz = len(inputs_ds.x), len(inputs_ds.y), len(inputs_ds.z)
+    depth = inputs_ds.depth.values
+    shsq = np.zeros((n_time, nx, ny, nz))
+    dvsq = np.zeros((n_time, nx, ny, nz))
+    dbs = np.zeros((n_time, nx, ny, nz)) if smooth_dbloc else None
+    for c0 in range(0, n_time, chunk):
+        c1 = min(n_time, c0 + chunk)
+        sl = slice(first_timestep + c0, first_timestep + c1)
+        u = inputs_ds.u_velocity.isel(time=sl).values
+        v = inputs_ds.v_velocity.isel(time=sl).values
+        shsq[c0:c1] = tpi.kpp_shsq(u, v, smooth_shsq, periodic_x, periodic_y)
+        dvsq[c0:c1] = tpi.kpp_dvsq(u, v, periodic_x, periodic_y)
+        if smooth_dbloc:
+            theta = inputs_ds.temperature.isel(time=sl).values
+            salt = inputs_ds.salinity.isel(time=sl).values
+            raw = np.zeros_like(theta)
+            for t in range(theta.shape[0]):
+                for i in range(nx):
+                    for j in range(ny):
+                        if _is_land_column(theta[t, i, j], salt[t, i, j]):
+                            continue
+                        ws, n = _wet_level_range(theta[t, i, j])
+                        w = slice(ws, ws + n)
+                        raw[t, i, j, w] = compute_buoyancy_gradients(
+                            theta[t, i, j, w], salt[t, i, j, w], depth[w], kpp_params.rho_const,
+                            kpp_params.gravity, use_jmd95=True)[1]
+            dbs[c0:c1] = tpi.kpp_dbloc_smooth(raw, theta != 0.0, periodic_x, periodic_y)
+    return {'shsq': shsq, 'dvsq': dvsq, 'dbloc_smooth': dbs}
+
+
+def _tracer_point_kwargs(tp: Optional[Dict], t_out_idx: int, i: int, j: int,
+                         wet_start: int, wet_end: int) -> Dict[str, np.ndarray]:
+    """The three keyword-only driver inputs for one column's wet range ({} if `tp` is None)."""
+    if tp is None:
+        return {}
+    kw = {'shsq_forcing': tp['shsq'][t_out_idx, i, j, wet_start:wet_end],
+          'dvsq_forcing': tp['dvsq'][t_out_idx, i, j, wet_start:wet_end]}
+    if tp['dbloc_smooth'] is not None:
+        kw['dbloc_smooth_forcing'] = tp['dbloc_smooth'][t_out_idx, i, j, wet_start:wet_end]
+    return kw
+
+
 def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
     """
     Worker function to process one (t, i, j) column.
@@ -582,6 +662,7 @@ def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
             bosol_forcing=bosol,
             boplume_forcing=boplume_val,
             sp_depth_forcing=sp_depth_val,
+            **_tracer_point_kwargs(_worker_tracer_point, t_out_idx, i, j, wet_start, wet_end),
         )
 
         # Pad profile fields back to the full grid depth with zeros outside
@@ -624,7 +705,9 @@ def _process_column(task: Tuple[int, int, int, int]) -> Optional[Dict]:
 
 def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                                first_timestep: int = None, last_timestep: int = None,
-                               n_jobs: int = 1, inputs_file: Path = None) -> xr.Dataset:
+                               n_jobs: int = 1, inputs_file: Path = None,
+                               tracer_point_inputs: bool = True, periodic_x: bool = True,
+                               periodic_y: bool = True) -> xr.Dataset:
     """
     Run Python KPP on all columns from inputs Dataset.
 
@@ -643,6 +726,13 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
         If > 1, use multiprocessing to parallelize across columns.
     inputs_file : Path, optional
         Path to input NetCDF file (required if n_jobs > 1 for workers to reload dataset)
+    tracer_point_inputs : bool, optional
+        (1DMIX-071, default True) pass MITgcm's neighbour-dependent shsq, dVsq and smoothed dbloc,
+        rebuilt from the neighbouring captured columns (`build_tracer_point_arrays`), to the
+        driver. False reproduces the former column-local replay. NotImplementedError if the
+        capture was built with KPP_ESTIMATE_UREF/SMOOTH_DVSQ/SMOOTH_DENS/SMOOTH_VISC/SMOOTH_DIFF.
+    periodic_x, periodic_y : bool, optional
+        Neighbour rule beyond the domain edge (True = MITgcm's default periodic exchange).
 
     Returns
     -------
@@ -740,6 +830,12 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
     # Process each timestep and column
     total_columns = n_time * nx * ny
 
+    # MITgcm's neighbour-dependent shsq / dVsq / smoothed dbloc (1DMIX-071)
+    tracer_point = None
+    if tracer_point_inputs:
+        tracer_point = build_tracer_point_arrays(
+            inputs_ds, kpp_params, first_timestep, last_timestep, periodic_x, periodic_y)
+
     # Choose serial or parallel processing
     if n_jobs > 1:
         # PARALLEL PROCESSING
@@ -762,7 +858,8 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
 
         with Pool(processes=n_jobs,
                   initializer=_init_worker,
-                  initargs=(str(inputs_file), kpp_params_dict, background_params)) as pool:
+                  initargs=(str(inputs_file), kpp_params_dict, background_params,
+                            tracer_point)) as pool:
 
             # Use imap_unordered for better progress reporting
             if HAS_TQDM and verbose:
@@ -898,6 +995,8 @@ def run_python_kpp_on_dataset(inputs_ds: xr.Dataset, verbose: bool = True,
                             bosol_forcing=bosol,            # Radiative (shortwave) buoyancy forcing [m²/s³]
                             boplume_forcing=boplume_val,     # Salt-plume haline buoyancy forcing [m²/s³] (1DMIX-034)
                             sp_depth_forcing=sp_depth_val,   # Salt plume penetration depth [m] (1DMIX-034)
+                            # MITgcm's neighbour-dependent shsq/dVsq/smoothed dbloc (1DMIX-071; {} = column-local)
+                            **_tracer_point_kwargs(tracer_point, t_out_idx, i, j, wet_start, wet_end),
                             # Note: Mode determined automatically based on which params provided
                             # - If raw fluxes present → Mode 3 (forcing validation)
                             # - If only pre-computed → Mode 1 (use pre-computed)
@@ -1057,6 +1156,9 @@ Required arguments:
     parser.add_argument('-j', '--jobs', '--n-jobs', type=int, default=1,
                         dest='n_jobs',
                         help=f'Number of parallel worker processes (default: 1, max: {cpu_count()})')
+    parser.add_argument('--column-local', action='store_true',
+                        help='column-local shsq/dVsq/dbloc (the pre-1DMIX-071 replay) instead of '
+                             "MITgcm's neighbour-dependent tracer-point inputs")
 
     args = parser.parse_args()
 
@@ -1099,7 +1201,8 @@ Required arguments:
         first_timestep=args.first_timestep,
         last_timestep=args.last_timestep,
         n_jobs=args.n_jobs,
-        inputs_file=inputs_file
+        inputs_file=inputs_file,
+        tracer_point_inputs=not args.column_local,
     )
 
     # Add input file provenance

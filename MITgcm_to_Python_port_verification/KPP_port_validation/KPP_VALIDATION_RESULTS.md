@@ -55,6 +55,21 @@ holds the generated PDF/markdown reports this document's numbers trace to.
   statistic instead and says so.
 - Every statistic excludes non-physical padding below a column's real
   seafloor before it is computed.
+- **Replay inputs (1DMIX-071).** MITgcm forms KPP's `shsq` (`kpp_calc.F:459-495`), `dVsq`
+  (`kpp_forcing_surf.F:463-504`) and, through `smooth_horiz` (`kpp_routines.F:1318-1398`), the
+  smoothed `dbloc` that enters the gradient Richardson number (`kpp_routines.F:1133-1137`) from the
+  NEIGHBOURING columns; a single column cannot form them. `run_python_kpp_on_dataset` (default
+  `tracer_point_inputs=True`) therefore rebuilds MITgcm's values from the neighbouring captured columns
+  (`scripts/tracer_point_inputs.py`, periodic wrap) and passes them to `KPPDriver.compute_mixing` through
+  the keyword-only `shsq_forcing`, `dvsq_forcing` and `dbloc_smooth_forcing`. `shsq` and `dVsq` are verified
+  directly against the captured `shear_sq`/`dVsq` (max relative difference 0.0, bit identical, interior /
+  tile-edge / domain-edge, every in-scope multi-column capture; `tests/test_tracer_point_inputs.py`). **The
+  smoothed `dbloc` is not captured, so its reconstruction is validated only through its effect on the KPP
+  outputs** (and by a hand-computed unit test of the `smooth_horiz` arithmetic). Every table below is
+  measured in that default mode unless it says "column-local" (`tracer_point_inputs=False` /
+  `--column-local`, the former replay, kept with one old-mode test on `global_ocean_90x40x15`). The
+  replay refuses (`NotImplementedError`) captures built with `KPP_ESTIMATE_UREF`, `KPP_SMOOTH_DVSQ`,
+  `KPP_SMOOTH_DENS`, `KPP_SMOOTH_VISC` or `KPP_SMOOTH_DIFF` (none of the declared captures is).
 
 ## Shared infrastructure (grid, driver, equation of state)
 
@@ -118,11 +133,31 @@ sides evaluate the same formula on the same unit-confused geometry. Since
 that capture any more. That capture is a known-gap characterization, never a
 validation.
 
-## Two mechanisms that explain most of the tail below
+## Mechanisms that explain the tail below
 
-Two causal mechanisms account for the great majority of every non-roundoff
-discrepancy in the per-experiment sections that follow. Both are stated once
-here rather than re-derived per experiment.
+**Which input does what (Richard's 1DMIX-071 review, ablation: reconstructed `shsq`+`dVsq` only, `dbloc` left
+unsmoothed, against the full tracer-point replay).** The `dVsq` reconstruction drives `hbl` (the `hbl`
+statistics are identical with and without the `dbloc` smoothing: e.g. `90x40` max 0.3915 m, `lab_sea_1000`
+max 0.0287 m, `seaice_obcs` max 0.2065 m), while the smoothed `dbloc` drives the mixing-coefficient improvement: `visc_az`
+cells above 1% relative error, without versus with the smoothing: `lab_sea_1000` (first 20 steps) 3,652 vs 4,
+`global_ocean_90x40x15` 4,060 vs 456, `seaice_obcs` 426 vs 110. (I re-checked these against the review's
+`q5_ablate.out` and against my own Phase 1 runs of the same two variants.)
+
+Two causal mechanisms account for the great majority of the non-roundoff
+discrepancy that remains in the per-experiment sections that follow; a third,
+the replay-input effect (1DMIX-071, "Replay inputs" above), explained much of
+the tail the Rib/Ricr mechanism used to be credited with and is now removed from the
+replay. Each is stated once here rather than re-derived per experiment.
+
+**The replay-input effect (1DMIX-071), now removed.** Until 1DMIX-071 the replay fed
+the port column-local `du^2+dv^2` and an unsmoothed `dbloc`, so on every multi-column
+capture the port saw a different shear, bulk Richardson number and gradient Richardson
+number than MITgcm. With MITgcm's tracer-point inputs the `hbl` maxima fall from 90.04 m
+to 0.39 m (`global_ocean_90x40x15`), 26.4 m to 0.029 m (`lab_sea` 999, first 20 steps), 20.4 m to
+0.21 m (`seaice_obcs`) and 40.7 m to 21.7 m (`lab_sea` 6-month, first 100 steps); `global_oce_latlon`
+(smoothing off) does not change (3.09 m). Attributions below that were made with the column-local replay
+(the Rib/Ricr-only reading of the `lab_sea`, `seaice_obcs` and `11k` tails, the `ghat` exact-zero analyses)
+are re-stated in each section with the new numbers; where a mechanism was not re-measured it says so.
 
 **The Rib/Ricr threshold-crossing sensitivity.** KPP diagnoses `hbl` by
 searching down the column for the first level where the bulk Richardson
@@ -251,6 +286,13 @@ agreeing to within about 6e-5 m and a correspondingly tiny `ghat` difference
 (about 1.5e-3), consistent with the same continuous relationship holding at
 small scale too.
 
+**1DMIX-071 for the two single-column captures above (`1D_ocean_ice_column`, 10 and 11,000 timesteps).** Fed
+MITgcm's tracer-point inputs, a single column's reconstructed `shear_sq`/`dVsq` equal the captured values bit for
+bit (the neighbours are the column itself), whereas the column-local `du^2+dv^2` differs from them by 3-4e-16
+relative; every figure in these two sections (`hbl`, `visc_az`, `diff_kz`, `ghat`, all statistics) is
+identical to four significant digits in both modes, and the 10-step replay output is bit-identical. These
+sections' Rib/Ricr and `ghat` attributions therefore stand.
+
 ## `lab_sea`, 999 timesteps (41 days) — the first multi-column real-ocean grid
 
 MITgcm's real Lab Sea configuration: a 20×16 spherical grid with real
@@ -276,13 +318,21 @@ not percent. A direct instrumented `wscale` check on a 20-timestep subsample
 of this capture finds a real but small effect from the `keep_mitgcm_bugs`
 clamp choice (`hbl` differing by up to 3.9e-3 m, mixing coefficients by
 1e-3–7.6e-2 m²/s between the two settings) — dwarfed by, and unrelated to,
-the much larger Rib/Ricr tail described next.
+the much larger column-local-replay `hbl` tail described next (attributed there to Rib/Ricr; see the 1DMIX-071 paragraph below for what remains).
+
+**1DMIX-071 (tracer-point replay).** The table above and its tail were measured with the column-local
+replay on the older 999-step capture. Re-measured on the current capture, first 20 timesteps (3,000 ocean
+column-timesteps, 34,200 active cells): `hbl` median `7.3e-4 m`, max `0.029 m` (column-local: `3.4e-3 m`,
+`26.4 m`, 2 columns above 5 m); `visc_az` max_abs `6.0e-5` and 4 cells above 1% relative error (column-local
+`3.4e-2`, 4,143 / 12.1%); `diff_kz_s`/`_t` max_abs `1.6e-4`, 37 cells (column-local `7.0e-2`, 3,850 / 11.3%);
+`ghat` max `0.85`, median `1.9e-2`, no cell above 1% (column-local `117.8`, 202 cells). So the large tail above
+was largely the replay-input effect; the full 999-step recomputation was not repeated.
 
 ## `lab_sea`, 6-month run (4368 timesteps, first 100 subsampled) — the longest temporal duration
 
 The same Lab Sea grid run for a full 6 months instead of 41 days — this
 project's longest real-multi-column temporal duration, testing whether the
-Rib/Ricr sensitivity above changes character over a much longer,
+`hbl` tail above changes character over a much longer,
 climatologically representative run. The full 4368-timestep/655,200-wet-
 column-timestep capture is impractical to fully replay on every report
 refresh, so the results below use the leading 100-of-4368 timesteps
@@ -292,8 +342,10 @@ directly against MITgcm's own captured `visc_az` for the latter.
 
 **`hbl`** (absolute difference, `N=15,000`): median `2.89e-3 m`, max
 `40.72 m`, with 0.68%/0.47% of column-timesteps exceeding a 1 m/5 m
-difference — the same Rib/Ricr threshold-sensitivity tail as the shorter
-41-day capture above. A separate, larger characterization was previously
+difference (column-local replay; attributed at the time to the same Rib/Ricr
+threshold-sensitivity tail as the shorter 41-day capture above, now known to be
+mostly the replay-input effect: with tracer-point inputs ONE column-timestep exceeds 5 m, see the
+1DMIX-071 note below the mixing table). A separate, larger characterization was previously
 reported at the full 655,200-wet-column-timestep scale (not this
 100-timestep subsample): `hbl` median difference `0.0011 m`, with a wider
 tail — 3.6%/1.5%/0.31% of column-timesteps exceeding 1 m/5 m/20 m, and one
@@ -313,16 +365,24 @@ is not reported here.
 
 | Field | Median abs. diff | Max abs. diff | Fraction >1% rel. err. | N (active) |
 |---|---|---|---|---|
-| `visc_az` | 0 (exact) | 3.49e-2 | 13.35% | 171,000 |
-| `diff_kz_s` | 0 (exact) | 7.60e-2 | 12.27% | 171,000 |
-| `diff_kz_t` | 0 (exact) | 7.60e-2 | 12.27% | 171,000 |
+| `visc_az` | 0 (exact) | 2.33e-2 (3.49e-2 column-local) | 0.014% (13.35%) | 171,000 |
+| `diff_kz_s` | 0 (exact) | 5.25e-2 (7.60e-2) | 0.110% (12.27%) | 171,000 |
+| `diff_kz_t` | 0 (exact) | 5.25e-2 (7.60e-2) | 0.110% (12.27%) | 171,000 |
 
-The fraction exceeding 1% relative error is much larger than the
-single-column `1D_ocean_ice_column` capture's own fraction — expected for
-this multi-column, variable-bathymetry, real-land experiment, where the same
-Rib/Ricr threshold sensitivity flips many more individual columns' boundary-
-layer diagnosis than the single-column case does. The absolute-error bounds,
-which are what matters physically, stay small and comparable to the
+(1DMIX-071: the figures outside brackets are the tracer-point replay, the bracketed ones the former
+column-local replay; 24 / 189 cells above 1% against 22,830 / 20,980. The `hbl` figures in the paragraph
+above are the column-local ones; with tracer-point inputs, same 15,000 column-timesteps: median `5.70e-4 m`,
+p99 `0.025 m`, max `21.71 m`, ONE column-timestep above 5 m (t=90, i=17, j=6: MITgcm 66.71 m, port 45.00 m)
+against 71, so most of that tail was the replay-input effect. The one remaining column is not root-caused here;
+141 of the 189 `diff_kz_s` cells above 1% sit in 8-wet-level columns.)
+
+With MITgcm's tracer-point inputs (1DMIX-071) the fraction exceeding 1% relative
+error is 0.014% (`visc_az`) and 0.110% (`diff_kz_s/_t`), below the single-column
+`1D_ocean_ice_column` 11,000-step capture's own 0.055% / 0.796% for `diff_kz`; the
+column-local replay's 13.35% / 12.27% (previous version of this paragraph: "much larger ... because
+Rib/Ricr threshold sensitivity flips many more columns' boundary-layer diagnosis") was
+the replay-input effect (shear, bulk and gradient Richardson numbers differing from MITgcm's), not
+a property of this multi-column grid. The absolute-error bounds stay small and comparable to the
 single-column result.
 
 **`ghat`**: median absolute difference `2.404e-2`, max `362.4`
@@ -351,6 +411,12 @@ of genuine large `hbl` misses, and a larger cluster of small offsets that
 happen to straddle a grid-cell edge — with a small remainder not
 characterized further.
 
+**1DMIX-071: that `ghat` analysis was measured with the column-local replay and is NOT re-established.**
+With tracer-point inputs the same 34,540 active cells give median `1.76e-2`, max `89.5`, 5 cells above 1% relative
+error (761 column-local) and 2 cells with the port's `ghat` exactly `0.0` (54), one column-timestep with an `hbl`
+difference above 0.3 m (239 columns): the exact-zero cluster and the small-offset cluster were largely
+replay-input artifacts; the residual is the single hbl-21.7 m column above.
+
 ## `seaice_obcs` — the only salt-plume capture
 
 Sea ice, open boundary conditions, and — uniquely among every KPP
@@ -371,7 +437,9 @@ silently applying the wrong plume formula.
 
 **`hbl`** (absolute difference, `N=295` real ocean columns): median
 `3.46e-2 m`, p99 `19.15 m`, max `20.43 m`, with 9.15%/2.71% of columns
-exceeding a 1 m/5 m difference. The wide tail is the Rib/Ricr threshold-
+exceeding a 1 m/5 m difference (column-local replay; **1DMIX-071, tracer-point replay: median `8.65e-4 m`,
+p99 `0.179 m`, max `0.2065 m`, no column above 1 m** -- the wide tail was the replay-input effect, not Rib/Ricr
+sensitivity). The wide column-local tail was attributed to the Rib/Ricr threshold-
 sensitivity mechanism above, not a separate defect — this experiment's own
 haline forcing term shifts `bfsfc` at every affected column, but both
 implementations compute that shift the same way; what differs downstream is
@@ -396,9 +464,12 @@ as unresolved physics, not as a claim of correctness.
 
 | Field | Median abs. diff | P99 abs. diff | Max abs. diff | Fraction >1% rel. err. | N (active) |
 |---|---|---|---|---|---|
-| `visc_az` | 0 (exact) | 4.79e-3 | 1.84e-2 | 13.9% | — |
-| `diff_kz_s` | — | 4.87e-3 | 3.41e-2 | 13.9% | — |
-| `diff_kz_t` | — | 4.87e-3 | 3.41e-2 | 13.9% | — |
+| `visc_az` | 0 (exact) | 4.79e-3 (1.1e-4) | 1.84e-2 (3.1e-4) | 13.9% (3.13%, 110 cells) | — |
+| `diff_kz_s` | — | 4.87e-3 (1.5e-4) | 3.41e-2 (3.1e-4) | 13.9% (3.73%, 131 cells) | — |
+| `diff_kz_t` | — | 4.87e-3 (1.5e-4) | 3.41e-2 (3.1e-4) | 13.9% (3.73%, 131 cells) | — |
+
+(1DMIX-071: bracketed figures are the tracer-point replay, the others the column-local replay; the 110 / 131
+residual cells are not root-caused here.)
 
 **`ghat`**: median absolute difference `0.386`, p99 `124.4`, max `572.4`
 (`N=209` active cells). Measured directly rather than assumed to match the
@@ -425,6 +496,13 @@ moderately with `hbl` disagreement (`r=0.71`) while `hbl` itself matches
 closely there too (median `0.009 m`) — so `hbl` mismatch is at most a
 partial contributor to the ordinary residual, not an established dominant
 cause.
+
+**1DMIX-071: this `ghat` analysis was measured with the column-local replay and is NOT re-established.**
+With tracer-point inputs the 209 active cells give median `0.337`, max `99.5` (was `0.386` / `572.4`), 38 cells
+above 1% (57), 8 cells with the port's `ghat` exactly `0.0` (12), carrying 90.8% of the total absolute difference
+(75.8%); no column has an `hbl` difference above 0.3 m (57 had), so the `hbl`-driven member is gone and what
+remains is the not-yet-explained exact-zero behaviour of the shape-function evaluation described above
+(a follow-up candidate, not root-caused here).
 
 ## `global_oce_latlon` — a real global, multi-tile, seasonally-complete capture
 
@@ -496,6 +574,14 @@ the measured driver at that cell; the deeper reason the two implementations'
 tiny, near-zero `bfsfc` values land on opposite sides of zero is not
 root-caused further here.
 
+**1DMIX-071 for `global_oce_latlon`.** This capture was built with smoothing off (`KPP_SMOOTH_SHSQ`,
+`KPP_SMOOTH_DBLOC` `#undef`), so MITgcm's tracer-point inputs change only the 4-term `shsq`/`dVsq`; the first 5
+timesteps (11,575 column-timesteps) are essentially unchanged: `hbl` median `1.20e-3 m` (was `1.35e-3`), max `3.092 m`
+(same), none above 5 m; `visc_az` max_abs `0.0957` (same), 306 cells above 1% relative error (310);
+`diff_kz_s`/`_t` max_abs `0.110` (same), 1,461 cells (1,495); `ghat` max `116.0` (same), 9 cells above 1% (10), 3
+exact-zero cells carrying 97.6% of the total absolute difference (same 3 cells). These are REAL gaps, not replay
+artifacts, and are not root-caused here; the attributions of this section stand.
+
 ## `global_ocean_90x40x15` + KPP — the first geometry-matched cross-scheme capture (1DMIX-054)
 
 The KPP counterpart of the existing GGL90/IDEMIX capture of the same grid:
@@ -513,7 +599,23 @@ the recipe is R7 in `CAPTURES.md`. The header is MITgcm's default
 `KPP_OPTIONS.h`, so `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` (horizontal 1-2-1
 smoothing) are on in the MITgcm run while the single-column port has no
 horizontal smoothing -- as for the `lab_sea` captures; `global_oce_latlon` is the
-only multi-column capture with them off.
+only multi-column capture with them off. Since 1DMIX-071 the replay supplies MITgcm's smoothed `shsq` and
+`dbloc` (rebuilt from the neighbouring columns), so the figures marked "tracer-point" below compare the port
+with the smoothing MITgcm used.
+
+**1DMIX-071 (tracer-point replay), measured 2026-10-02, all 23,150 ocean column-timesteps / 269,940 active cells:**
+`hbl` median `5.64e-6 m`, p95 `5.5e-4 m`, p99 `5.06e-3 m`, max `0.3915 m`, no column above 1 m (29 above 0.05 m,
+3 above 0.3 m); `visc_az` max_abs `0.0481`, 456 cells (0.169%) above 1% relative error, p99 `1.7e-7`;
+`diff_kz_s`/`_t` max_abs `0.0521`, 520 cells (0.193%), p99 `2.5e-7`; `ghat` median `4.0e-5`, max `0.104`, no cell above
+1%, no exact-zero cell. These replace the column-local figures in the next paragraph and table (kept below
+as the old-mode record, executable in `test_global_ocean_90x40x15_*_column_local_*`). Residual, not shear-driven
+and not root-caused here: 367 of the 456 `visc_az` cells (80%) are at k=1 of the 610 two-wet-level columns
+(e.g. t=5, i=72, j=35: MITgcm `0.0491`, port `0.0010`, `hbl` difference 0); 450 of the 456 lie in columns whose
+`hbl` agrees to 0.05 m. The `hbl` maximum and the `visc_az`/`diff_kz` max_abs now meet the existing
+8 m and 0.06 / 0.1 conventions, so the labelled known gaps below are closed (the tests assert the conventions
+directly) -- they were replay-input artifacts.
+
+Column-local replay (the figures the paragraph and table below report):
 
 **`hbl`** (absolute difference, N=23,150): median `3.39e-4 m`, p95 `0.0398 m`,
 p99 `0.316 m`, max `90.04 m`; 0.28% / 0.0086% (65 / 2 column-timesteps) exceed
@@ -535,7 +637,10 @@ the `global_oce_latlon` bounds; the `visc_az`/`diff_kz` fraction above 1% (1.7% 
 meets the `lab_sea` bound (0.2) for `visc_az` and the `11k` bound (0.03) for `diff_kz_s/_t` (the tests use those, the strictest each meets) but not `global_oce_latlon`'s (0.01 / 0.02); the `hbl`
 maximum (90.04 m) and the `visc_az`/`diff_kz` max_abs (0.218 / 0.438) exceed **every**
 existing multi-column bound (8 m / 0.15 latlon, 50 m / 0.06-0.1 lab_sea_6mo) and are
-asserted as labelled known gaps (replay-input mechanism, 1DMIX-071) instead of widening any bound. Measured mechanisms:
+asserted as labelled known gaps (replay-input mechanism, 1DMIX-071) instead of widening any bound (all of this
+paragraph and the mechanisms below describe the column-local replay, kept as the old-mode tests; with
+tracer-point inputs every one of these quantities meets an existing bound and the known-gap tests are replaced by
+direct assertions of the conventions, see above). Measured mechanisms:
 
 * **The maximum is one column-timestep** (t=9, i=74, j=29: MITgcm `hbl` 171.49 m,
   port 81.45 m; next largest 7.03 m, then 3.85 m), and it carries the entire excess of
@@ -555,7 +660,7 @@ asserted as labelled known gaps (replay-input mechanism, 1DMIX-071) instead of w
   evidence only, not a declared capture): `hbl` statistics unchanged (max 90.02 m, same
   column) but the fraction above 1% falls to 0.39% (`visc_az`) / 0.73% (`diff_kz`), p99
   abs. diff to 3.6e-6 / 5.4e-6, meeting the `global_oce_latlon` bounds.
-* **Column-local velocities in the replay (1DMIX-071).** MITgcm's `shsq`/`dVsq` at a tracer
+* **Column-local velocities in the replay (1DMIX-071; now fed from the neighbours, see above).** MITgcm's `shsq`/`dVsq` at a tracer
   point average the squared differences of the four surrounding velocity points ((i,i+1),
   (j,j+1); `kpp_calc.F`, `kpp_forcing_surf.F`); the replay feeds the port only `uVel(i,j)`,
   `vVel(i,j)`. **`dVsq` is not smoothed** (`KPP_SMOOTH_DVSQ` undefined), so the identity is
@@ -716,26 +821,28 @@ exercise and this port, not open action items:
   `keep_mitgcm_bugs=False` explicitly and accept the resulting, measured
   divergence from MITgcm's real output under extreme forcing.
 - **The Rib/Ricr hard threshold means no `hbl` agreement bound can be made
-  arbitrarily tight.** Because `hbl` is defined by a threshold crossing, any
+  arbitrarily tight** (1DMIX-071: much of the multi-column `hbl` tail once credited to it was the
+  replay-input effect; what remains of this tail is the single-column `11k_1D` capture --
+  20.28 m maximum, 10 of 11,000 timesteps above 5 m -- and the single hbl-21.7 m `lab_sea` 6-month column). Because `hbl` is defined by a threshold crossing, any
   two independent floating-point implementations of the same physics will
   occasionally disagree about which side of the threshold a marginal level
   falls on, producing an occasional large `hbl` disagreement even when the
   underlying physics computation is correct at every level. This is a
   property of the diagnostic itself, not a bound this port could tighten by
   further debugging.
-- **Multi-column replays are column-local.** MITgcm's `shsq`/`dVsq` (KPP) and
-  `verticalShear` (GGL90) at a tracer point average the velocities at (i,i+1) and
-  (j,j+1), and `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` (on in MITgcm's default header)
-  smooth horizontally; the replay gives the port `uVel(i,j)`/`vVel(i,j)` of one column only
-  and the port has no horizontal smoothing. Measured under 1DMIX-054 (sections above and the
-  GGL90 document): the four-point averaged shear reproduces MITgcm's captured shear to
-  roundoff, the column-local one is off by a median 50-64%. Every shear-dependent
-  multi-column KPP/GGL90 residual in this project (Ri, TKE production, `hbl` through `dVsq`) therefore
-  contains this replay effect, and attributions to other
-  mechanisms on those captures (including the earlier Rib/Ricr-only reading of `lab_sea`'s
-  `hbl` tail) have not been re-separated from it. A replay that rebuilds tracer-point
-  velocities from the neighbouring columns of the same capture would remove it (a
-  semantic change to the comparison, not made here).
+- **Multi-column replays feed the port reconstructed tracer-point inputs (1DMIX-071).** MITgcm's
+  `shsq`/`dVsq` (KPP) and `verticalShear` (GGL90) at a tracer point use the velocities at (i,i+1),
+  (j,j+1), and `KPP_SMOOTH_SHSQ`/`KPP_SMOOTH_DBLOC` (on in MITgcm's default header) smooth horizontally.
+  The replays now rebuild these from the neighbouring columns of the capture (periodic wrap = MITgcm's
+  default exchange; the captures do not record periodicity, so the rule is validated only against the captured
+  `shear_sq`/`dVsq`/`vertical_shear`, where it is exact; Where the periodic-wrap rule is actually verified (wrap and zero-fill give different reconstructions and wrap matches the capture; counts from this issue and from Richard's review): x on `global_ocean.90x40x15` (GGL90 2,790 of 3,830 domain-edge interfaces; KPP 6,039 of 10,220), `global_oce_latlon` (1,610 cells, review) and `seaice_obcs` (245); y only on `seaice_obcs` and the 1x1 single-column captures. NOT verified: y on the global grids and on every GGL90 capture, and both axes on `lab_sea` and `isomip`, because wrap and zero-fill give identical reconstructions there (closed basins whose edge columns are land).) and pass them to the port
+  (`KPPDriver.compute_mixing`'s `shsq_forcing`/`dvsq_forcing`/`dbloc_smooth_forcing`). The smoothed `dbloc`
+  is not captured, so it is validated only through its effect on the outputs. NOT reproduced (the replay
+  raises `NotImplementedError`): `KPP_ESTIMATE_UREF`, `KPP_SMOOTH_DVSQ`, `KPP_SMOOTH_DENS`,
+  `KPP_SMOOTH_VISC`, `KPP_SMOOTH_DIFF` (no declared capture uses them); also not covered: KPP with shelf ice
+  (KPP skips surface-dry columns, so neighbours would be missing; no such capture) and non-periodic wet-edge
+  domains. The column-local replay stays available (`--column-local`). The port itself, used as a
+  single-column model, still has no horizontal smoothing by construction.
 - **The largest, multi-tile, seasonally-complete capture is validated on a
   timestep subsample, not the full run.** `global_oce_latlon`'s full
   720-timestep×2,315-column Python-port replay is estimated at roughly 1.5

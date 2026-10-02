@@ -21,7 +21,11 @@ already-captured NetCDF data for two experiments:
 Tolerances are set from the real, measured agreement levels recorded in
 closed_issues.md / open_issues.md (1DMIX-013, 1DMIX-018, 1DMIX-019), not
 aspirational bit-level values that were never actually achieved for a
-multi-column case.
+multi-column case. Since 1DMIX-071 the replay feeds the port MITgcm's tracer-point
+`shsq`/`dVsq`/smoothed `dbloc` (rebuilt from the neighbouring captured columns), and the multi-column
+`lab_sea` bounds below were re-measured and tightened on that basis: the `hbl` tail that 1DMIX-019
+attributed to Rib/Ricr threshold sensitivity was largely a replay-input effect (see the comments in the
+`lab_sea` tests and `KPP_port_validation/KPP_VALIDATION_RESULTS.md`).
 """
 
 import sys
@@ -122,8 +126,12 @@ def test_lab_sea_hbl_ocean_columns(result_labsea):
     # bounds reflect the full 999-timestep run's measured distribution
     # (median 0.004 m, 0.25% of columns exceed 5 m) with headroom for this
     # test's smaller 20-timestep sample.
-    assert np.median(diff_ocean) < 0.5, f"median hbl diff {np.median(diff_ocean):.4f} m regressed"
-    assert np.mean(diff_ocean > 5.0) < 0.02, "fraction of columns exceeding the known 1DMIX-019 tail grew"
+    # 1DMIX-071 (2026-10-02): with MITgcm's tracer-point shsq/dVsq/smoothed dbloc (the replay default) the
+    # 20-step sample measures median 7.3e-4 m, max 0.029 m, no column above 1 m (column-local replay:
+    # median 3.4e-3 m, max 26.4 m, 2 columns above 5 m) -- the tail was a replay-input artifact. Bounds
+    # tightened (were median < 0.5, fraction > 5 m < 0.02): to 0.005 and 0.001.
+    assert np.median(diff_ocean) < 0.005, f"median hbl diff {np.median(diff_ocean):.4f} m regressed"
+    assert np.mean(diff_ocean > 5.0) < 0.001, "fraction of columns exceeding the former 1DMIX-019 tail is back"
 
 
 def test_lab_sea_visc_az_median(result_labsea):
@@ -135,4 +143,5 @@ def test_lab_sea_visc_az_median(result_labsea):
     abs_err = np.abs(python_visc[active] - mitgcm_visc[active])
     # Full run's measured median is exactly 0.0; allow headroom for sampling.
     assert np.median(abs_err) < 1e-5, f"median visc_az abs err {np.median(abs_err):.2e} regressed"
-    assert np.percentile(abs_err, 99) < 0.01, f"p99 visc_az abs err {np.percentile(abs_err, 99):.2e} regressed"
+    # 1DMIX-071: p99 3.7e-5 with tracer-point inputs (1.6e-3 column-local); bound tightened from 0.01 to 1e-3.
+    assert np.percentile(abs_err, 99) < 1e-3, f"p99 visc_az abs err {np.percentile(abs_err, 99):.2e} regressed"

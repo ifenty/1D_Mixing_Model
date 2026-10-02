@@ -151,7 +151,9 @@ quantisation only), confirming the SHELFICE loop-bound fix is a no-op on square
 tiles. Its port replay changes only the ulp-scale rows: `mixing_length` max abs
 3.25e-4 -> 1.07e-13 and `visc_az` 1.1e-10 -> 9.5e-18 (the 1DMIX-038 kSrf `diff_kz`
 (1075 vs 1102 cells above 1%) and `tke_after` (17934 cells, 9.08e-6) gaps are
-unchanged, so they are not print artifacts). Consequently
+unchanged, so they are not print artifacts; **1DMIX-071 later showed them to be partly replay-input
+artifacts**: with MITgcm's tracer-point velocities `diff_kz` has 0 cells above 1% and `tke_after` 16,123
+real cells, see the table below). Consequently
 `test_isomip_mixing_length_ksrf_plus_1`, which asserts `1e-4 < max_abs < 0.01`,
 would fail on a 17-digit isomip capture; it passes on the declared capture, and its
 bound was left untouched (follow-up when the declared isomip capture is recaptured).
@@ -212,8 +214,8 @@ point and the same statistics the tests assert):
 | `1D_ocean_ice_column` `visc_az`/`diff_kz`/`mixing_length`/`tke_after` | 8.3e-10 / 8.3e-11 / 2.6e-5 / 2.9e-15 (0) | 3.3e-17 / 1.2e-17 / 2.6e-13 / 5.4e-20 (0) | print quantization -> roundoff |
 | `isomip` `visc_az` | 1.13e-10 (0) | 9.5e-18 (0) | print quantization -> roundoff |
 | `isomip` `mixing_length` | 3.25e-4 (0) | 1.07e-13 (0) | print quantization -> roundoff; the 1DMIX-038 "kSrf+1" residual |
-| `isomip` `diff_kz` | 2.905e-3 (1102) | 2.905e-3 (1075) | real kSrf gap; 27 cells (rel 1.7%-51% at 16 digits, <= 0.26% at 17) were artifacts |
-| `isomip` `tke_after` | 9.081e-6 (17934) | 9.081e-6 (17934) | real, identical |
+| `isomip` `diff_kz` | 2.905e-3 (1102) | 2.905e-3 (1075) | (1DMIX-070 label "real kSrf gap" corrected by 1DMIX-071: replay-input artifact, 0 cells with tracer-point inputs); 27 cells (rel 1.7%-51% at 16 digits, <= 0.26% at 17) were artifacts |
+| `isomip` `tke_after` | 9.081e-6 (17934) | 9.081e-6 (17934) | identical at both precisions (not print quantization); 1DMIX-071: 16,123 real cells (first-wet+1: 9,542, +2: 6,581) plus 1,811 replay-input artifact cells |
 | `global_ocean_90x40x15` (`visc_az`, `diff_kz`, `mixing_length`, `tke_after`) | 5.59 (183) / 2.75 (247456) / 15.5 (206) / 446 (264515) | identical | real (IDEMIX and a small tail) |
 | `global_ocean_cs32x15` (same order) | 100 (508739) / 2.01e9 (510536) / 1.45e7 (510393) / 4.20e5 (527111) | identical | **HISTORICAL port-side numbers** (pressure coordinates: since 1DMIX-073 the port raises `ValueError` on this capture, so these cannot be reproduced; re-measured on the pre-change code 2026-10-02 they are unchanged: 100 / 2.0149e9 / 1.4492e7 / 4.1995e5 max abs, 62.5-64.8% of 813,820 cells >1%) |
 
@@ -324,8 +326,10 @@ the stock KPP-only input never had). All in `mitgcm_verification_mods/lab_sea/gg
 
 Raw `output.txt` files are kept under `~/Projects/MITgcm/verification/lab_sea/output_ggl90_*_054/` (untracked, outside the repo).
 Results: `GGL90_VALIDATION_RESULTS.md` ("`lab_sea` (999 timesteps and 6-month)"). In short: `visc_az`/`mixing_length` are clean to
-roundoff; `diff_kz`/`tke_after` are known gaps traced (by a measured identity) to the replay feeding the port column-local
-velocities where MITgcm averages (i,i+1),(j,j+1) (replay-input effect 1DMIX-071, not a port gap).
+roundoff; `diff_kz`/`tke_after` were known gaps (1DMIX-054) that 1DMIX-071 showed to be replay-input artifacts: with the
+replay feeding MITgcm's tracer-point velocities ((i,i+1),(j,j+1) averages, rebuilt from the neighbouring columns) both are clean
+to roundoff on the 999-step capture and on steps 2000-2099 of the 6-month capture. (P8 above is a column-local replay output of
+2026-09-30, i.e. from before 1DMIX-071; it was not regenerated.)
 
 ## `vermix` (20 timesteps, single column)
 

@@ -57,6 +57,20 @@ physically meaningful comparison, not just the ones exceeding some
   MITgcm's own fill convention there, so those cells are genuinely not
   compared, not silently treated as a match.
 
+**Replay inputs (1DMIX-071).** MITgcm forms GGL90's vertical shear at a tracer point from `uVel` at
+(i, i+1) and `vVel` at (j, j+1) (`ggl90_calc.F:541-556`, `calcMeanVertShear=.FALSE.`), i.e. the shear of
+`ubar=(u(i)+u(i+1))/2`, `vbar=(v(j)+v(j+1))/2`. The captures hold `uVel(i,j)`, `vVel(i,j)` of every column of
+the global grid, so the replay (`scripts/run_ggl90_from_netcdf_input.py::run`, default
+`tracer_point_velocities=True`) rebuilds `ubar`/`vbar` from the neighbouring captured columns
+(`scripts/tracer_point_inputs.py`; periodic wrap, MITgcm's default exchange) and feeds those to the port;
+that reproduces the captured `vertical_shear` to roundoff (max relative difference <= 8.1e-16 in interior,
+tile-edge and domain-edge columns of `isomip`, `global_ocean.90x40x15` and both `lab_sea` captures;
+`tests/test_tracer_point_inputs.py`). Every table below is measured in that default mode unless it says
+"column-local", the former replay (`tracer_point_velocities=False` / `--column-local`, kept, with one
+old-mode test on `isomip` and one on `lab_sea`). Single-column captures are unchanged exactly
+(`0.5*(u+u) = u`). A capture with `calcMeanVertShear=1` cannot be reproduced by averaging; the replay raises
+`ValueError` for it (`1DMIX-074` tracks the port ignoring that flag).
+
 ## Shared infrastructure (grid, driver, equation of state)
 
 GGL90 runs on the same single 1-D vertical column representation KPP uses,
@@ -219,19 +233,26 @@ index 0.
 | Field | Median\|diff\| | Max\|diff\| | Max rel | Fraction >1% rel | N |
 |---|---|---|---|---|---|
 | `visc_az` | 0 | 9.5e-18 | 3.9e-13% | 0% | 1,437,204 |
-| `diff_kz` | 0 | 2.9e-03 | 300.0% | 0.075% | 1,437,204 |
+| `diff_kz` | 0 | 1.7e-18 | 3.9e-13% | 0% | 1,437,204 |
 | `mixing_length` | 4.6e-18 | 1.1e-13 | 3.8e-13% | 0% | 1,437,204 |
-| `tke_after` | 0 | 9.1e-06 | 232.7% | 1.25% | 1,437,204 |
+| `tke_after` | 0 | 9.2e-06 | 100.0% | 1.12% (16,123 cells) | 1,437,204 |
 
 (17-digit capture, 1DMIX-070. `visc_az` and `mixing_length` were previously
 tabulated at 2.4e-10 and 4.3e-3 maximum absolute difference; the same port
 on the earlier 16-digit capture gives 1.1e-10 and 3.25e-4 — 4.3e-3 predates
 the 1DMIX-068 `N²` fix — and those two residuals were print quantization of
-the captured inputs, see below. The `diff_kz` and `tke_after` rows are real
-and did not change: 1102 -> 1075 `diff_kz` cells above 1%, `tke_after`
-17,934 cells and 9.081e-6 identical at both precisions.)
+the captured inputs, see below. At 17 digits with the column-local replay the `diff_kz` and `tke_after`
+rows were 1075 cells (max_abs 2.9e-3, 0.075%) and 17,934 cells (max_abs 9.081e-6, 1.25%, 232.7% max rel);
+the table above is the 1DMIX-071 tracer-point replay: 1DMIX-071 removed the whole `diff_kz` row and 1,811
+of the `tke_after` cells, see below.)
 
-**`diff_kz`'s `kSrf` residual (0.075% of cells, max_abs 2.9e-3).** This
+**`diff_kz`: the former `kSrf+1` residual (0.075% of cells, max_abs 2.9e-3) was a replay-input artifact
+(1DMIX-071).** The 1,075 cells (1,069 at first-wet+1, 6 at +2) were attributed under 1DMIX-038 to the
+background-floor convention at `kSrf`, but the replay fed the port column-local velocities, so its shear,
+Richardson number and Prandtl number differed from MITgcm's at those near-neutral cells; with MITgcm's
+tracer-point velocities the same port gives 0 cells above 1% and max_abs 1.7e-18 (max_rel 3.9e-15).
+The old figures remain executable (`test_isomip_diff_kz_column_local_gap`). The `kSrf` convention below is
+still what makes `diff_kz` exact AT `kSrf`. This
 port's final background-floor assignment for `diff_kz` threads an explicit
 `is_true_surface` flag through the mixing-coefficient code
 (`ggl90_mixing_coefficients.py::compute_viscosity_diffusivity`) so that, at
@@ -268,12 +289,13 @@ and `visc_az` 9.5e-18 versus 1.1e-10. The regression test
 lower-bounded gap (its old `1e-4 < max_abs` floor certified the artifact)
 but a roundoff-level upper bound (`< 1e-11`, tightened from `< 0.01`).
 
-**`tke_after`'s residual (1.25% of cells, max_abs 9.1e-6) is real and is
-identical at 16 and 17 digits.** It carries the `kSrf` background-floor
-effect on the coupled TKE solve and the related first-wet `+1`/`+2` levels
-and one specific latitude row: at 17 digits its 17,934 cells above 1% sit
-at first-wet level `+1` (9,542 cells, max_abs 9.1e-6), `+2` (6,581 cells,
-max_abs 2.6e-8) and deeper (1,811 cells, 9.3e-9), while `mixing_length`
+**`tke_after`'s residual (1.12% of cells, 16,123 cells, max_abs 9.2e-6) is real, shear-independent and
+identical at 16 and 17 digits (1DMIX-071 removed 1,811 of the former 17,934 cells).** It carries the `kSrf`
+background-floor effect on the coupled TKE solve and the related first-wet `+1`/`+2` levels: with MITgcm's
+tracer-point velocities its 16,123 cells above 1% sit at first-wet level `+1` (9,542 cells, max_abs 9.2e-6)
+and `+2` (6,581 cells, max_abs 2.6e-8), all of them, and the same 9,542 + 6,581 cells appear with the
+column-local replay. The other 1,811 cells of the column-local replay (first-wet+5..+7, rows y=50-52, steps
+1-11, max_abs 9.3e-9) were replay-input artifacts and vanish. `mixing_length`
 agrees to 1e-13 at every one of those levels. That rules `mixing_length`
 (and hence the near-neutral `N²` amplification the earlier text invoked for
 the `+1`/`+2`/row-50 part) out as their cause; a per-cell probe from
@@ -281,8 +303,8 @@ the `+1`/`+2`/row-50 part) out as their cause; a per-cell probe from
 MITgcm at the affected locations) is consistent with that, and the
 implicit TKE solve redistributing the `kSrf`-boundary effect is the
 explanation this document carried before. The residual mechanism at the
-`+2` and row-50 cells was not re-traced by 1DMIX-070; it stays a documented
-known gap under 1DMIX-038/048, not a print artifact.
+`+1`/`+2` cells was not re-traced by 1DMIX-070 or 1DMIX-071 (a follow-up candidate: 9,542 + 6,581 cells); it
+stays a documented known gap under 1DMIX-038/048, neither a print artifact nor a shear effect.
 
 ## `global_ocean.90x40x15` — the only clean, z-coordinate IDEMIX capture
 
@@ -298,6 +320,11 @@ pressure-coordinate confound described in the next section.
 | `mixing_length` | ~0.04% | 15.5 | 485,840 |
 | `diff_kz` | 50.9% | 2.7 | 485,840 |
 | `tke_after` | 54.4% | 446 | 485,840 |
+
+(1DMIX-071, tracer-point replay: `diff_kz` 247,442 cells (50.93%), `tke_after` 264,332 (54.41%); the
+column-local replay gave 247,456 / 264,515, so the shear moves only 14 / 183 of these cells.
+`visc_az` / `mixing_length` 183 / 206 cells are identical in both modes: that small tail is not a
+shear or replay-input effect and is not root-caused here.)
 
 **Root cause.** Real MITgcm's IDEMIX extension adds a genuine extra source
 term to the TKE budget (`IDEMIX_gTKE`, internal-wave-energy dissipation) and
@@ -421,40 +448,40 @@ The header is MITgcm's default `GGL90_OPTIONS.h` (an earlier scaffold's vermix-e
 |---|---|---|---|---|
 | `visc_az` | 0 / 1.3e-14 | 0 | 1.5e-14 | 0 |
 | `mixing_length` | 0 / 1.1e-11 (values to ~3,300 m) | 0 | 1.5e-11 | 0 |
-| `diff_kz` | 0 / 2.15 | 1,800 (0.031%) | 1.56 | 1,430 (0.248%) |
-| `tke_after` | 0 / 1.07e-3 | 32,862 (0.570%) | 3.6e-5 | 6,497 (1.126%) |
+| `diff_kz` | 0 / 9.8e-15 | 0 | 8.4e-15 | 0 |
+| `tke_after` | 0 / 1.6e-18 | 0 | 2.6e-19 | 0 |
 
-`visc_az` and `mixing_length` are clean to roundoff on a multi-column, sea-ice-covered grid (same
-bounds as the `1D_ocean_ice_column` clean captures). `diff_kz` and `tke_after` are **not clean and
-exceed the clean-capture bounds of the test module, which are not widened**; they are asserted as labelled
-known gaps (replay-input mechanism, 1DMIX-071) with upper guards only (the mismatch fraction is season dependent). Four 100-step windows of the 6-month run gave `diff_kz` /
-`tke_after` fractions of 0.131% / 0.97% (steps 1500-1599), 0.248% / 1.13% (2000-2099), 0.057% / 0.90%
-(3000-3099) and 0.0175% / 0.36% (4268-4367): the mismatch fraction follows the season.
+All four fields are **clean to roundoff** on this multi-column, sea-ice-covered grid, with MITgcm's tracer-point
+velocities (1DMIX-071, measured 2026-10-02; the clean-capture bounds of the test module are met without
+being widened). Through 1DMIX-070 `diff_kz` and `tke_after` were asserted as labelled **known gaps**
+(1DMIX-054) -- with the column-local replay they were `diff_kz` 1,800 cells (0.031%, max_abs 2.15) and `tke_after`
+32,862 cells (0.570%, max_abs 1.07e-3) on the 999-step capture, 1,430 (0.248%, max_abs 1.56) and 6,497
+(1.126%, max_abs 3.6e-5) on steps 2000-2099 -- and were REPLAY-INPUT ARTIFACTS, not port gaps. The old-mode numbers
+stay executable (`test_lab_sea_6mo_column_local_gap`, exactly 1,430 / 6,497). The season dependence of the
+column-local gap (four 100-step windows of the 6-month run: 0.131% / 0.97% at steps 1500-1599, 0.248% / 1.13% at
+2000-2099, 0.057% / 0.90% at 3000-3099, 0.0175% / 0.36% at 4268-4367 in `diff_kz` / `tke_after`) is
+recorded only as the old-mode behaviour; the clean tracer-point replay was measured on steps 2000-2099 and the
+full 999-step capture, not re-measured on the other three windows.
 
-**Measured mechanism (the replay feeds the port column-local velocities).** MITgcm's `verticalShear`
-at tracer point (i,j), level k is `((ubar(k-1)-ubar(k))^2 + (vbar(k-1)-vbar(k))^2)/drC^2` with
-`ubar=(uVel(i)+uVel(i+1))/2`, `vbar=(vVel(j)+vVel(j+1))/2` (`ggl90_calc.F`, the default
-`calcMeanVertShear=.FALSE.` branch), while the replay hands the port `uVel(i,j)`, `vVel(i,j)` only.
-Because the capture holds every column's velocities, `ubar`/`vbar` can be rebuilt from the neighbouring
-columns of the same capture: over the first 300 timesteps (458,013 cells, interior i<19, j<15) the rebuilt
-shear matches MITgcm's captured `vertical_shear` to a median relative error of 1.25e-16 (max 6.6e-16),
-while the column-local shear the replay effectively uses is off by a median 64% (99% of cells differ by
-more than 1%) -- asserted by `test_lab_sea_999_shear_is_four_point_average`. This fits the pattern of
-the two gaps: `tke_after` mismatches are 96.9% in levels 1-4 (centres 15-65 m), evenly spread over the
-run, and 91.9% in cells with `tke_before >= 1e-8` where shear production matters; `diff_kz` mismatches
-(through `Pr = f(Ri)`, `Ri = N^2/(shear^2 + GGL90eps)`) are 95.4% near-neutral cells with shear below 1e-6
-(where a tiny `N^2` amplifies any shear difference); with neighbour-averaged velocities the `diff_kz` mismatch
-goes to zero, i.e. it is entirely the shear, not an EOS effect (review measurement, steps 500-509: `diff_kz` and
-`tke_after` mismatches above 1% go to 0, max_abs to 3.4e-15 / 3.0e-19). `visc_az` and `mixing_length` do not
-depend on the shear and are exact. This is the replay-input effect **1DMIX-071**, not a port gap and not a defect in `GGL90Driver`; no port source or
-replay semantic was changed (the replay script gained optional `first_timestep`/`last_timestep` and loads the
-selected inputs once, numerically identical).
+**Mechanism (confirmed by the fix).** MITgcm's `verticalShear` at tracer point (i,j), level k is
+`((ubar(k-1)-ubar(k))^2 + (vbar(k-1)-vbar(k))^2)/drC^2` with `ubar=(uVel(i)+uVel(i+1))/2`,
+`vbar=(vVel(j)+vVel(j+1))/2` (`ggl90_calc.F:541-556`, the default `calcMeanVertShear=.FALSE.` branch), while the
+former replay handed the port `uVel(i,j)`, `vVel(i,j)` only. Rebuilt from the neighbouring columns of the
+capture, the shear matches MITgcm's captured `vertical_shear` to a relative error <= 8e-16 (first 300 steps,
+all columns including domain edges; `tests/test_tracer_point_inputs.py` and
+`test_lab_sea_999_shear_is_four_point_average`), while the column-local shear is off by a median 64-74%.
+The column-local mismatches were 96.9% in levels 1-4 (`tke_after`, evenly spread over the run, 91.9% in
+cells with `tke_before >= 1e-8`) and, for `diff_kz` (through `Pr = f(Ri)`,
+`Ri = N^2/(shear^2 + GGL90eps)`), 95.4% near-neutral cells with shear below 1e-6. `visc_az` and
+`mixing_length` do not depend on the shear and were always exact. No port source changed: the replay
+script feeds different inputs (default `tracer_point_velocities=True`; the replay also gained optional
+`first_timestep`/`last_timestep` under 1DMIX-054).
 
-**Consequence for the other multi-column GGL90 captures (1DMIX-071).** `isomip`, `global_ocean.90x40x15` and
-`global_ocean.cs32x15` (until 1DMIX-073 made the port reject it) were also replayed with column-local velocities; their `tke_after`/`diff_kz` residuals
-(attributed above to the kSrf floor, missing IDEMIX physics and pressure coordinates) may include
-this effect. It has not been separated there; a follow-up that rebuilds tracer-point velocities from the
-neighbouring columns for all multi-column replays would do so.
+**Consequence for the other multi-column GGL90 captures (1DMIX-071, measured).** `isomip`: the `diff_kz` gap was a
+replay-input artifact (1,075 -> 0 cells) and 1,811 of the 17,934 `tke_after` cells were (the remaining 16,123 at
+first-wet+1/+2 are real); `global_ocean.90x40x15` (IDEMIX): unchanged (the missing-IDEMIX gap and its
+`visc_az`/`mixing_length` tail are not shear effects); `global_ocean.cs32x15`: pressure coordinates, rejected by the
+port since 1DMIX-073, no replay.
 
 ## The 6 idealized scenarios, standalone Fortran driver — isolating the physics from any capture noise
 
@@ -536,7 +563,17 @@ exercise and this port, not open action items:
   `use_idemix`. Its only observed instance in this project's own captures
   is the now-permanently-out-of-scope pressure-coordinate capture, so it
   remains deferred rather than implemented speculatively for a
-  configuration this project does not otherwise validate against.
+  configuration this project does not otherwise validate against. The
+  tracer-point replay (1DMIX-071) refuses such a capture with a `ValueError`
+  (MITgcm's `calcMeanVertShear=.TRUE.` shear is a sum of squares of four
+  separate differences, not the shear of an averaged velocity); the flag
+  being ignored by `GGL90Driver` is tracked as 1DMIX-074.
+- **The replay's neighbour rule is periodic wrap.** `tracer_point_velocities`
+  assumes MITgcm's default periodic exchange at the domain edge (closed basins
+  are closed by land columns); no capture records its periodicity, so the rule is
+  validated only against the captured `vertical_shear` (exact in every class of
+  every in-scope multi-column capture; a zero-fill rule is wrong at the wet
+  domain edges of `global_ocean.90x40x15`). Where the periodic-wrap rule is actually verified (wrap and zero-fill give different reconstructions and wrap matches the capture; counts from this issue and from Richard's review): x on `global_ocean.90x40x15` (GGL90 2,790 of 3,830 domain-edge interfaces; KPP 6,039 of 10,220), `global_oce_latlon` (1,610 cells, review) and `seaice_obcs` (245); y only on `seaice_obcs` and the 1x1 single-column captures. NOT verified: y on the global grids and on every GGL90 capture, and both axes on `lab_sea` and `isomip`, because wrap and zero-fill give identical reconstructions there (closed basins whose edge columns are land).
 - **The `ALLOW_SHELFICE` `is_true_surface` handling is exercised only by
   the MITgcm-comparison verification harness, not by this project's own
   scenario-driving code path.** `main/mixing_adapter.py` (the entry point
@@ -545,8 +582,9 @@ exercise and this port, not open action items:
   the explicit `is_true_surface` flag described under `isomip` above is set
   by the MITgcm-replay harness only, for columns it knows are sliced from a
   real floating-ice-shelf capture.
-- **The Rib/Ricr-style threshold sensitivity that dominates several KPP
-  discrepancies has no direct GGL90 analogue.** GGL90 has no hard
+- **The Rib/Ricr-style threshold sensitivity that was credited with several KPP
+  discrepancies (1DMIX-071 showed much of the multi-column KPP `hbl` tail to be a
+  replay-input effect instead; a smaller real tail remains) has no direct GGL90 analogue.** GGL90 has no hard
   Richardson-number threshold anywhere in its own formulas; its
   discrepancies are instead governed by the mechanisms in this document
   (the TKE buoyancy-term distinction, the `isomip` `kSrf` boundary
@@ -570,7 +608,8 @@ docstrings in
 which drive the same replay entry point
 (`scripts/run_ggl90_from_netcdf_input.py::run`). The `isomip`,
 `global_ocean.90x40x15` and (1DMIX-054) `lab_sea` statistics come from
-that same test module's own fresh measurements. The `global_ocean.cs32x15` statistics are
+that same test module's own fresh measurements (default tracer-point replay since 1DMIX-071; the
+`--column-local` option of the replay script reproduces the former figures). The `global_ocean.cs32x15` statistics are
 **historical**: the test module no longer measures them (the port rejects that capture since
 1DMIX-073). They were measured once on 2026-10-02 on the pre-change code, by replaying the
 full capture through a `git archive` extraction of HEAD 65939cf with the same replay entry
@@ -592,7 +631,8 @@ agreement; nothing in them was print quantization); the `1D_ocean_ice_column`
 and `isomip` rows named above (`visc_az`, `mixing_length`, and the
 `1D_ocean_ice_column` `diff_kz`/`tke_after` roundoff rows) were print
 quantization and dropped to roundoff; the `isomip` `diff_kz` and `tke_after`
-gaps are real and unchanged. Evidence and per-file provenance:
+gaps were unchanged by print precision (1DMIX-071 later showed the `diff_kz` gap and 1,811 `tke_after` cells to be
+replay-input artifacts, see the `isomip` section). Evidence and per-file provenance:
 `devel-loop/loop_state/bob-1DMIX-070-evidence.md`, and
 `GGL90_port_validation/CAPTURES.md`. The idealized-scenario
 statistics come from

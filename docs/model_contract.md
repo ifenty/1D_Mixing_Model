@@ -230,10 +230,16 @@ were all produced at 16 digits through 1DMIX-069; **1DMIX-070 recaptured every o
 at 17 digits** (same recipes, same names) after also widening the PARAM_* scalar prints and the
 KPP standalone driver's result formats, so the limit above no longer applies to the declared
 captures. Every MITgcm field agrees with its 16-digit predecessor to <= 6e-16 relative
-(print quantisation only), the KPP residuals are unchanged (the Rib/Ricr tail is real), and the
+(print quantisation only), the KPP residuals were unchanged by print precision, and the
 GGL90 rows that were print quantisation (`1D_ocean_ice_column` all fields, `isomip` `mixing_length`
-and `visc_az`) dropped to roundoff; `isomip` `diff_kz` (kSrf) and `tke_after`, `global_ocean.90x40x15`
-and `global_ocean.cs32x15` are unchanged and remain real gaps. Instrumented
+and `visc_az`) dropped to roundoff; `isomip` `diff_kz` and `tke_after`, `global_ocean.90x40x15`
+and `global_ocean.cs32x15` were unchanged by print precision. **1DMIX-071 later re-decided several of those
+"real" labels** (the replays had fed the port column-local velocities where MITgcm uses neighbour averages):
+`isomip` `diff_kz` (1,075 cells above 1%) is a replay-input artifact, 0 cells with tracer-point inputs;
+`isomip` `tke_after` is 16,123 real cells (first-wet+1: 9,542, +2: 6,581) plus 1,811 artifact cells;
+`global_ocean.90x40x15` (IDEMIX) is unchanged and real; `cs32x15` is no longer replayed. The KPP "Rib/Ricr tail"
+on the multi-column captures was largely the same artifact (see the lab_sea figures in the KPP section and
+`KPP_VALIDATION_RESULTS.md`); the single-column and `global_oce_latlon` tails are unchanged and real. Instrumented
 Fortran fidelity (only output-only hunks versus stock MITgcm d861cd501, after
 fixing the `ggl90_calc.F` SHELFICE `DO i=jMin,jMax` transcription error): see
 `MITgcm_to_Python_port_verification/mitgcm_verification_mods/README.md`.
@@ -611,8 +617,11 @@ predict "measurably affects the output"; a direct field-level A/B
 - `lab_sea` (20-step and 6-month/100-step subsample): a real but tiny A/B
   difference (`hbl` max_abs ~3.9e-3 m; mixing coefficients ~1e-3-7.6e-2
   m²/s) — dwarfed by, and unrelated to, this experiment's own large,
-  already-characterized Rib/Ricr threshold-sensitivity tail (1DMIX-019: max
-  `hbl` diff vs. MITgcm 26-41 m). Confirmed by a three-way check
+  column-local-replay `hbl` tail (1DMIX-019, attributed then to Rib/Ricr
+  threshold sensitivity: max `hbl` diff vs. MITgcm 26-41 m; **1DMIX-071: that tail was
+  largely a replay-input artifact -- with MITgcm's tracer-point inputs the maximum is 0.029 m on
+  `lab_sea_1000`, first 20 steps (was 26.4 m) and 21.7 m on the 6-month capture, first 100 steps
+  (was 40.7 m)**). Confirmed by a three-way check
   (`1dmix057-wscale-capture-threeway.txt`): `Python(False)` and
   `Python(True)` vs. MITgcm max_abs/median_abs are identical to displayed
   precision for every field; `n_gt_1pct` shifts by only ~5 cells out of
@@ -663,6 +672,35 @@ from the `True`-variant measurements above (tightened, not widened — see
 The 1DMIX-056 witness tests (`test_kpp_combined_storm_hbl_substitution.py`)
 pin `keep_mitgcm_bugs` explicitly per variant and are unaffected by this
 default change.
+
+### KPP and GGL90 tracer-point shear: what the single-column drivers take as input (1DMIX-071)
+
+MITgcm forms the shear at a tracer point (i,j) from the velocities on the surrounding faces
+(i,i+1),(j,j+1) and, for KPP's smoothed quantities, the 3x3 neighbourhood. A single-column driver cannot
+see the neighbours, so the contract is:
+
+- **GGL90** (`ggl90_calc.F:541-556`, `calcMeanVertShear=.FALSE.`): the shear is the squared vertical
+  shear of the averaged velocity `ubar=(u(i)+u(i+1))/2`, `vbar=(v(j)+v(j+1))/2`. `GGL90Driver.compute_mixing(u, v, ...)`
+  takes the tracer-point velocities as `u`, `v`; no driver change. A caller that has only `uVel(i,j)`, `vVel(i,j)`
+  gets a different shear than MITgcm used (the pre-1DMIX-071 replay). The `calcMeanVertShear=.TRUE.`
+  formula (`ggl90_calc.F:526-540`, sum of squares of four separate differences) is not reproducible this way, and the
+  port ignores the flag (open issue 1DMIX-074).
+- **KPP**: `shsq` (`kpp_calc.F:459-495`), `dVsq` (`kpp_forcing_surf.F:463-504`) and the horizontally smoothed
+  `dbloc` (`kpp_calc.F:276-289`, `smooth_horiz` `kpp_routines.F:1318-1398`, used by the gradient Richardson
+  number, `kpp_routines.F:1133-1137`) are means of squared differences of the neighbouring columns, not functions of an
+  averaged velocity. `KPPDriver.compute_mixing` therefore accepts three **keyword-only optional inputs**,
+  each default `None` (the column-local computation; an exact behavioral no-op, proven by golden digests in
+  `Vertical_Mixing_Models/tests/test_kpp_tracer_point_inputs.py`): `shsq_forcing` (nz,) [m^2/s^2], index k = interface
+  below cell k; `dvsq_forcing` (nz,) [m^2/s^2], which also bypasses `_estimate_reference_velocity` (MITgcm's dVsq already
+  contains its own uRef); `dbloc_smooth_forcing` (nz,) [m/s^2], used only by `ri_iwmix`'s gradient Richardson number
+  (it may be negative). Shape `(nz,)`, finite, and non-negative for the two squared quantities, else `ValueError`. Passing the driver's own
+  column-local arrays reproduces the `None` path bit for bit. `KPPAdapter` and the scenario-driving path never pass them.
+- The MITgcm-capture replays (`MITgcm_to_Python_port_verification/scripts/run_{ggl90,kpp}_from_netcdf_input.py`) build these from the
+  neighbouring captured columns (`scripts/tracer_point_inputs.py`; periodic wrap, MITgcm's default exchange)
+  by default and keep a column-local mode. `shsq`/`dVsq`/GGL90 shear are verified directly against the
+  captured values (`MITgcm_to_Python_port_verification/tests/test_tracer_point_inputs.py`); the smoothed `dbloc` is not captured and is
+  validated only through its effect on KPP outputs. Where the periodic-wrap rule is actually verified (wrap and zero-fill give different reconstructions and wrap matches the capture; counts from this issue and from Richard's review): x on `global_ocean.90x40x15` (GGL90 2,790 of 3,830 domain-edge interfaces; KPP 6,039 of 10,220), `global_oce_latlon` (1,610 cells, review) and `seaice_obcs` (245); y only on `seaice_obcs` and the 1x1 single-column captures. NOT verified: y on the global grids and on every GGL90 capture, and both axes on `lab_sea` and `isomip`, because wrap and zero-fill give identical reconstructions there (closed basins whose edge columns are land). Options not reproduced (replay raises `NotImplementedError`):
+  `KPP_ESTIMATE_UREF`, `KPP_SMOOTH_DVSQ`, `KPP_SMOOTH_DENS`, `KPP_SMOOTH_VISC`, `KPP_SMOOTH_DIFF`.
 
 ## Invariants
 

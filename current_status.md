@@ -24,7 +24,7 @@ Append dated, evidence-linked milestones when warranted. Keep any resume block l
 - Two tooling bugs blocking formal closure itself: `verify.py`'s PATH-sensitive evidence fingerprint, and `final_verification.py`'s dual-module-identity lease bug — 1DMIX-036, 1DMIX-037.
 
 **Root-caused, not fixed (structural/inert, evidenced)**:
-- KPP `hbl` Rib/Ricr threshold-crossing sensitivity — inherent floating-point sensitivity of a hard-thresholded diagnostic, not a port defect (1DMIX-019).
+- KPP `hbl` Rib/Ricr threshold-crossing sensitivity — inherent floating-point sensitivity of a hard-thresholded diagnostic, not a port defect (1DMIX-019); 1DMIX-071 later showed much of the multi-column `hbl` tail it was credited with to be a replay-input effect (the replays fed column-local shear); a smaller real tail remains (single-column `11k_1D`, one `lab_sea` 6-month column).
 - GGL90 `diff_kz`/`tke_after` residual on `global_oce_latlon` — real horizontal smoothing (`ALLOW_GGL90_SMOOTH`) outside single-column replay scope, confirmed to 1.7e-16 median relative error once compared correctly (1DMIX-028).
 - GGL90 TKE-near-floor mismatches — inert floating-point noise, matching the KPP Rib/Ricr precedent (1DMIX-031).
 

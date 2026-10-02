@@ -202,7 +202,7 @@ median 2.305e-7 -> 2.303e-7), so the KPP known gaps (Rib/Ricr threshold tail, `w
 zero-signature cells) are real and none was a print artifact: `1D_10` `hbl` max 1.289e-2 m,
 `11k_1D` `hbl` median 2.85e-5 m / max 20.28 m, `lab_sea_1000` (first 20 steps) `hbl` max 26.4 m,
 `lab_sea_6mo` (first 100 steps) `hbl` max 40.72 m and `visc_az` 13.35% above 1%, `seaice_obcs` `hbl`
-max 20.4 m, `global_oce_latlon_720` (first 5 steps) `hbl` max 3.09 m. No KPP test assertion needed
+max 20.4 m, `global_oce_latlon_720` (first 5 steps) `hbl` max 3.09 m. (These are the column-local replay's figures; 1DMIX-071 later showed most of the `lab_sea`, `seaice_obcs` and `global_ocean_90x40x15` `hbl`/mixing/`ghat` tails to be replay-input artifacts, see `KPP_VALIDATION_RESULTS.md`; the precision conclusion above is unaffected.) No KPP test assertion needed
 changing (all KPP upper bounds unchanged and passing).
 
 Note on documented numbers: the `11k_1D` fractions above (0.055% and 0.796%) are what the current

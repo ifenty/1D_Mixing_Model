@@ -110,10 +110,15 @@ def _diff_and_rel(mitgcm: np.ndarray, python: np.ndarray) -> Tuple[np.ndarray, n
 
 
 def _run_replay(inputs_nc: Path, tmp_path_factory, tag: str, first_timestep=None,
-                last_timestep=None) -> xr.Dataset:
+                last_timestep=None, tracer_point_velocities=True) -> xr.Dataset:
+    """Replay through `run_ggl90_from_netcdf_input.run`. Since 1DMIX-071 the default feeds the port
+    MITgcm's tracer-point velocities (rebuilt from neighbouring captured columns);
+    `tracer_point_velocities=False` is the former column-local replay, kept so the old-versus-new
+    evidence stays executable (isomip and lab_sea 6mo old-mode fixtures below)."""
     out_dir = tmp_path_factory.mktemp(f'ggl90_{tag}')
     return run_python_ggl90_on_dataset(inputs_nc, out_dir / f'python_ggl90_outputs_{tag}.nc',
-                                       first_timestep=first_timestep, last_timestep=last_timestep)
+                                       first_timestep=first_timestep, last_timestep=last_timestep,
+                                       tracer_point_velocities=tracer_point_velocities)
 
 
 # ========================================================================
@@ -225,6 +230,17 @@ def result_isomip(tmp_path_factory):
     return python_ds, mitgcm_ds
 
 
+@pytest.fixture(scope='module')
+def result_isomip_column_local(tmp_path_factory):
+    """The pre-1DMIX-071 replay (column-local uVel(i,j), vVel(i,j)), for old-versus-new evidence."""
+    _require(DATA_ISOMIP)
+    _require(OUTPUTS_ISOMIP)
+    python_ds = _run_replay(DATA_ISOMIP, tmp_path_factory, 'isomip_column_local',
+                            tracer_point_velocities=False)
+    mitgcm_ds = xr.open_dataset(OUTPUTS_ISOMIP)
+    return python_ds, mitgcm_ds
+
+
 def test_isomip_visc_az_clean(result_isomip):
     """visc_az has no kSrf-boundary defect (only diff_kz's own final
     assignment order is affected, per 1DMIX-038) -- over 1,437,204 wet cells
@@ -233,6 +249,7 @@ def test_isomip_visc_az_clean(result_isomip):
     1.1e-10 for the same port on the 16-digit capture (2.4e-10 in the older
     1DMIX-038-era measurement): print quantization, not physics. The 1e-8
     bound is unchanged (never widened) and now has ~10 orders of headroom.
+    (Unchanged by the 1DMIX-071 tracer-point velocities: visc_az does not depend on the shear.)
     """
     python_ds, mitgcm_ds = result_isomip
     diff, rel = _diff_and_rel(mitgcm_ds['visc_az'].values, python_ds['visc_az'].values)
@@ -240,23 +257,39 @@ def test_isomip_visc_az_clean(result_isomip):
     assert np.max(diff) < 1e-8, f"isomip visc_az max_abs {np.max(diff):.3e} regressed"
 
 
-def test_isomip_diff_kz_ksrf_gap(result_isomip):
-    """1DMIX-038's root-caused kSrf background-diffusivity-floor mismatch.
-    REAL gap, unchanged at 17 digits (1DMIX-070): 1075/1,437,204 cells
-    (0.075%) exceed 1% rel on the 17-digit capture, max_abs 2.905e-3 (1102
-    cells, same max_abs, on the 16-digit capture: the 27 cells that differ
-    had rel 1.7%-51% at 16 digits and <= 0.26% at 17, i.e. were print
-    artifacts; the 1075 that remain are at k = first-wet+1 (1069, max_abs
-    2.9e-3) and +2 (6, max_abs 1.3e-5)).
-    Bounded both sides: >0.02% keeps this a real, known, nonzero gap (a
-    silent drop to 0 would mean the kSrf convention changed without
-    1DMIX-038 being reopened); <0.5% catches an unexplained worsening.
+def test_isomip_diff_kz_clean(result_isomip):
+    """isomip `diff_kz` is CLEAN to roundoff with MITgcm's tracer-point velocities (1DMIX-071).
+
+    Through 1DMIX-070 this file asserted a *known gap* here (`0.0002 < frac < 0.005`, the
+    "root-caused kSrf background-diffusivity-floor mismatch" of 1DMIX-038): 1075 of 1,437,204 cells
+    (0.075%) exceeded 1% rel, max_abs 2.905e-3, at k = first-wet+1 (1069) and +2 (6). That gap was a
+    REPLAY-INPUT ARTIFACT: the replay fed the port column-local uVel(i,j), vVel(i,j) where MITgcm's
+    shear (ggl90_calc.F:541-556) uses the (i,i+1),(j,j+1) average, which moves the Richardson number
+    and so the Prandtl number of those near-neutral cells. With the tracer-point velocities the same
+    port gives 0 cells above 1% rel and max_abs 1.7e-18 (max_rel 3.9e-15), measured 2026-10-02;
+    `test_isomip_diff_kz_column_local_gap` keeps the old figures executable. (The kSrf convention
+    that 1DMIX-038 fixed for `diff_kz` at kSrf itself is a separate, still-valid fix.)
+    The former lower bound certified an artifact and is removed; the upper bound (max_abs 0.01)
+    is tightened to 1e-8, the `diff_kz` clean-capture bound of this file
+    (`test_1d_ocean_ice_column_clean`), not to the measurement.
     """
     python_ds, mitgcm_ds = result_isomip
     diff, rel = _diff_and_rel(mitgcm_ds['diff_kz'].values, python_ds['diff_kz'].values)
+    assert (rel > 0.01).sum() == 0, f"isomip diff_kz: {(rel > 0.01).sum()} cells >1% rel (was 1075 column-local)"
+    assert np.max(diff) < 1e-8, f"isomip diff_kz max_abs {np.max(diff):.3e} regressed"
+
+
+def test_isomip_diff_kz_column_local_gap(result_isomip_column_local):
+    """OLD MODE (column-local velocities, the pre-1DMIX-071 replay), kept as the executable
+    old-versus-new evidence: the former 1DMIX-038/070 band is unchanged -- 1075/1,437,204 cells
+    (0.075%) exceed 1% rel, max_abs 2.905e-3, at first-wet+1 (1069) and +2 (6). Same bounds as before
+    the 1DMIX-071 change (>0.02% and <0.5%; max_abs < 0.01), none widened."""
+    python_ds, mitgcm_ds = result_isomip_column_local
+    diff, rel = _diff_and_rel(mitgcm_ds['diff_kz'].values, python_ds['diff_kz'].values)
     frac = float((rel > 0.01).mean())
-    assert 0.0002 < frac < 0.005, f"isomip diff_kz kSrf-mismatch fraction {frac:.5f} outside the known 1DMIX-038 bound"
-    assert np.max(diff) < 0.01, f"isomip diff_kz max_abs {np.max(diff):.3e} regressed"
+    assert int((rel > 0.01).sum()) == 1075
+    assert 0.0002 < frac < 0.005, f"isomip column-local diff_kz mismatch fraction {frac:.5f} outside the former band"
+    assert np.max(diff) < 0.01, f"isomip column-local diff_kz max_abs {np.max(diff):.3e} regressed"
 
 
 def test_isomip_mixing_length_ksrf_plus_1(result_isomip):
@@ -288,21 +321,47 @@ def test_isomip_mixing_length_ksrf_plus_1(result_isomip):
     assert np.max(diff) < 1e-11, f"isomip mixing_length max_abs {np.max(diff):.3e} regressed (17-digit roundoff level is 1.07e-13)"
 
 
+def _first_wet_offsets(bad_mask):
+    """(k - first wet level of the column) for every True cell of a (t,x,y,z) mask."""
+    inputs = xr.open_dataset(DATA_ISOMIP)
+    first_wet = np.argmax(inputs['temperature'].values != 0, axis=-1)
+    t, i, j, k = np.nonzero(bad_mask)
+    return k - first_wet[t, i, j]
+
+
 def test_isomip_tke_after_ksrf_region(result_isomip):
-    """tke_after carries the kSrf mismatch plus the related kSrf+1/kSrf+2/
-    y=50 residuals 1DMIX-048's review logged as additional evidence for
-    1DMIX-038 (not reopened as a separate issue). REAL gap, identical at 16
-    and 17 digits (1DMIX-070): 17934/1,437,204 cells (1.25%) exceed 1% rel,
-    max_abs 9.081e-6 -- matches 1DMIX-048's own cited post-fix count
-    exactly. At 17 digits they sit at first-wet+1 (9542 cells), +2 (6581),
-    and 1811 deeper cells (the y=50 row), while mixing_length agrees to
-    1e-13 at every one of those levels, so mixing_length is not their cause.
+    """REAL gap, measured with MITgcm's tracer-point velocities (1DMIX-071): 16,123 of 1,437,204 cells
+    (1.12%) exceed 1% rel, max_abs 9.209e-6, ALL at first-wet+1 (9,542 cells) and first-wet+2 (6,581),
+    i.e. the kSrf region 1DMIX-038/048 describe; the shear does not change them (the column-local replay
+    has the same 9,542 + 6,581 cells). The column-local replay additionally had 1,811 cells (1.25%
+    in total, 17,934) at first-wet+5..+7 (rows y=50-52, steps 1-11): those were replay-input artifacts and vanish
+    (`test_isomip_tke_after_column_local_gap`). The kSrf+1/+2 residual is NOT root-caused here (follow-up).
+    Bounds unchanged from before 1DMIX-071 (never widened): 0.5% < fraction < 3%, max_abs < 5e-5;
+    plus the structural statement that every mismatch lies at first-wet+1 or +2.
     """
     python_ds, mitgcm_ds = result_isomip
     diff, rel = _diff_and_rel(mitgcm_ds['tke_after'].values, python_ds['tke_after'].values)
     frac = float((rel > 0.01).mean())
     assert 0.005 < frac < 0.03, f"isomip tke_after mismatch fraction {frac:.5f} outside the known 1DMIX-038/048 bound"
     assert np.max(diff) < 5e-5, f"isomip tke_after max_abs {np.max(diff):.3e} regressed"
+    bad = np.zeros(python_ds['tke_after'].shape, dtype=bool)
+    wet = ~np.isnan(python_ds['tke_after'].values)
+    bad[wet] = (np.abs(mitgcm_ds['tke_after'].values - python_ds['tke_after'].values)[wet]
+                / np.maximum(np.abs(mitgcm_ds['tke_after'].values[wet]), 1e-12)) > 0.01
+    assert int(bad.sum()) == 16123, f"isomip tke_after: {int(bad.sum())} cells >1% rel (measured 16,123)"
+    assert set(np.unique(_first_wet_offsets(bad))) == {1, 2}
+
+
+def test_isomip_tke_after_column_local_gap(result_isomip_column_local):
+    """OLD MODE (column-local velocities): 17,934 cells (1.25%) exceed 1% rel, max_abs 9.081e-6 --
+    the 16,123 kSrf+1/+2 cells of the real gap plus 1,811 replay-input artifacts at first-wet+5..+7
+    (461 / 887 / 463 cells). Bounds as before 1DMIX-071."""
+    python_ds, mitgcm_ds = result_isomip_column_local
+    diff, rel = _diff_and_rel(mitgcm_ds['tke_after'].values, python_ds['tke_after'].values)
+    frac = float((rel > 0.01).mean())
+    assert int((rel > 0.01).sum()) == 17934
+    assert 0.005 < frac < 0.03
+    assert np.max(diff) < 5e-5
 
 
 # ========================================================================
@@ -330,6 +389,9 @@ def test_global_ocean_90x40x15_idemix_unaffected_fields(result_90x40x15, field, 
     TKEPrandtlNumber/the TKE update do) -- measured fresh this round,
     183/206 of 485,840 cells (~0.04%) exceed 1% rel (a separate, small,
     already-noted 1DMIX-028-style tail, not IDEMIX), max_abs 5.6/15.5.
+    1DMIX-071 (measured 2026-10-02): identical (183/206, same max_abs) with MITgcm's tracer-point
+    velocities and with the former column-local ones -- the tail is NOT a shear/replay-input effect
+    and is not root-caused here (follow-up candidate: 183 visc_az / 206 mixing_length cells).
     """
     python_ds, mitgcm_ds = result_90x40x15
     diff, rel = _diff_and_rel(mitgcm_ds[field].values, python_ds[field].values)
@@ -344,6 +406,9 @@ def test_global_ocean_90x40x15_idemix_gap(result_90x40x15, field, max_abs_bound)
     diff_kz/tke_after depend on IDEMIX_gTKE via TKEPrandtlNumber/the TKE
     budget. Measured fresh this round: 50.9%/54.4% of 485,840 cells exceed
     1% rel (matching 1DMIX-025's own cited 51%/54%), max_abs 2.7/446.
+    1DMIX-071 (2026-10-02, tracer-point velocities, the replay default): 247,442 (50.93%) / 264,332
+    (54.41%) cells, max_abs 2.746 / 445.9; the column-local replay gave 247,456 / 264,515: the shear
+    changes only 14 / 183 of these cells, so the gap is the missing IDEMIX physics, a REAL gap.
     Bounded both sides -- a false-clean drop toward 0% would mean IDEMIX
     physics was silently added or the gap silently hidden; this is not a
     port defect and is not expected to close without implementing IDEMIX.
@@ -519,6 +584,9 @@ def test_global_ocean_cs32x15_port_rejects_pressure_coordinate_input(cs32x15_cap
 # labelled KNOWN GAPS (upper guards only, never by widening a clean bound) whose
 # mechanism is a replay-input effect (1DMIX-071: the replay feeds column-local
 # velocities where MITgcm averages (i,i+1),(j,j+1)), not a port gap.
+# 1DMIX-071 (2026-10-02) resolved that: the default replay now feeds MITgcm's tracer-point
+# velocities and `diff_kz`/`tke_after` are clean; the old column-local figures are kept only as
+# old-mode tests on the 6-month window.
 # ========================================================================
 
 @pytest.fixture(scope='module')
@@ -563,69 +631,31 @@ def test_lab_sea_999_clean_fields(result_lab_sea_999, field, max_abs_bound):
     assert np.max(diff) < max_abs_bound, f"lab_sea_999 {field}: max_abs {np.max(diff):.3e} regressed"
 
 
-def test_lab_sea_999_diff_kz_known_gap(result_lab_sea_999):
-    """KNOWN-GAP CHARACTERIZATION (1DMIX-054). Replay-input mechanism, not a port gap (1DMIX-071): with neighbour-averaged velocities
-    (Richard's review measurement, 1DMIX-054 round 1, steps 500-509) `diff_kz` and `tke_after`
-    mismatches above 1% go to 0 and max_abs to 3.4e-15 / 3.0e-19.
+@pytest.mark.parametrize('field,max_abs_bound', [('diff_kz', 1e-8), ('tke_after', 1e-12)])
+def test_lab_sea_999_diff_kz_and_tke_after_clean(result_lab_sea_999, field, max_abs_bound):
+    """`diff_kz` and `tke_after` are CLEAN to roundoff with MITgcm's tracer-point velocities (1DMIX-071),
+    over all 5,764,230 wet cells (all 999 steps, measured 2026-10-02): 0 cells above 1% rel; max_abs
+    9.8e-15 (`diff_kz`, max_rel 4.4e-15) and 1.6e-18 (`tke_after`, max_rel 1.8e-11).
 
-    Measured fresh over 5,764,230
-    wet cells: 1,800 cells (0.031%) exceed 1% rel, max_abs 2.146 (max_rel 3.0),
-    median/p95 0. This exceeds the clean-capture `diff_kz` bound of this file
-    (1e-8, `1D_ocean_ice_column`) and is NOT clean like `visc_az`; it is not
-    widened. Since `visc_az` and `mixing_length` agree to roundoff, the
-    difference sits in the Prandtl number Pr = f(Ri), Ri = N^2/(shear^2 +
-    GGL90eps): 1,150 of the 1,800 mismatch cells have MITgcm `ri_number` in
-    (0,1) (Pr unsaturated; 1,490 cells overall lie in that range) and 1,718
-    have shear < 1e-6 (near-neutral cells where Ri is set by a tiny N^2, the
-    documented EOS-precision amplification, see CAPTURES.md G5, and where a
-    shear that differs as in `test_lab_sea_999_shear_is_four_point_average`
-    moves Ri directly); with neighbour-averaged velocities the mismatch goes to 0,
-    i.e. it is entirely the shear (1DMIX-071), not an EOS effect.
-    Upper guards only (the mismatch fraction is season dependent, so a lower
-    guard would be fragile; 1DMIX-054 round 1): fraction < 0.005 (the `isomip`
-    kSrf upper band) and max_abs < 5.0 (the `global_ocean_90x40x15` diff_kz
-    bound, 2.3x the measured maximum).
+    Through 1DMIX-070 these were asserted as KNOWN GAPS (1DMIX-054): 1,800 `diff_kz` cells (0.031%,
+    max_abs 2.146) and 32,862 `tke_after` cells (0.570%, max_abs 1.07e-3, 96.9% in levels 1-4) above 1%
+    rel. They were REPLAY-INPUT ARTIFACTS: the replay fed the port column-local velocities where MITgcm
+    averages (i,i+1),(j,j+1) (ggl90_calc.F:541-556), which moves the shear, Ri and Prandtl number
+    (`test_lab_sea_6mo_*_column_local_gap` keeps the old figures executable). The former upper guards
+    (fractions 0.005 / 0.03; max_abs 5.0 / 3e-3) are tightened, not widened, to the clean-capture bounds
+    of this file (`diff_kz` 1e-8, `tke_after` 1e-12, `test_1d_ocean_ice_column_clean`).
     """
     python_ds, mitgcm_ds = result_lab_sea_999
-    diff, rel = _diff_and_rel(mitgcm_ds['diff_kz'].values, python_ds['diff_kz'].values)
-    frac = float((rel > 0.01).mean())
-    assert frac < 0.005, f"lab_sea_999 diff_kz mismatch fraction {frac:.5f} exceeds the known band"
-    assert np.max(diff) < 5.0, f"lab_sea_999 diff_kz max_abs {np.max(diff):.3e} regressed"
-
-
-def test_lab_sea_999_tke_after_known_gap(result_lab_sea_999):
-    """KNOWN-GAP CHARACTERIZATION (1DMIX-054). Replay-input mechanism, not a port gap (1DMIX-071): with neighbour-averaged velocities
-    (Richard's review measurement, 1DMIX-054 round 1, steps 500-509) `diff_kz` and `tke_after`
-    mismatches above 1% go to 0 and max_abs to 3.4e-15 / 3.0e-19.
-
-    Measured fresh over 5,764,230
-    wet cells: 32,862 cells (0.570%) exceed 1% rel (max_rel 5.6e3), max_abs
-    1.07e-3, median 0, p95 1.4e-8. The clean-capture bound of this file
-    (`tke_after` < 1e-12, `1D_ocean_ice_column`) is not met and NOT widened.
-    The mismatches sit in levels 1-4 (centres 15-65 m; per-level counts 8,676 /
-    10,396 / 10,595 / 2,171 = 96.9% of them; none at the surface or below level
-    8), are spread evenly over the 999 timesteps (per-decile 2,766-3,760) and
-    91.9% of them have tke_before >= 1e-8, i.e. cells where shear production
-    is not negligible. Mechanism (measured,
-    `test_lab_sea_999_shear_is_four_point_average`): MITgcm's shear at a
-    tracer point is built from the velocities at (i,i+1) and (j,j+1) while the
-    replay feeds the port the column-local uVel(i,j), vVel(i,j) only, so the
-    port's shear production differs (median 64% in the shear itself).
-    Upper guards only (season dependent fraction; 1DMIX-054 round 1): fraction
-    < 0.03 (the `isomip` tke_after upper band); max_abs < 3e-3 (2.8x the measured maximum; no existing
-    max_abs bound of this file applies: 5e-5 isomip and 1e-12 clean are both
-    exceeded, 700 for the IDEMIX capture is not informative).
-    """
-    python_ds, mitgcm_ds = result_lab_sea_999
-    diff, rel = _diff_and_rel(mitgcm_ds['tke_after'].values, python_ds['tke_after'].values)
-    frac = float((rel > 0.01).mean())
-    assert frac < 0.03, f"lab_sea_999 tke_after mismatch fraction {frac:.5f} exceeds the known band"
-    assert np.max(diff) < 3e-3, f"lab_sea_999 tke_after max_abs {np.max(diff):.3e} regressed"
+    diff, rel = _diff_and_rel(mitgcm_ds[field].values, python_ds[field].values)
+    assert (rel > 0.01).sum() == 0, f"lab_sea_999 {field}: {(rel > 0.01).sum()} cells >1% rel"
+    assert np.max(diff) < max_abs_bound, f"lab_sea_999 {field}: max_abs {np.max(diff):.3e} regressed"
 
 
 def test_lab_sea_999_shear_is_four_point_average():
-    """Oracle-side mechanism check for the two known gaps above (no port
-    involved; replay-input effect, 1DMIX-071, not a port gap). MITgcm's `verticalShear` at tracer point (i,j), level k is
+    """Oracle-side mechanism check for the two former known gaps (now closed by the tracer-point
+    replay, `test_lab_sea_999_diff_kz_and_tke_after_clean`; no port involved; replay-input effect,
+    1DMIX-071, not a port gap; the same identity is asserted for every multi-column capture and
+    edge class in `tests/test_tracer_point_inputs.py`). MITgcm's `verticalShear` at tracer point (i,j), level k is
     ((ubar(k-1)-ubar(k))^2 + (vbar(k-1)-vbar(k))^2)/drC^2 with
     ubar=(uVel(i)+uVel(i+1))/2 and vbar=(vVel(j)+vVel(j+1))/2 (ggl90_calc.F,
     calcMeanVertShear=.FALSE. branch). The capture holds every column's
@@ -702,30 +732,44 @@ def test_lab_sea_6mo_clean_fields(result_lab_sea_6mo, field, max_abs_bound):
     assert np.max(diff) < max_abs_bound, f"lab_sea_6mo {field}: max_abs {np.max(diff):.3e} regressed"
 
 
-def test_lab_sea_6mo_diff_kz_known_gap(result_lab_sea_6mo):
-    """KNOWN-GAP CHARACTERIZATION (1DMIX-054), same replay-input mechanism
-    (1DMIX-071, not a port gap) and upper guards as
-    `test_lab_sea_999_diff_kz_known_gap`. Steps 2000-2099, measured fresh: 1,430 of
-    577,000 cells (0.248%) exceed 1% rel, max_abs 1.562 (max_rel 4.0).
-    """
+@pytest.mark.parametrize('field,max_abs_bound', [('diff_kz', 1e-8), ('tke_after', 1e-12)])
+def test_lab_sea_6mo_diff_kz_and_tke_after_clean(result_lab_sea_6mo, field, max_abs_bound):
+    """Steps 2000-2099 (577,000 wet cells), tracer-point velocities (1DMIX-071, measured 2026-10-02): 0
+    cells above 1% rel; max_abs 8.4e-15 (`diff_kz`) / 2.6e-19 (`tke_after`). Former KNOWN GAPS
+    (1DMIX-054) were 1,430 `diff_kz` cells (0.248%, max_abs 1.562) and 6,497 `tke_after` cells
+    (1.126%, max_abs 3.56e-5): replay-input artifacts, see `test_lab_sea_999_diff_kz_and_tke_after_clean`
+    and `test_lab_sea_6mo_column_local_gap`. Bounds are the clean-capture ones of this file."""
     python_ds, mitgcm_ds = result_lab_sea_6mo
-    diff, rel = _diff_and_rel(mitgcm_ds['diff_kz'].values, python_ds['diff_kz'].values)
-    frac = float((rel > 0.01).mean())
-    assert frac < 0.005, f"lab_sea_6mo diff_kz mismatch fraction {frac:.5f} exceeds the known band"
-    assert np.max(diff) < 5.0, f"lab_sea_6mo diff_kz max_abs {np.max(diff):.3e} regressed"
+    diff, rel = _diff_and_rel(mitgcm_ds[field].values, python_ds[field].values)
+    assert (rel > 0.01).sum() == 0, f"lab_sea_6mo {field}: {(rel > 0.01).sum()} cells >1% rel"
+    assert np.max(diff) < max_abs_bound, f"lab_sea_6mo {field}: max_abs {np.max(diff):.3e} regressed"
 
 
-def test_lab_sea_6mo_tke_after_known_gap(result_lab_sea_6mo):
-    """KNOWN-GAP CHARACTERIZATION (1DMIX-054), same replay-input mechanism
-    (1DMIX-071, not a port gap) and upper guards as
-    `test_lab_sea_999_tke_after_known_gap`. Steps 2000-2099, measured fresh:
-    6,497 of 577,000 cells (1.126%) exceed 1% rel, max_abs 3.56e-5 (max_rel 5.5e3).
-    """
-    python_ds, mitgcm_ds = result_lab_sea_6mo
-    diff, rel = _diff_and_rel(mitgcm_ds['tke_after'].values, python_ds['tke_after'].values)
-    frac = float((rel > 0.01).mean())
-    assert frac < 0.03, f"lab_sea_6mo tke_after mismatch fraction {frac:.5f} exceeds the known band"
-    assert np.max(diff) < 3e-3, f"lab_sea_6mo tke_after max_abs {np.max(diff):.3e} regressed"
+@pytest.fixture(scope='module')
+def result_lab_sea_6mo_column_local(tmp_path_factory):
+    """Steps 2000-2099 replayed the pre-1DMIX-071 way (column-local velocities)."""
+    _require(DATA_LABSEA_6MO)
+    _require(OUTPUTS_LABSEA_6MO)
+    python_ds = _run_replay(DATA_LABSEA_6MO, tmp_path_factory, 'lab_sea_6mo_column_local',
+                            first_timestep=_LABSEA_6MO_FIRST, last_timestep=_LABSEA_6MO_LAST,
+                            tracer_point_velocities=False)
+    mitgcm_ds = xr.open_dataset(OUTPUTS_LABSEA_6MO).isel(
+        time=slice(_LABSEA_6MO_FIRST, _LABSEA_6MO_LAST + 1)).load()
+    return python_ds, mitgcm_ds
+
+
+def test_lab_sea_6mo_column_local_gap(result_lab_sea_6mo_column_local):
+    """OLD MODE (column-local velocities; the pre-1DMIX-071 replay), the executable old-versus-new
+    evidence, steps 2000-2099: 1,430 of 577,000 `diff_kz` cells (0.248%, max_abs 1.562) and 6,497
+    `tke_after` cells (1.126%, max_abs 3.56e-5) exceed 1% rel -- exactly the numbers the
+    1DMIX-054 known-gap tests asserted, with their upper guards unchanged (fractions < 0.005 / 0.03;
+    max_abs < 5.0 / 3e-3). The full 999-step capture in this mode gave 1,800 / 32,862 cells."""
+    python_ds, mitgcm_ds = result_lab_sea_6mo_column_local
+    d1, r1 = _diff_and_rel(mitgcm_ds['diff_kz'].values, python_ds['diff_kz'].values)
+    d2, r2 = _diff_and_rel(mitgcm_ds['tke_after'].values, python_ds['tke_after'].values)
+    assert int((r1 > 0.01).sum()) == 1430 and int((r2 > 0.01).sum()) == 6497
+    assert float((r1 > 0.01).mean()) < 0.005 and np.max(d1) < 5.0
+    assert float((r2 > 0.01).mean()) < 0.03 and np.max(d2) < 3e-3
 
 
 def test_lab_sea_6mo_first_999_steps_identical_to_999_capture():
@@ -748,3 +792,58 @@ def test_lab_sea_6mo_first_999_steps_identical_to_999_capture():
         assert np.array_equal(a_in[v].values, b_in[v].values), f"input {v} differs"
     for v in ('visc_az', 'diff_kz', 'mixing_length', 'tke_after', 'ri_number', 'vertical_shear'):
         assert np.array_equal(a_out[v].values, b_out[v].values), f"output {v} differs"
+
+
+# ------------------------------------------------------------------------
+# 1DMIX-071: tracer-point replay plumbing (old mode intact, single column unchanged, calcMeanVertShear)
+# ------------------------------------------------------------------------
+
+import hashlib  # noqa: E402
+
+# SHA-256 of (visc_az, diff_kz, mixing_length, tke_after) of the replay, taken BEFORE the 1DMIX-071
+# edit of `run_ggl90_from_netcdf_input.py` (git HEAD c6d8ffb). `tracer_point_velocities=False` must
+# reproduce them bit for bit; the single-column vermix capture must give the same digest in the new
+# default mode too (0.5*(u+u) = u).
+_GGL90_GOLDEN = {
+    ('lab_sea_999', 0, 4): 'b66cdbf85d4e1e6c5ab0c5c348780b197abde6fba40199324461bd85ea39328d',
+    ('isomip_12', 0, 1): 'e4ee68cac06913f2d0331197890f7661d3175476f57eff5c59a9d9bc712e11c4',
+    ('global_ocean_90x40x15_idemix_10', 0, 1): '04a0adc590218ee6bdb0674c84f29192cd87520883747859b5b4b94d3ea40d90',
+    ('vermix_20_1dmix024', 0, 19): '2c002842ac165b4f87d18d9a2795e16c84c6e2d81e1c2560b2528c5a3f09fbc5',
+}
+
+
+def _replay_digest(stem, lo, hi, tmp_path, tracer_point_velocities):
+    path = _INPUTS / f'mitgcm_ggl90_inputs_{stem}.nc'
+    _require(path)
+    out = run_python_ggl90_on_dataset(path, tmp_path / 'o.nc', first_timestep=lo, last_timestep=hi,
+                                      tracer_point_velocities=tracer_point_velocities)
+    h = hashlib.sha256()
+    for f in ('visc_az', 'diff_kz', 'mixing_length', 'tke_after'):
+        h.update(f.encode())
+        h.update(np.ascontiguousarray(out[f].values, dtype=np.float64).tobytes())
+    return h.hexdigest()
+
+
+@pytest.mark.parametrize('key', sorted(_GGL90_GOLDEN))
+def test_column_local_replay_is_bit_identical_to_pre_1dmix071(key, tmp_path):
+    assert _replay_digest(*key, tmp_path, tracer_point_velocities=False) == _GGL90_GOLDEN[key]
+
+
+def test_single_column_replay_unchanged_by_tracer_point_velocities(tmp_path):
+    key = ('vermix_20_1dmix024', 0, 19)
+    assert _replay_digest(*key, tmp_path, tracer_point_velocities=True) == _GGL90_GOLDEN[key]
+
+
+def test_calc_mean_vert_shear_capture_raises_in_tracer_point_mode(tmp_path):
+    """calcMeanVertShear=1 is a sum of squares of four separate differences (ggl90_calc.F:526-540): not
+    reproducible by averaging velocities, so the default replay refuses it (the port itself ignores
+    the flag, tracked as 1DMIX-074); the column-local mode still runs."""
+    _require(DATA_VERMIX)
+    ds = xr.open_dataset(DATA_VERMIX).isel(time=slice(0, 2)).load()
+    ds.attrs['calcMeanVertShear'] = 1
+    modified = tmp_path / 'vermix_cmvs1.nc'
+    ds.to_netcdf(modified)
+    with pytest.raises(ValueError, match='calcMeanVertShear=1'):
+        run_python_ggl90_on_dataset(modified, tmp_path / 'o1.nc')
+    out = run_python_ggl90_on_dataset(modified, tmp_path / 'o2.nc', tracer_point_velocities=False)
+    assert out.sizes['time'] == 2

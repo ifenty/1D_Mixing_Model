@@ -7,8 +7,19 @@ MITgcm's captured TKE(t+1)/viscosity/diffusivity. This isolates agreement on
 the physics formula itself and avoids trajectory-drift confounds -- mirrors
 scripts/run_kpp_from_netcdf_input.py's role for KPP.
 
+Tracer-point velocities (1DMIX-071): MITgcm forms the GGL90 vertical shear at a tracer point
+from uVel at (i, i+1) and vVel at (j, j+1) (ggl90_calc.F:541-556, calcMeanVertShear=.FALSE.), i.e.
+the shear of ubar=(u(i)+u(i+1))/2, vbar=(v(j)+v(j+1))/2. The captures hold uVel(i,j)/vVel(i,j) of
+every column, so by default (`tracer_point_velocities=True`) this replay feeds the port ubar/vbar
+rebuilt from the neighbouring columns (scripts/tracer_point_inputs.py; periodic wrap, MITgcm's
+default exchange), which reproduces the captured `vertical_shear` to roundoff. The former
+column-local behaviour (u(i,j), v(i,j) only) is kept as `tracer_point_velocities=False` / `--column-local`
+so old-versus-new comparisons stay executable. A capture with calcMeanVertShear=1 cannot be
+reproduced by averaging and raises ValueError in the default mode (1DMIX-074 tracks the port
+ignoring that flag). Single-column captures (x = y = 1) are unchanged exactly (0.5*(u+u) = u).
+
 Usage:
-  python run_ggl90_from_netcdf_input.py <inputs.nc> -o <output.nc> [--first N] [--last N]
+  python run_ggl90_from_netcdf_input.py <inputs.nc> -o <output.nc> [--first N] [--last N] [--column-local]
 """
 
 import sys
@@ -23,6 +34,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'Vertical_Mixing_Mo
 
 from GGL90.ggl90_core_driver import GGL90Driver
 from GGL90.ggl90_parameters import GGL90Parameters
+
+sys.path.insert(0, str(Path(__file__).parent))
+from tracer_point_inputs import tracer_point_velocities as _tpv  # noqa: E402
 
 
 # Maps MITgcm PARAM_<name> (netCDF global attrs) -> GGL90Parameters field name
@@ -139,7 +153,8 @@ def build_params(inputs_ds: xr.Dataset) -> GGL90Parameters:
 
 
 def run(inputs_nc: Path, output_nc: Path, first_timestep: Optional[int] = None,
-        last_timestep: Optional[int] = None) -> xr.Dataset:
+        last_timestep: Optional[int] = None, tracer_point_velocities: bool = True,
+        periodic_x: bool = True, periodic_y: bool = True) -> xr.Dataset:
     """Replay the port on every (or a leading/contiguous subset of) captured timestep(s).
 
     `first_timestep`/`last_timestep` (0-indexed, inclusive; default None = all) mirror
@@ -149,6 +164,12 @@ def run(inputs_nc: Path, output_nc: Path, first_timestep: Optional[int] = None,
     loop below reads `inputs_ds[...].values[t, i, j, :]` many times per column, and on a lazy
     NetCDF-backed dataset each such call re-reads (and decompresses) the whole variable
     (thousands of times slower for a multi-column capture; numerically identical results).
+
+    `tracer_point_velocities` (1DMIX-071, default True): feed the port MITgcm's tracer-point
+    velocities ubar=(u(i)+u(i+1))/2, vbar=(v(j)+v(j+1))/2 rebuilt from the neighbouring captured
+    columns (`periodic_x`/`periodic_y`: MITgcm's default periodic exchange, see
+    scripts/tracer_point_inputs.py). False reproduces the former column-local replay. Raises
+    ValueError when True and the capture has calcMeanVertShear=1 (not reproducible by averaging).
     """
     inputs_ds = xr.open_dataset(inputs_nc)
     if first_timestep is not None or last_timestep is not None:
@@ -162,6 +183,22 @@ def run(inputs_nc: Path, output_nc: Path, first_timestep: Optional[int] = None,
     inputs_ds = inputs_ds.load()
     params = build_params(inputs_ds)
     driver = GGL90Driver(params=params)
+
+    u_all = inputs_ds['u_velocity'].values
+    v_all = inputs_ds['v_velocity'].values
+    if tracer_point_velocities:
+        # Geometry first: a pressure-coordinate capture (cs32x15, which also has calcMeanVertShear=1)
+        # must keep raising the 1DMIX-073 geometry ValueError, not the shear one below.
+        from main.column_grid import validate_zcoordinate_geometry
+        validate_zcoordinate_geometry(inputs_ds['depth'].values, inputs_ds['cell_thickness'].values,
+                                      scheme="GGL90")
+        if params.calc_mean_vert_shear:
+            raise ValueError(
+                "calcMeanVertShear=1: MITgcm's shear is then a sum of squares of four separate "
+                "differences (ggl90_calc.F:526-540), not the shear of an averaged velocity, so "
+                "tracer-point velocities cannot reproduce it. Pass tracer_point_velocities=False "
+                "for the column-local replay (1DMIX-071; the port ignores the flag, 1DMIX-074).")
+        u_all, v_all = _tpv(u_all, v_all, periodic_x, periodic_y)
 
     background_visc = float(inputs_ds.attrs.get('viscAz', 0.0))
     background_diff = float(inputs_ds.attrs.get('diffKzS', 0.0))
@@ -207,8 +244,8 @@ def run(inputs_nc: Path, output_nc: Path, first_timestep: Optional[int] = None,
                 tke = inputs_ds['tke_before'].values[t, i, j, :]
                 theta = inputs_ds['temperature'].values[t, i, j, :]
                 salt = inputs_ds['salinity'].values[t, i, j, :]
-                u = inputs_ds['u_velocity'].values[t, i, j, :]
-                v = inputs_ds['v_velocity'].values[t, i, j, :]
+                u = u_all[t, i, j, :]
+                v = v_all[t, i, j, :]
                 u_star_sq = float(inputs_ds['u_star_sq'].values[t, i, j])
 
                 # Skip land points (see _is_land_column -- 1DMIX-028): leave
@@ -319,8 +356,12 @@ def main():
                         help='first timestep to replay (0-indexed, inclusive; default: 0)')
     parser.add_argument('--last', type=int, default=None,
                         help='last timestep to replay (0-indexed, inclusive; default: last)')
+    parser.add_argument('--column-local', action='store_true',
+                        help='feed the port uVel(i,j), vVel(i,j) only (the pre-1DMIX-071 replay) '
+                             'instead of MITgcm tracer-point velocities')
     args = parser.parse_args()
-    run(Path(args.input_file), Path(args.output), first_timestep=args.first, last_timestep=args.last)
+    run(Path(args.input_file), Path(args.output), first_timestep=args.first, last_timestep=args.last,
+        tracer_point_velocities=not args.column_local)
 
 
 if __name__ == '__main__':

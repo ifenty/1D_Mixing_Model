@@ -99,6 +99,25 @@ class KPPOutput:
         }
 
 
+def _validate_column_input(name: str, arr, nz: int, nonnegative: bool):
+    """Validate an optional per-column input of ``compute_mixing`` (1DMIX-071).
+
+    Returns ``None`` for ``None`` (the exact no-op), otherwise a float64 copy of shape
+    ``(nz,)``. Raises ``ValueError`` for a wrong shape, any non-finite value, or (when
+    ``nonnegative``) any negative value.
+    """
+    if arr is None:
+        return None
+    a = np.array(arr, dtype=np.float64)
+    if a.shape != (nz,):
+        raise ValueError(f"{name} must have shape ({nz},) (one value per level), got {a.shape}")
+    if not np.all(np.isfinite(a)):
+        raise ValueError(f"{name} must be finite (found {int(np.sum(~np.isfinite(a)))} non-finite value(s))")
+    if nonnegative and np.any(a < 0.0):
+        raise ValueError(f"{name} is a squared quantity and must be >= 0 (min={a.min():.6g})")
+    return a
+
+
 class KPPDriver:
     """
     Main driver for KPP mixing scheme.
@@ -157,6 +176,15 @@ class KPPDriver:
         # behavioral no-op -- see that function's own docstring for the exact
         # substitution semantics.
         hbl_override: float = None,
+        # Optional tracer-point inputs (1DMIX-071), keyword-only. MITgcm forms shsq,
+        # dVsq and the horizontally smoothed dbloc from NEIGHBOURING columns, which a
+        # single-column driver cannot see; a caller that has the neighbours (the
+        # MITgcm-capture replays) supplies the finished values here. Default None for
+        # each is an exact behavioral no-op (the column-local computation below).
+        *,
+        shsq_forcing: Optional[np.ndarray] = None,
+        dvsq_forcing: Optional[np.ndarray] = None,
+        dbloc_smooth_forcing: Optional[np.ndarray] = None,
     ) -> KPPOutput:
         """
         Compute KPP mixing coefficients for a single column.
@@ -232,6 +260,24 @@ class KPPDriver:
             steps consume it -- see `diagnose_bl_depth`'s own docstring for
             exact semantics. Default `None` is an exact behavioral no-op;
             every existing caller/scenario is unaffected.
+        shsq_forcing : np.ndarray, shape (nz,), optional
+            (1DMIX-071, keyword-only) MITgcm's ``shsq(k)`` for this column
+            (kpp_calc.F:459-495) [m^2/s^2], index k = interface below cell k, in place
+            of the column-local ``du**2 + dv**2`` of ``_compute_shear``. Must be finite
+            and >= 0. Default None = column-local computation (exact no-op). The last
+            element (the bottom of the supplied column) is passed through unchanged.
+        dvsq_forcing : np.ndarray, shape (nz,), optional
+            (1DMIX-071, keyword-only) MITgcm's ``dVsq(k)`` (kpp_forcing_surf.F:463-504)
+            [m^2/s^2], in place of the column-local surface-relative value. Finite and
+            >= 0. Supplying it bypasses ``_estimate_reference_velocity`` (MITgcm's dVsq
+            already contains its own uRef). Default None = no-op.
+        dbloc_smooth_forcing : np.ndarray, shape (nz,), optional
+            (1DMIX-071, keyword-only) horizontally smoothed ``dbloc`` (the ``ghat``
+            input of KPPMIX, kpp_calc.F:276-289 via ``smooth_horiz``,
+            kpp_routines.F:1311-1391) [m/s^2], used ONLY by the gradient-Richardson
+            term of ``ri_iwmix`` (kpp_routines.F:1133-1137). Finite; may be negative.
+            Default None = ``dbloc.copy()`` (no horizontal smoothing in a single column,
+            exact no-op).
 
         Notes
         -----
@@ -282,7 +328,15 @@ class KPPDriver:
 
         # Smooth dbloc if requested
         dbloc_smooth = dbloc.copy()
-        # Note: horizontal smoothing requires 2D/3D data, skipped for 1D columns
+        # Note: horizontal smoothing requires 2D/3D data, skipped for 1D columns --
+        # unless the caller (the MITgcm-capture replay, 1DMIX-071) supplies the
+        # already smoothed profile through `dbloc_smooth_forcing`.
+        shsq_in = _validate_column_input("shsq_forcing", shsq_forcing, nz, nonnegative=True)
+        dvsq_in = _validate_column_input("dvsq_forcing", dvsq_forcing, nz, nonnegative=True)
+        dbloc_smooth_in = _validate_column_input(
+            "dbloc_smooth_forcing", dbloc_smooth_forcing, nz, nonnegative=False)
+        if dbloc_smooth_in is not None:
+            dbloc_smooth = dbloc_smooth_in
 
         # ===== Step 2: Compute surface forcing =====
         # Determine mode based on what parameters are provided:
@@ -391,6 +445,7 @@ class KPPDriver:
         shsq, dvsq = self._compute_shear(
             u_vel, v_vel, depth, cell_thickness,
             dbloc=dbloc, tau_x=tau_x, tau_y=tau_y, ustar=ustar,
+            shsq_override=shsq_in, dvsq_override=dvsq_in,
         )
 
         # ===== Step 4: Interior mixing (Ri-based) =====
@@ -653,9 +708,16 @@ class KPPDriver:
         tau_x: Optional[float] = None,
         tau_y: Optional[float] = None,
         ustar: Optional[float] = None,
+        shsq_override: Optional[np.ndarray] = None,
+        dvsq_override: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute velocity shear terms.
+
+        ``shsq_override`` / ``dvsq_override`` (1DMIX-071; already validated by
+        ``compute_mixing``) replace the respective column-local result; ``None`` is the
+        unchanged computation. An overridden ``dvsq`` skips the reference-velocity
+        estimate entirely.
 
         Returns
         -------
@@ -672,6 +734,10 @@ class KPPDriver:
             du = u_vel[k] - u_vel[k+1]
             dv = v_vel[k] - v_vel[k+1]
             shsq[k] = du**2 + dv**2
+        if shsq_override is not None:
+            shsq = shsq_override.copy()
+        if dvsq_override is not None:
+            return shsq, dvsq_override.copy()
 
         if self.params.estimate_uref:
             u_ref, v_ref = self._estimate_reference_velocity(
