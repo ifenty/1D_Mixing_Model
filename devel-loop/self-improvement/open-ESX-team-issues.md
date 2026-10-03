@@ -1300,3 +1300,44 @@ A native stop whose footer cites a missing or mismatched evidence file is record
 
 ### Expected Effect
 Broken footer references are caught when the agent stops, not at closeout.
+
+---
+
+## 🔴 PROPOSED: a native reviewer's stop was never recorded, and nothing said so; the SubagentStop hook's 15 s limit is now close to the work it does
+
+**Date Identified**: 2026-10-03  05:10
+**Status**: Proposed
+**UUID**: TEAM-NATIVE-STOP-MISSED-001
+**Category**: evidence_integrity
+**Severity**: High
+**Assessment**: devel-loop/self-improvement/assessments/2026-10-03-native-stop-missed/assessment.md
+**Anchors**: tools/esx/hooks.py; tools/esx/agent_runtime.py; tools/esx/footer_contract.py; .claude/settings.json
+
+### Issue
+In 1DMIX-080, Richard (a native Agent-tool subagent) finished and the host delivered his report and completion notification. But `dispatch_log.jsonl` held no record of his stop, and his `native_inflight` marker remained. `loop_control.py status` went on saying "richard running". Nothing reported the missing record; the coordinator found it only because the stop to be selected was absent. Replaying the same event through `hooks.py subagent-stop` with no time limit recorded it correctly (`completed`, verdict REJECT) in 3.3 s.
+
+The cause is not established. The SubagentStop hook in `.claude/settings.json` has `"timeout": 15`. Since 1.6.3, `stop_record` also runs `footer_contract.reference_errors` on bob and richard stops: `verify.load_evidence` re-fingerprints the suite, and orientation and report loads are added. Timed cold on Richard's real footer, that check alone took 9.6 s (user 3.6 s, sys 7.3 s). The whole replay took 3.3 s warm. A hook killed at its timeout leaves exactly this state. Bob's earlier stop in the same iteration was recorded. Four other stops in the log carry `missing runtime identity` with agent ids that are not ours.
+
+### Evidence
+1DMIX-080, 2026-10-03:
+- Richard (agent a325d9f09d6c933c3) completed at about 05:06Z;
+- `devel-loop/loop_state/native_inflight/a325d9f09d6c933c3.json` remained, and the log tail held only `missing runtime identity` rows;
+- the replay `python3 tools/esx/hooks.py subagent-stop < event.json` recorded it: real 3.27 s;
+- `reference_errors` timed alone took 9.6 s real.
+
+### Potential Impact
+A reviewer verdict that silently never enters the record. The coordinator either waits on a stop that already happened, or acts on the report without a recorded completion, which the final packet then refuses. One check added to the hook's critical path moved a fast hook close to its kill limit.
+
+### Proposed Fix
+- Keep the SubagentStop hook fast: record the stop first (status `completed`, pending validation), then run the reference checks and amend the record. Alternatively, run the checks at `selections` / review-packet time and print them there.
+- Raise the hook timeout to give a margin over the measured cold time.
+- Make a lost stop visible: when the host reports a subagent finished (or when `status` finds an inflight marker older than its agent's last transcript write) and no record exists, say so and give the replay command.
+- Ship a `hooks.py replay-stop --agent-id ID` that rebuilds the event from the subagent transcript.
+
+### Acceptance Criteria
+- A native stop is recorded even when validation is slow.
+- A missing stop record is reported by `--next`/`status`, with the recovery command, instead of "running".
+- A test simulates a validation slower than the hook limit and shows the stop still recorded.
+
+### Expected Effect
+No reviewer or implementer verdict is lost silently.
