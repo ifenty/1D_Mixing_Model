@@ -1,0 +1,8 @@
+{
+  "synthetic_record_detected": true,
+  "real_output_not_detected": true,
+  "limited_turn": "limited",
+  "resumed_turn": "working",
+  "deployed_ralph_stop": "tools/esx/ralph_stop.py",
+  "status": "PASS"
+}

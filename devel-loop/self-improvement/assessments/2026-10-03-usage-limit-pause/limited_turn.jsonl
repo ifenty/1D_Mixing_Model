@@ -1,0 +1,3 @@
+{"type": "user", "timestamp": "2026-10-01T06:11:36.250Z", "message": {"role": "user", "model": null, "content": "(user text omitted)"}}
+{"type": "assistant", "timestamp": "2026-09-30T15:21:28.186Z", "message": {"role": "assistant", "model": "claude-opus-5-5", "content": [{"type": "text", "text": "(assistant output, text omitted)"}]}}
+{"type": "assistant", "error": "rate_limit", "isApiErrorMessage": true, "apiErrorStatus": 429, "timestamp": "2026-10-01T06:11:36.828Z", "message": {"role": "assistant", "model": "<synthetic>", "content": [{"type": "text", "text": "You've hit your weekly limit \u00b7 resets Oct 2, 4am (America/Los_Angeles)"}]}}
