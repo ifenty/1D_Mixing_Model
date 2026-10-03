@@ -637,8 +637,9 @@ predict "measurably affects the output"; a direct field-level A/B
   `visc_az` max_abs 0.332 → 0.096 m²/s (3.5x); `diff_kz_s`/`diff_kz_t` max_abs
   0.959 → 0.110 m²/s (8.7x); `n_gt_1pct` for `hbl` drops 146→10 of 11,575
   (measured 2026-09-28 under 1DMIX-057, before 1DMIX-080, with the then-default Jerlov water type IB;
-  with IA and `True` the same capture now measures `hbl` 1.9e-7 m, `visc_az` 4.8e-8, `diff_kz_s` 1.4e-7,
-  2026-10-03; the `False` side was not re-measured under IA).
+  with IA and `True` the same capture measured `hbl` 1.9e-7 m, `visc_az` 4.8e-8, `diff_kz_s` 1.4e-7 on
+  2026-10-03 (1DMIX-080), and with `swfrac`'s 200 m cut-off added `hbl` 9.3e-12 m, `visc_az` 3.0e-14, `diff_kz_s`
+  1.2e-13 (1DMIX-085); the `False` side was not re-measured under IA).
   These are the exact values `test_kpp_mitgcm_validation_extended.py`'s own
   `test_global_oce_latlon_hbl`/`test_global_oce_latlon_mixing` docstrings
   previously attributed *entirely* to "the same Rib/Ricr threshold-
@@ -755,28 +756,42 @@ These are the post-1DMIX-075 figures; 1DMIX-080 (the Jerlov water type, next sec
 `lab_sea` 999 steps 2,941 / 9,943 -> 0 / 0, `11k_1D` 130 / 152 -> 85 / 88; and the reverse `ghat` class (port exactly 0) went to 0 on
 every capture.
 
-### KPP shortwave penetration: Jerlov water type IA, MITgcm's hard-coded value (1DMIX-080)
+### KPP shortwave penetration: Jerlov water type IA, MITgcm's hard-coded value (1DMIX-080), and the 200 m cut-off (1DMIX-085)
 
 With penetrating shortwave on (`KPPParameters.shortwave_heating` and `select_penetrating_sw >= 1`, MITgcm `SHORTWAVE_HEATING` and
 `selectPenetratingSW >= 1`), `diagnose_bl_depth` adds `bosol*(1 - swfrac(d))` to `bfsfc` at the trial levels and at the pre- and
 post-limit `hbl` (`kpp_routines.F:505-519`, `:700-712`, `:836-849`; `Vertical_Mixing_Models/KPP/kpp_scheme_specific.py::diagnose_bl_depth`).
 `swfrac` (`Vertical_Mixing_Models/KPP/kpp_shortwave.py::swfrac`) is MITgcm's `model/src/swfrac.F`, the two-band Paulson-Simpson
-fraction `rfac*exp(-d/a1) + (1-rfac)*exp(-d/a2)` (`:102-103`), with the five-type table of `:71-76`.
+fraction `rfac*exp(-d/a1) + (1-rfac)*exp(-d/a2)` (`:102-103`), with the five-type table of `:71-76`, and exactly 0 below 200 m.
 - **Water type.** MITgcm hard-codes `jwtype=2`, Jerlov type IA (`rfac=0.62`, `a1=0.6 m`, `a2=20 m`): `swfrac.F` line 92 (and 94,
   both branches of `#ifdef ALLOW_CAL`), "Parameter jwtype is hardcoded to 2 for time being". No namelist sets it, so no MITgcm
   capture records it. The port's default (`KPPParameters.jerlov_water_type`, `KPP/kpp_default_parameters.yaml`, `swfrac`'s
   `water_type`) is therefore `"IA"`; it was `"IB"` before 1DMIX-080. The other four types stay selectable.
+- **200 m cut-off (1DMIX-085).** `swfrac.F:97-105`: `facz = fact*swdk` (the negative distance from the surface; bldepth passes
+  `fact = hbf` on `zgrid(kl)` at the trial levels, `kpp_routines.F:508`, and `fact = -1` on `hbl`, `:703` and `:839`), and
+  `IF ( facz .LT. -200. _d 0 ) swdk = 0` (`:99-100`), else the double exponential. The comparison is strict: the fraction is exactly
+  0 deeper than 200 m and the double exponential at exactly 200 m (IA: 1.7252e-5). `kpp_shortwave.py::swfrac` applies the same
+  test to `facz = -d` inside the function, so all three `diagnose_bl_depth` call sites get it. Consequences, as in MITgcm: at
+  `hbl` > 200 m the absorbed fraction is 1 and `bfsfc = bo + bosol` exactly; the bulk Richardson number at every trial level
+  below 200 m uses that same full absorption, even where `hbl` is shallow (only `bulk_ri` below 200 m changes then).
 - **Verified exactly.** `swfrac(d, "IA")` equals MITgcm's own SWFRAC output (the `SWFrac3D` every capture records as `swatt`,
-  `model/src/ini_forcing.F:150-182`) bit for bit at every interface above 200 m (`Vertical_Mixing_Models/tests/test_kpp_jerlov_water_type.py`).
-- **Not reproduced (open):** the 200 m cut-off of `swfrac.F:99-100` (exactly 0 below 200 m; 1DMIX-085); MITgcm's `KPPuseSWfrac3D`
+  `model/src/ini_forcing.F:150-182`) bit for bit at every wet interface (one whose cell below is wet), including the exact
+  zeros below 200 m; an interface above a dry cell is 0 in `swatt` through `ini_forcing.F`'s land mask, not through SWFRAC
+  (`Vertical_Mixing_Models/tests/test_kpp_jerlov_water_type.py`, which also tests the boundary doubles around 200 m).
+- **Not reproduced (open):** MITgcm's `KPPuseSWfrac3D`
   branch, which interpolates the precomputed `SWFrac3D` instead of calling SWFRAC (`kpp_routines.F:491-497`, `:690-698`,
   `:829-834`; the port warns and evaluates `swfrac`; the `11k_1D` and `1D_10` captures use it); `hbf` at the trial levels
   (MITgcm evaluates SWFRAC at `-hbf*zgrid(kl)`, the port at `-zgrid(kl)`, identical for `hbf = 1`, MITgcm's default and every
   capture's value); `KPPfrac` (`kpp_calc.F:640-668`, the shortwave part of the nonlocal temperature flux in `kpp_transport_t.F`).
 - **Effect.** Every capture built with penetrating shortwave changed; on those whose MITgcm run calls SWFRAC (`lab_sea`,
-  `lab_sea_6mo`, `seaice_obcs`, `global_oce_latlon`) the port now agrees with MITgcm to roundoff, with the port's `bfsfc` equal to
-  MITgcm's `bfsfc_final` except at `hbl` > 200 m (the cut-off). The six scenarios run with penetrating shortwave off and are
-  bit-identical; GGL90 does not use `swfrac`. Figures: `MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md`
+  `lab_sea_6mo`, `seaice_obcs`, `global_oce_latlon`) the port now agrees with MITgcm to roundoff in the windows the tests
+  replay (`global_oce_latlon`: its first 5 steps; over all 720 steps one partial-depth column, (26, 3), keeps an `hbl`
+  difference up to 9.1e-3 m, not root-caused and not the cut-off; outside it at most 2.8e-9 m). Since the cut-off (1DMIX-085) the
+  port's `bfsfc` equals MITgcm's `bfsfc_final` exactly at every `hbl` > 200 m column-step (`global_oce_latlon`: 19 in the tests'
+  first 5 steps, 27,057 over all 720) and differs elsewhere by at most 2.6e-22 in the first 5 steps and 7.6e-13 over all 720 (the
+  latter in column (26, 3), whose small `hbl` difference the cut-off did not change); the cut-off changed no other capture (none has
+  a shortwave-on `hbl` or `kbl` level below 200 m). The six scenarios run with penetrating shortwave off and are bit-identical;
+  GGL90 does not use `swfrac`. Figures: `MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md`
   ("Mechanisms").
 
 ## Invariants

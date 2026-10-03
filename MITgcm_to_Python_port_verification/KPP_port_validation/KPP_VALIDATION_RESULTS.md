@@ -135,13 +135,41 @@ validation.
 
 ## Mechanisms that explain the tail below
 
+**The 200 m shortwave cut-off (1DMIX-085), now reproduced.** `model/src/swfrac.F:99-100` sets the shortwave fraction to
+exactly 0 when `facz .LT. -200.` (`facz` = the negative distance from the surface; strictly deeper than 200 m, the double
+exponential at exactly 200 m). The port's `swfrac` had no cut-off; it now applies the same test inside the function, so
+all three bldepth call sites get it (`kpp_routines.F:508` trial levels, `:703` and `:839` at `hbl`). Only
+`global_oce_latlon` changed among the KPP captures (the only shortwave-on capture with `hbl`, or the first level below it,
+deeper than 200 m); `1D_10`, `11k_1D`, `lab_sea` (all 999 steps), `lab_sea_6mo` and `seaice_obcs` are bit-identical (no
+`hbl` beyond 36 / 36 / 160 / 94 / 46 m and no `kbl` level below 200 m), `global_ocean_90x40x15` too (no penetrating
+shortwave, although 44 of its column-steps have `hbl` > 200 m). Old -> new, port against MITgcm (`global_oce_latlon`;
+cells above 1% / max_abs; "deep" = the column-steps with `hbl` > 200 m; evidence `devel-loop/loop_state/bob-1DMIX-085-evidence.md`,
+local and git-ignored):
+
+| Window | `hbl` > 200 m column-steps | `visc_az` | `diff_kz_s` (= `_t`) | `ghat` max_abs | `hbl` max (m) | `bfsfc` at `hbl` > 200 m: differing / max | `bfsfc` elsewhere: differing / max |
+|---|---|---|---|---|---|---|---|
+| first 5 steps (the tests' window) | 19 (6 columns) | 0 / 4.8e-8 -> 0 / 3.0e-14 | 0 / 1.4e-7 -> 0 / 1.2e-13 | 1.2e-6 -> 1.1e-13 | 1.9e-7 -> 9.3e-12 | 11 / 5.6e-14 -> 0 / 0 | 87 / 7.7e-22 -> 79 / 2.6e-22 |
+| all 720 steps (new) | 27,057 (199 columns) | 0 / 8.9e-6 -> 0 / 1.7e-7 (deep 5.2e-12) | 0 / 1.9e-5 -> 0 / 2.0e-7 (deep 1.3e-11) | 2.1e-3 -> 3.1e-12 | 9.1e-3 -> 9.1e-3 (deep 7.7e-4 -> 2.8e-9) | 25,299 / 1.9e-12 -> 0 / 0 | 41,162 / 7.6e-13 -> 6,612 / 7.6e-13 |
+
+At every `hbl` > 200 m column-step the port's `bfsfc` now equals MITgcm's `bfsfc_final` bit for bit (`bo + bosol`, absorbed
+fraction 1). What remains over the 720 steps is not the cut-off and was unchanged by it: the 47 column-steps with an `hbl`
+difference above 1e-6 m are all in one partial-depth column, (i, j) = (26, 3), steps 8-76, `hbl` about 26 m, difference up to
+9.1e-3 m (it carries the 1.7e-7 / 2.0e-7 mixing and 7.6e-13 `bfsfc` maxima). Outside that column the `hbl` difference is
+at most 2.8e-9 m: three `hbl` > 200 m column-steps exceed 1e-9 m ((t, i, j) = (43, 81, 35) 1.07e-9, (85, 81, 35) 1.09e-9,
+(190, 80, 35) 2.76e-9 m, at `hbl` 788-980 m), and every `hbl` <= 200 m column-step differs by at most 7.0e-12 m. The
+trial-level bulk Richardson number below 200 m now matches MITgcm's captured `bulk_ri` as well as the levels above it do
+(first 5 steps, 290 m level, 11,075 column-steps: bit-equal 0.55% -> 83.8%; max relative difference 9.7e-5 -> 2.7e-13 over
+the 10,890 where MITgcm's `bulk_ri` is nonzero -- in the other 185 MITgcm's is exactly 0 and the port's is not, before and
+after the edit alike).
+
 **The Jerlov water type (1DMIX-080), now reproduced; read this before the older figures below.** MITgcm's
 shortwave-penetration fraction `model/src/swfrac.F` hard-codes Jerlov water type IA (`jwtype=2`, line 92 and 94: "hardcoded to 2
 for time being"; no namelist entry, so no capture records it). The port defaulted to type IB. Every capture built with
 penetrating shortwave (`selectPenetratingSW >= 1`: all except `global_ocean_90x40x15`) therefore had a different surface
 buoyancy forcing `bfsfc` at every level of the boundary-layer search. The port's IA coefficients and formula are MITgcm's
 bit for bit: it reproduces the SWFRAC output MITgcm writes into every capture (`swatt`, MITgcm's `SWFrac3D`) exactly at
-every interface above 200 m. With the default changed to IA (cells above 1% relative error / max_abs; `hbl` max in m;
+every wet interface above 200 m (and, since the 1DMIX-085 cut-off above, at every wet interface below it too; an
+interface whose cell below is dry is 0 in `swatt` through `ini_forcing.F`'s land mask, not through SWFRAC). With the default changed to IA (cells above 1% relative error / max_abs; `hbl` max in m;
 the port's `bfsfc` against MITgcm's `bfsfc_final`; evidence `devel-loop/loop_state/bob-1DMIX-080-evidence.md`, which
 is local and git-ignored):
 
@@ -159,11 +187,12 @@ is local and git-ignored):
 Cells where the port's `ghat` is exactly 0 and MITgcm's is not (open issue 1DMIX-076): `global_oce_latlon` 2 -> 0,
 `seaice_obcs` 8 -> 0, `lab_sea_6mo` 2 -> 0, `lab_sea` 999 steps 127 -> 0, `11k_1D` 13 -> 0 (the reverse class: 0 everywhere
 except one new `11k_1D` cell). On the four captures whose MITgcm runs call SWFRAC the port now agrees with MITgcm to
-roundoff, and the port's `bfsfc` equals MITgcm's `bfsfc_final` except at a few column-steps; the largest remaining
-differences (`global_oce_latlon`, `bfsfc` 5.6e-14, `ghat` 1.2e-6) sit in the 19 ocean column-steps (6 distinct columns) whose
-`hbl` is deeper than 200 m in both MITgcm and the port, 11 of which have a nonzero `bfsfc` difference; there `swfrac.F:99`
-sets the fraction to exactly 0 and the port does not (open issue 1DMIX-085). The other 87 column-steps whose `bfsfc` differs
-do so by at most 7.7e-22. The two single-column
+roundoff in the windows above (over all 720 `global_oce_latlon` steps, measured under 1DMIX-085, one partial-depth column,
+(26, 3), keeps an `hbl` difference up to 9.1e-3 m; see the 1DMIX-085 paragraph), and the port's `bfsfc` equals MITgcm's `bfsfc_final` except at a few column-steps; the largest remaining
+differences (`global_oce_latlon`, `bfsfc` 5.6e-14, `ghat` 1.2e-6) sat in the 19 ocean column-steps (6 distinct columns) whose
+`hbl` is deeper than 200 m in both MITgcm and the port, 11 of which had a nonzero `bfsfc` difference; there `swfrac.F:99`
+sets the fraction to exactly 0 and the port did not until 1DMIX-085 (above: those differences are now roundoff, `bfsfc`
+exact). The other 87 column-steps whose `bfsfc` differed did so by at most 7.7e-22. The two single-column
 captures (`11k_1D`, `1D_10`) were built with `KPPuseSWfrac3D = 1`: MITgcm then interpolates its precomputed SWFrac3D
 (`kpp_routines.F:491-497`, `:690-698`, `:829-834`) instead of calling SWFRAC, a branch the port does not implement.
 MITgcm's `bfsfc_final` on `11k_1D` equals that branch, re-evaluated at MITgcm's `hbl` from the captured inputs, bit for bit
@@ -260,7 +289,7 @@ inherent property of any finite-precision implementation of a
 hard-thresholded diagnostic, not a fixable defect in the search algorithm or
 the underlying formulas. **1DMIX-080:** no capture's measured tail now needs this mechanism. After 1DMIX-071 removed the
 replay-input part, the remaining `hbl` tails credited to it (`11k_1D` 20.28 m, `lab_sea_6mo` 21.7 m, `lab_sea` 999 steps
-52.9 m, `global_oce_latlon` 3.09 m) were the Jerlov water type: they fall to roundoff, or for `11k_1D` to 10.15 m, whose
+52.9 m, `global_oce_latlon` 3.09 m in its first 5 steps) were the Jerlov water type: in those windows they fall to roundoff, or for `11k_1D` to 10.15 m, whose
 measured candidate is the unported KPPuseSWfrac3D branch (above). The mechanism is real in principle but is not the
 measured cause of any figure in this document.
 
@@ -621,10 +650,13 @@ this capture: its replay is bit-identical before and after, so the 8 cells stay.
 
 *1DMIX-080 (Jerlov type IA, see "Mechanisms"): the residual figures below (`hbl` max 3.09 m, 62 / 1,136 mixing cells,
 `ghat` 115.97 and its stable/unstable flip, the `bfsfc` difference of open issue 1DMIX-078) predate it and were the
-water type. First 5 steps now: 0 cells above 1% in any field, `hbl` max 1.9e-7 m, `visc_az` / `diff_kz` / `ghat` max_abs
-4.8e-8 / 1.4e-7 / 1.2e-6, `bfsfc` sign mismatches 355 -> 0; the largest of these sit in the 19 ocean column-steps
-(6 distinct columns) with `hbl` > 200 m in both models, 11 of which have a nonzero `bfsfc` difference (the `swfrac.F:99`
-cut-off, open issue 1DMIX-085). The `keep_mitgcm_bugs` figures below (33.9 m -> 3.09 m and so on) are a separate,
+water type. After 1DMIX-080 the first 5 steps had 0 cells above 1% in any field, `hbl` max 1.9e-7 m, `visc_az` / `diff_kz` /
+`ghat` max_abs 4.8e-8 / 1.4e-7 / 1.2e-6 and `bfsfc` sign mismatches 355 -> 0; the largest of those differences sat in the 19
+ocean column-steps (6 distinct columns) with `hbl` > 200 m in both models, 11 of which had a nonzero `bfsfc` difference (the
+`swfrac.F:99` cut-off). 1DMIX-085 added that cut-off: first 5 steps now `hbl` max 9.3e-12 m, `visc_az` / `diff_kz` / `ghat`
+max_abs 3.0e-14 / 1.2e-13 / 1.1e-13, `bfsfc` exact at every `hbl` > 200 m column-step (also over all 720 steps; the 720-step
+remainder, one column at up to 9.1e-3 m in `hbl`, is in "Mechanisms"). The
+`keep_mitgcm_bugs` figures below (33.9 m -> 3.09 m and so on) are a separate,
 historical A/B measured 2026-09-28 under 1DMIX-057, before 1DMIX-080, with the then-default Jerlov type IB; they stand as
 measured then, and the `False` side was not re-measured under IA.*
 
@@ -967,7 +999,10 @@ exercise and this port, not open action items:
 - **The Rib/Ricr hard threshold means no `hbl` agreement bound can be made
   arbitrarily tight** (1DMIX-071: much of the multi-column `hbl` tail once credited to it was the
   replay-input effect; 1DMIX-080: the rest was the Jerlov water type -- `lab_sea`, `lab_sea_6mo`, `seaice_obcs` and
-  `global_oce_latlon` now agree to within 2e-7 m, and the single-column `11k_1D` maximum fell from 20.28 m to 10.15 m,
+  `global_oce_latlon` agree to within 2e-7 m over the windows replayed (`lab_sea` all 999 steps 3.6e-9 m, `lab_sea_6mo`
+  first 100 steps 9.7e-11 m, `seaice_obcs` 5 steps 3.6e-15 m, `global_oce_latlon` first 5 steps 1.9e-7 m after 1DMIX-080
+  and 9.3e-12 m after 1DMIX-085); over all 720 `global_oce_latlon` steps one partial-depth column, (i, j) = (26, 3), differs
+  by up to 9.1e-3 m (steps 8-76, not root-caused, unchanged by 1DMIX-085), and the single-column `11k_1D` maximum fell from 20.28 m to 10.15 m,
   1 of 11,000 timesteps above 5 m, with the unported KPPuseSWfrac3D branch as its measured candidate; no remaining
   figure is attributed to this mechanism by measurement). Because `hbl` is defined by a threshold crossing, any
   two independent floating-point implementations of the same physics will

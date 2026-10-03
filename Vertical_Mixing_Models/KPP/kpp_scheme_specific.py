@@ -152,7 +152,9 @@ def diagnose_bl_depth(
         # i.e. at depth -hbf*zgrid(kl); the port passes -zgrid[kl] (no hbf factor), which is
         # the same number only for hbf = 1 (MITgcm's default, kpp_readparms.F:116, and the
         # value in every capture). The water type is MITgcm's hard-coded IA by default
-        # (KPPParameters.jerlov_water_type, swfrac.F line 92; 1DMIX-080).
+        # (KPPParameters.jerlov_water_type, swfrac.F line 92; 1DMIX-080). swfrac returns exactly 0
+        # below 200 m (swfrac.F:99-100, 1DMIX-085), here at -zgrid[kl] > 200 m; MITgcm's test is on
+        # hbf*(-zgrid(kl)), the same for hbf = 1 (hbf at the trial level: 1DMIX-130).
         if config.shortwave_heating and config.select_penetrating_sw >= 1:
             frac_absorbed = 1.0 - swfrac(-zgrid[kl], config.jerlov_water_type)[0]
             bfsfc = bo + bosol * frac_absorbed

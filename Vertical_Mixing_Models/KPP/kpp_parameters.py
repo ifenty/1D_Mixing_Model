@@ -179,8 +179,9 @@ class KPPParameters:
     # cuts those same worst-case disagreements to 3.09 m / 0.096 / 0.110
     # (both sides measured 2026-09-28 under 1DMIX-057, before 1DMIX-080, with
     # the then-default Jerlov water type IB; with IA and True the same capture
-    # now measures 1.9e-7 m / 4.8e-8 / 1.4e-7, 2026-10-03; the False side was
-    # not re-measured under IA) --
+    # measured 1.9e-7 m / 4.8e-8 / 1.4e-7 on 2026-10-03 (1DMIX-080), and with
+    # swfrac's 200 m cut-off added 9.3e-12 m / 3.0e-14 / 1.2e-13 (1DMIX-085,
+    # 2026-10-03); the False side was not re-measured under IA) --
     # a 3.5x-11x improvement in fidelity to the real Fortran oracle this
     # project exists to validate against, on a real (not idealized-scenario)
     # capture. The other 3 real captures this project regression-tests

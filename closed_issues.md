@@ -24,6 +24,38 @@ Positive. Preserve the evidence and the scientific bounds of the conclusion.
 <Commit SHA or noncommit reason; iteration history/evidence references; related blockers>
 ```
 
+## RESOLVED: the port's `swfrac` had no 200 m cut-off — it now applies `swfrac.F`'s cut-off exactly
+
+**Date Identified**: 2026-10-02T21:47:00Z
+**Date Resolved**: 2026-10-03T09:12:00Z
+**Status**: Resolved
+**UUID**: 1DMIX-085
+
+### Issue
+MITgcm's `swfrac.F` sets the shortwave fraction to exactly zero below 200 m; the port's `kpp_shortwave.py::swfrac` had no cut-off. After 1DMIX-080, the remaining global_oce_latlon differences (first 5 steps) sat in the 19 ocean column-steps with `hbl` > 200 m. Source: FABLE_FINDS.md §A10.
+
+### Resolution and justification
+`swfrac` applies the cut-off after the unchanged formula: `frac = np.where(-z < -200.0, 0.0, frac)`. This is `swfrac.F:98-100` exactly (`facz = fact*swdk; IF (facz .LT. -200.) swdk = 0`, strict, so exactly 200 m keeps the formula) at all three `bldepth` call sites (`kpp_routines.F` :508 with `hbf=1`, :703 and :839). Bob and Richard each read the stock source. Richard's Fortran emulation over 40,017 depths (including ±5 ulp around 200 m, NaN and ±inf), all five water types and both sign conventions found 0 mismatches.
+
+### Verification and remaining bounds
+- **Independent oracle:** the candidate `swfrac` equals MITgcm's captured `swatt` at every wet interface: 22,425 latlon interfaces below 200 m, and those of lab_sea, seaice_obcs and 1D_10.
+- **global_oce_latlon, first 5 steps:**
+  - `bfsfc` equals `bfsfc_final` exactly at all 19 deep column-steps (11 differed before, max 5.63e-14);
+  - `visc_az` / `diff_kz_s` / `ghat` / `hbl` max_abs went from 4.81e-8 / 1.38e-7 / 1.22e-6 / 1.89e-7 m to 3.0e-14 / 1.19e-13 / 1.11e-13 / 9.27e-12 m;
+  - Rib at the 290 m trial level is bit-equal with MITgcm's captured value in 85.2% of the 10,890 column-steps where that value is nonzero (0.56% before).
+- **global_oce_latlon, all 720 steps:** `bfsfc` is exact in all 27,057 deep column-steps (25,299 differed). Outside column (26,3) the `hbl` difference is at most 2.8e-9 m; it is at most 7.0e-12 m where `hbl` <= 200 m.
+- **Unchanged (byte-identical):** every other capture, because max `hbl` and the deepest shortwave-on scan level stay above 200 m, or penetrating shortwave is off. All six scenarios with both schemes, and GGL90, are also byte-identical.
+- **Tests:** 25 Jerlov/`swfrac` tests, including the boundary at the doubles around 200 m for every water type. Each new test fails with the pre-edit `swfrac` or a boundary mutant (`<=`, a cut at -201, a sign flip). Three latlon bounds were tightened, from 2e-6 to 1e-9 and 1e-12 (5-step window, stated in the docstrings); none widened.
+- **Remaining:**
+  - global_oce_latlon column (26,3), steps 8-76, `hbl` difference up to 9.1e-3 m. It is unchanged by this fix and not related to shortwave (1DMIX-132).
+  - 185 column-steps at the 290 m level where MITgcm's `bulk_ri` is exactly 0 and the port's is not (1DMIX-133).
+  - `hbf` != 1 at the trial level (1DMIX-130).
+- **Review:** round 0 REJECT on three documentation statements; round 1 APPROVE with empty must_fix.
+- **Checks:** full suite 323 passed, 3 skipped (pre-existing, 1DMIX-010).
+
+### Traceability
+`Vertical_Mixing_Models/KPP/kpp_shortwave.py::swfrac`; `Vertical_Mixing_Models/tests/test_kpp_jerlov_water_type.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md`; `docs/model_contract.md`. Related: 1DMIX-129, 1DMIX-132, 1DMIX-133.
+
 ## RESOLVED: KPP Jerlov water type defaulted to `"IB"`; MITgcm hard-codes type IA — the port now uses IA
 
 **Date Identified**: 2026-10-02T21:47:00Z

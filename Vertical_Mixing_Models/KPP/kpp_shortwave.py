@@ -11,8 +11,13 @@ model/src/swfrac.F (lines 92 and 94, both branches of `#ifdef ALLOW_CAL`;
 header line 23 "Parameter jwtype is hardcoded to 2 for time being"). No
 namelist parameter sets it, so no MITgcm capture records it; the port's
 default is therefore "IA" here and in `KPPParameters.jerlov_water_type`.
-The 200 m cut-off of swfrac.F:99-100 (fraction exactly 0 below 200 m) is not
-reproduced yet (open issue 1DMIX-085).
+
+200 m cut-off (1DMIX-085): swfrac.F:98-100 sets the fraction to exactly 0
+when `facz .LT. -200.` (`facz = fact*swdk`, the negative distance from the
+surface), i.e. strictly deeper than 200 m; at exactly 200 m the double
+exponential is kept. `swfrac` applies the same test to `facz = -depth_m`, so
+every caller (the three bldepth call sites in `kpp_scheme_specific.py::
+diagnose_bl_depth`, MITgcm kpp_routines.F:508/703/839) gets it.
 """
 
 import numpy as np
@@ -32,10 +37,12 @@ def swfrac(depth_m, water_type: str = "IA"):
     """
     Fraction of shortwave irradiance remaining at depth `depth_m` (>= 0).
 
-    MITgcm swfrac.F:102-103, `rfac*exp(facz/a1) + (1-rfac)*exp(facz/a2)` with
-    `facz = -depth_m` (MITgcm's `fact*swdk`, the negative distance from the
-    surface); identical operation order, bit-identical to MITgcm's own SWFRAC
-    output above 200 m for type IA (1DMIX-080).
+    MITgcm swfrac.F:97-105: `facz = fact*swdk` (here `facz = -depth_m`, the
+    negative distance from the surface); exactly 0 if `facz < -200` (lines
+    99-100, strict: depth > 200 m; 1DMIX-085), else
+    `rfac*exp(facz/a1) + (1-rfac)*exp(facz/a2)` (lines 102-103) with identical
+    operation order, bit-identical to MITgcm's own SWFRAC output for type IA
+    (1DMIX-080; captured `swatt`, including its exact zeros below 200 m).
 
     Parameters
     ----------
@@ -48,7 +55,8 @@ def swfrac(depth_m, water_type: str = "IA"):
     Returns
     -------
     np.ndarray
-        Fraction of shortwave still present at depth (1 at surface, -> 0 with depth).
+        Fraction of shortwave still present at depth (1 at surface, decreasing
+        with depth, exactly 0 below 200 m).
     """
     if water_type not in JERLOV_TABLE:
         raise ValueError(
@@ -57,4 +65,6 @@ def swfrac(depth_m, water_type: str = "IA"):
     r, d1, d2 = JERLOV_TABLE[water_type]
     z = np.atleast_1d(np.asarray(depth_m, dtype=float))
     frac = r * np.exp(-z / d1) + (1.0 - r) * np.exp(-z / d2)
+    # swfrac.F:99-100, `IF ( facz .LT. -200. _d 0 ) swdk(i) = 0. _d 0` with facz = -depth_m (1DMIX-085).
+    frac = np.where(-z < -200.0, 0.0, frac)
     return frac

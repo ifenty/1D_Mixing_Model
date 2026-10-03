@@ -124,14 +124,23 @@ MITgcm expected values: `Vertical_Mixing_Models/tests/test_kpp_levels_below.py`.
 line 92, `jwtype=2`; no namelist entry, so no capture records it). Every capture built with penetrating shortwave
 (`selectPenetratingSW >= 1`: all but `global_ocean_90x40x15`) changed. On `lab_sea_6mo`, `seaice_obcs` and
 `global_oce_latlon` (and the full 999-step `lab_sea`), whose MITgcm runs call SWFRAC, the port now agrees with
-MITgcm to roundoff: 0 cells above 1% in every field, no exact-zero `ghat` cells, `hbl` within 2e-7 m, and the port's
-`bfsfc` equal to MITgcm's `bfsfc_final` in all but a few column-steps (largest difference 5.6e-14, at `hbl` > 200 m,
-the `swfrac.F:99` cut-off of open issue 1DMIX-085). The residual real gaps that earlier sections call "not
+MITgcm to roundoff in the windows replayed here (`global_oce_latlon`: its first 5 steps; over all 720 steps one column,
+(26, 3), keeps an `hbl` difference up to 9.1e-3 m, measured under 1DMIX-085): 0 cells above 1% in every field, no exact-zero `ghat` cells, `hbl` within 2e-7 m, and the port's
+`bfsfc` equal to MITgcm's `bfsfc_final` in all but a few column-steps (largest difference 5.6e-14 at the time, at
+`hbl` > 200 m: the `swfrac.F:99` cut-off, since added by 1DMIX-085, see below). The residual real gaps that earlier sections call "not
 root-caused" on those captures, and the `ghat`/`bfsfc` differences of open issues 1DMIX-076/078, were this. The
 single-column `11k_1D` / `1D_10` captures were built with `KPPuseSWfrac3D = 1`, a branch the port does not
 implement (MITgcm interpolates its precomputed SWFrac3D instead of calling SWFRAC); they improved (11k_1D `hbl`
 max 20.28 -> 10.15 m, `ghat` max_abs 1321.7 -> 30.87) and keep a residual. Figures marked 1DMIX-080 in the
 docstrings below are the new ones; bounds were tightened to existing conventions, none widened.
+
+**1DMIX-085 update (2026-10-03)**: `swfrac` now has MITgcm's 200 m cut-off (`swfrac.F:99-100`, fraction exactly 0
+when `facz < -200`, i.e. strictly below 200 m). Only `global_oce_latlon` changes among these replays (the only
+shortwave-on capture with `hbl` > 200 m: 19 ocean column-steps in 6 columns in the first 5 steps): there the port's
+`bfsfc` now equals MITgcm's `bfsfc_final` exactly at every `hbl` > 200 m column-step and the deep-column remainder
+went to roundoff (`ghat` max_abs 1.2e-6 -> 1.1e-13, `visc_az` 4.8e-8 -> 3.0e-14, `diff_kz_s` 1.4e-7 -> 1.2e-13,
+`hbl` 1.9e-7 -> 9.3e-12 m). Every other capture here is bit-identical: no `hbl` and no `kbl` level below 200 m
+(1D_10, 11k_1D, lab_sea, lab_sea_6mo, seaice_obcs) or no penetrating shortwave (90x40x15).
 
 Given this, the tests below:
 - Always test `hbl` (unaffected by the truncation defect even before this
@@ -922,11 +931,37 @@ def test_seaice_obcs_ghat_exact_zero_classes(result_seaice_obcs, ocean_mask_seai
 
 @pytest.fixture(scope='module')
 def result_global_oce_latlon():
+    """The replay, plus (1DMIX-085) the port's final `bfsfc` per column-step as `python_ds['bfsfc']`: the second
+    value returned by `KPP/kpp_scheme_specific.py::diagnose_bl_depth`, recorded at the call
+    `KPP/kpp_core_driver.py::KPPDriver.compute_mixing` makes once per wet column. The serial replay visits wet
+    columns in (t, i, j) order, so record n is the n-th wet column; each record's `hbl` is checked equal to the
+    replay's own `hbl` output there."""
     _require(DATA_GLOBAL_OCE_LATLON)
     _require(OUTPUTS_GLOBAL_OCE_LATLON)
+    import KPP.kpp_core_driver as kpp_core_driver
     inputs_ds = xr.open_dataset(DATA_GLOBAL_OCE_LATLON).isel(
         time=slice(0, _GLOBAL_OCE_LATLON_N)).load()
-    python_ds = run_python_kpp_on_dataset(inputs_ds, verbose=False)
+    records = []
+    original = kpp_core_driver.diagnose_bl_depth
+
+    def recording(*args, **kwargs):
+        out = original(*args, **kwargs)
+        records.append((float(out[0]), float(out[1])))
+        return out
+
+    kpp_core_driver.diagnose_bl_depth = recording
+    try:
+        python_ds = run_python_kpp_on_dataset(inputs_ds, verbose=False)
+    finally:
+        kpp_core_driver.diagnose_bl_depth = original
+    hbl = python_ds['hbl'].values
+    wet = np.argwhere(np.isfinite(hbl))
+    assert len(records) == len(wet)
+    rec = np.asarray(records)
+    assert np.array_equal(rec[:, 0], hbl[tuple(wet.T)]), "bfsfc record order does not match the replay"
+    bfsfc = np.full(hbl.shape, np.nan)
+    bfsfc[tuple(wet.T)] = rec[:, 1]
+    python_ds['bfsfc'] = (python_ds['hbl'].dims, bfsfc)
     mitgcm_ds = xr.open_dataset(OUTPUTS_GLOBAL_OCE_LATLON).isel(
         time=slice(0, _GLOBAL_OCE_LATLON_N)).load()
     return inputs_ds, python_ds, mitgcm_ds
@@ -1011,11 +1046,19 @@ def test_global_oce_latlon_hbl(result_global_oce_latlon, ocean_mask_global_oce_l
 
     **1DMIX-080 (2026-10-03)**: the gap was the port's former Jerlov water type IB (MITgcm hard-codes IA,
     swfrac.F line 92): median 1.20e-3 -> 0 m, max 3.092 -> 1.9e-7 m, none above 1 m (was 4). The largest
-    remaining differences sit in the 19 ocean column-steps (6 distinct columns) with `hbl` > 200 m in both
-    models, 11 of which have a nonzero `bfsfc` difference; there MITgcm's swfrac is exactly 0 and the port's
-    is not (swfrac.F:99, open issue 1DMIX-085); elsewhere <= 1.5e-7 m. Bounds tightened:
+    remaining differences then sat in the 19 ocean column-steps (6 distinct columns) with `hbl` > 200 m in both
+    models, 11 of which had a nonzero `bfsfc` difference; there MITgcm's swfrac is exactly 0 and the port's
+    was not (swfrac.F:99; ported by 1DMIX-085, below); elsewhere <= 1.5e-7 m. Bounds tightened:
     median 0.005 -> 5e-4 (the 90x40x15 convention), max 8.0 -> 2e-6 (the roundoff convention of
     `test_global_ocean_90x40x15_two_wet_level_columns`; measured 1.9e-7).
+
+    **1DMIX-085 (2026-10-03)**: with swfrac.F's 200 m cut-off in the port, max 1.9e-7 -> 9.3e-12 m; median 0
+    (unchanged). The port's `hbl` changed in 19 column-steps: 11 of the 19 with `hbl` > 200 m, and 8 with
+    `hbl` <= 200 m whose first level below `hbl` (290 m) is a trial level below 200 m (Rib scan,
+    kpp_routines.F:508). The `hbl` > 200 m class itself: `test_global_oce_latlon_bfsfc_and_deep_boundary_layers`.
+    Bound tightened: max 2e-6 -> 1e-9 (the `ghat` bound of `test_global_ocean_90x40x15_two_wet_level_columns`;
+    measured 9.27e-12 m). The bound holds for this 5-step window only: over all 720 steps (measured, not tested) the
+    `hbl` > 200 m column-steps reach 2.76e-9 m and column (26, 3) 9.1e-3 m (steps 8-76, not the cut-off).
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values)[
@@ -1025,13 +1068,13 @@ def test_global_oce_latlon_hbl(result_global_oce_latlon, ocean_mask_global_oce_l
     max_diff = float(np.max(diff))
     assert median < 5e-4, f"global_oce_latlon hbl median diff {median:.4g} m regressed"
     assert frac_gt5m < 0.001, f"global_oce_latlon hbl fraction >5m diff {frac_gt5m:.4%} regressed"
-    assert max_diff < 2e-6, f"global_oce_latlon hbl max diff {max_diff:.4g} m regressed"
+    assert max_diff < 1e-9, f"global_oce_latlon hbl max diff {max_diff:.4g} m regressed"
 
 
 @pytest.mark.parametrize('field,median_bound,max_abs_bound,frac_gt1pct_bound', [
-    ('visc_az', 1e-5, 2e-6, 0.001),
-    ('diff_kz_s', 1e-5, 2e-6, 0.001),
-    ('diff_kz_t', 1e-5, 2e-6, 0.001),
+    ('visc_az', 1e-5, 1e-12, 0.001),
+    ('diff_kz_s', 1e-5, 1e-12, 0.001),
+    ('diff_kz_t', 1e-5, 1e-12, 0.001),
 ])
 def test_global_oce_latlon_mixing(result_global_oce_latlon, ocean_mask_global_oce_latlon,
                                    field, median_bound, max_abs_bound, frac_gt1pct_bound):
@@ -1070,10 +1113,17 @@ def test_global_oce_latlon_mixing(result_global_oce_latlon, ocean_mask_global_oc
 
     **1DMIX-080 (2026-10-03)**: the rest was the port's former Jerlov water type IB (MITgcm hard-codes IA,
     swfrac.F line 92; the bfsfc difference of 1DMIX-078): `visc_az` 62 -> 0 cells above 1%, max_abs 0.0770 ->
-    4.8e-8; `diff_kz_s`/`_t` 1,136 -> 0, max_abs 0.0945 -> 1.4e-7; the maxima sit in the `hbl` > 200 m
-    column-steps (swfrac.F:99 cut-off, 1DMIX-085), elsewhere <= 3.2e-10 / 5.6e-10. Bounds tightened: max_abs
-    0.1 -> 2e-6 (the roundoff convention of `test_global_ocean_90x40x15_two_wet_level_columns`), the `diff_kz`
-    fraction 0.01 -> 0.001 (this test's `visc_az` convention); measured 1.4e-7 and 0.
+    4.8e-8; `diff_kz_s`/`_t` 1,136 -> 0, max_abs 0.0945 -> 1.4e-7; the maxima then sat in the `hbl` > 200 m
+    column-steps (swfrac.F:99 cut-off, ported by 1DMIX-085, below), elsewhere <= 3.2e-10 / 5.6e-10. Bounds tightened:
+    max_abs 0.1 -> 2e-6 (the roundoff convention of `test_global_ocean_90x40x15_two_wet_level_columns`), the
+    `diff_kz` fraction 0.01 -> 0.001 (this test's `visc_az` convention); measured 1.4e-7 and 0.
+
+    **1DMIX-085 (2026-10-03)**: with swfrac.F's 200 m cut-off, `visc_az` max_abs 4.8e-8 -> 3.0e-14, `diff_kz_s`/`_t`
+    1.4e-7 -> 1.19e-13 (63 cells of each field changed, 39 of them in the `hbl` > 200 m column-steps); 0 cells above 1%,
+    median 0 (unchanged). Bound tightened: max_abs 2e-6 -> 1e-12 (the mixing-coefficient tolerance of the
+    `test_kpp_levels_below.py` MITgcm witnesses, `_WITNESS_TOL`; measured 3.0e-14 / 1.19e-13). The bound holds for this
+    5-step window only: over all 720 steps (measured, not tested) the `hbl` > 200 m column-steps reach 5.2e-12 / 1.34e-11
+    and column (26, 3) 1.75e-7 / 1.95e-7.
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff, rel = _mixing_diff_rel(mitgcm_ds[field].values, python_ds[field].values,
@@ -1150,11 +1200,18 @@ def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_
 
     **1DMIX-080 (2026-10-03)**: the stable/unstable disagreement above, and the 2 remaining exact-zero cells,
     were the port's former Jerlov water type IB: with MITgcm's hard-coded IA (swfrac.F line 92) the port's
-    `bfsfc` equals MITgcm's `bfsfc_final` in 11,477 of 11,575 column-steps (sign mismatches 355 -> 0),
-    median_abs 1.37e-3 -> 0, max_abs 115.97 -> 1.2e-6 (in an `hbl` > 200 m column-step, swfrac.F:99 cut-off,
-    1DMIX-085), 0 cells above 1% (was 9), 0 exact-zero cells (was 2). Bounds tightened: median 0.01 -> 1e-3
-    (the 90x40x15 `ghat` convention), max_abs 140 -> 2e-6 (the roundoff convention of
+    `bfsfc` equalled MITgcm's `bfsfc_final` in 11,477 of 11,575 column-steps (sign mismatches 355 -> 0; since
+    1DMIX-085 in 11,496, see `test_global_oce_latlon_bfsfc_and_deep_boundary_layers`), median_abs 1.37e-3 -> 0,
+    max_abs 115.97 -> 1.2e-6 (then in an `hbl` > 200 m column-step, swfrac.F:99 cut-off, ported by 1DMIX-085), 0 cells above 1% (was 9), 0 exact-zero cells (was 2). Bounds tightened: median 0.01
+    -> 1e-3 (the 90x40x15 `ghat` convention), max_abs 140 -> 2e-6 (the roundoff convention of
     `test_global_ocean_90x40x15_two_wet_level_columns`; measured 1.2e-6).
+
+    **1DMIX-085 (2026-10-03)**: with swfrac.F's 200 m cut-off, max_abs 1.22e-6 -> 1.11e-13 (now in an `hbl` <= 200 m
+    column-step; 9.0e-14 in the `hbl` > 200 m ones; 52 wet cells changed, 36 of them in those column-steps);
+    median 0. Bound tightened: max_abs 2e-6 ->
+    1e-12 (the `ghat` tolerance of the `test_kpp_levels_below.py` MITgcm witnesses, `_WITNESS_TOL`; measured
+    1.11e-13). The bound holds for this 5-step window only: over all 720 steps (measured, not tested) the `hbl` > 200 m
+    column-steps reach 3.1e-12.
     """
     _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
     diff, _rel = _mixing_diff_rel(mitgcm_ds['ghat'].values, python_ds['ghat'].values,
@@ -1162,7 +1219,7 @@ def test_global_oce_latlon_ghat(result_global_oce_latlon, ocean_mask_global_oce_
     median = float(np.median(diff))
     max_abs = float(np.max(diff))
     assert median < 1e-3, f"global_oce_latlon ghat: median abs diff {median:.4g} regressed"
-    assert max_abs < 2e-6, f"global_oce_latlon ghat: max abs diff {max_abs:.4g} regressed"
+    assert max_abs < 1e-12, f"global_oce_latlon ghat: max abs diff {max_abs:.4g} regressed"
 
 
 def test_global_oce_latlon_ghat_exact_zero_classes(result_global_oce_latlon, ocean_mask_global_oce_latlon):
@@ -1175,6 +1232,39 @@ def test_global_oce_latlon_ghat_exact_zero_classes(result_global_oce_latlon, oce
     py = python_ds['ghat'].values
     assert int(((mit == 0.0) & (py != 0.0) & wet).sum()) == 0
     assert int(((mit != 0.0) & (py == 0.0) & wet).sum()) == 0
+
+
+def test_global_oce_latlon_bfsfc_and_deep_boundary_layers(result_global_oce_latlon, ocean_mask_global_oce_latlon):
+    """1DMIX-085: the column-steps with `hbl` > 200 m, where swfrac.F:99-100 sets the shortwave fraction to exactly
+    0 (bldepth calls SWFRAC with `fact = -1` on `hbl`, kpp_routines.F:703 and :839), and the port's final `bfsfc`
+    (open issue 1DMIX-078's quantity; `python_ds['bfsfc']`, recorded by the fixture) against MITgcm's captured
+    `bfsfc_final`. First 5 steps, measured 2026-10-03.
+
+    The class is exercised: 19 ocean column-steps in 6 distinct columns have `hbl` > 200 m, the same 19 in both
+    models. Before 1DMIX-085, 11 of the 19 had a nonzero `bfsfc` difference (max 5.63e-14, `bosol*swfrac_IA(hbl)`)
+    and they held this capture's maxima (`hbl` 1.9e-7 m, `visc_az` 4.8e-8, `diff_kz_s` 1.4e-7, `ghat` 1.2e-6). Now
+    the port's `bfsfc` equals MITgcm's in all 19, bit for bit (the absorbed fraction is exactly 1, so
+    `bfsfc = bo + bosol`), and there the fields differ by at most `hbl` 9.3e-12 m, `visc_az` 3.0e-14, `diff_kz_s`
+    1.19e-13, `ghat` 9.0e-14. Over all 11,575 column-steps `bfsfc` differs in 79 (was 98), every one with `hbl`
+    <= 200 m, max 2.6e-22 (was 5.63e-14). Bounds: exact for the deep class (as measured); 1e-9 m for `hbl` and 1e-12
+    for the mixing fields (the bounds of the latlon tests above); `bfsfc` overall 1e-20 (a new assertion; measured
+    2.65e-22, margin ~40x, about 10 ulp of the 1e-7 magnitudes involved). These bounds are for the 5-step window: over
+    all 720 steps (measured, not tested) the same class has `bfsfc` still exact in all 27,057 `hbl` > 200 m column-steps,
+    but reaches `hbl` 2.76e-9 m, `visc_az` 5.2e-12, `diff_kz_s` 1.34e-11, `ghat` 3.1e-12."""
+    _inputs_ds, python_ds, mitgcm_ds = result_global_oce_latlon
+    ocean = ocean_mask_global_oce_latlon
+    ph, mh = python_ds['hbl'].values, mitgcm_ds['hbl'].values
+    deep = ocean & (mh > 200.0)
+    assert np.array_equal(deep, ocean & (ph > 200.0))
+    assert int(deep.sum()) == 19
+    assert len({(i, j) for _t, i, j in np.argwhere(deep)}) == 6
+    pb, mb = python_ds['bfsfc'].values, mitgcm_ds['bfsfc_final'].values
+    assert np.array_equal(pb[deep], mb[deep])
+    assert float(np.abs(pb - mb)[ocean].max()) < 1e-20
+    assert float(np.abs(ph - mh)[deep].max()) < 1e-9
+    for field in ('visc_az', 'diff_kz_s', 'diff_kz_t', 'ghat'):
+        diff = np.abs(python_ds[field].values - mitgcm_ds[field].values)[deep]
+        assert float(diff.max()) < 1e-12, field
 
 
 # ========================================================================
@@ -1686,6 +1776,16 @@ _KPP_REPLAY_GOLDEN_080 = {
         _KPP_REPLAY_GOLDEN_075[('global_oce_latlon_720', 0, 0)][1],
         'bc5fe9b42924e02a783201118180e742837f3d81a3cfdd62fbd64894baf61a92'),
 }
+# Column-local replays whose digest 1DMIX-085 changed on purpose: key -> (digest before 1DMIX-085 = the 1DMIX-080
+# golden above, digest after), measured 2026-10-03 at the 1DMIX-085 edit (devel-loop scratch
+# `bob-1DMIX-085/compare_after.txt`). swfrac now returns exactly 0 below 200 m (swfrac.F:99-100); only this capture
+# has shortwave-on column-steps with `hbl` (or the first level below it) deeper than 200 m. The other three 1DMIX-080
+# digests (1D_10, seaice_obcs, lab_sea_1000 (0,1)) and the 90x40x15 one were measured unchanged.
+_KPP_REPLAY_GOLDEN_085 = {
+    ('global_oce_latlon_720', 0, 0): (
+        _KPP_REPLAY_GOLDEN_080[('global_oce_latlon_720', 0, 0)][1],
+        '937210f2969c5ecc84d9e6c69501702219e9f8ac128045e9732b1d892b894345'),
+}
 
 
 def _kpp_replay_digest(stem, lo, hi, **kw):
@@ -1704,10 +1804,13 @@ def _kpp_replay_digest(stem, lo, hi, **kw):
 def test_column_local_replay_changed_only_by_1dmix080_since_pre_1dmix071(key):
     """The two captures whose columns never enter the 1DMIX-075 regimes reproduced the pre-1DMIX-071 column-local
     replay bit for bit until 1DMIX-080; they now differ from it only by the Jerlov water type (both were built
-    with penetrating shortwave) and are pinned to the digest measured at the 1DMIX-080 edit."""
+    with penetrating shortwave) and are pinned to the digest measured at the 1DMIX-080 edit. The 1DMIX-085 cut-off
+    (swfrac exactly 0 below 200 m) does not move them: no `hbl` or `kbl` level below 200 m (not in
+    `_KPP_REPLAY_GOLDEN_085`)."""
     digest, _out = _kpp_replay_digest(*key, tracer_point_inputs=False)
     before, after = _KPP_REPLAY_GOLDEN_080[key]
     assert before == _KPP_REPLAY_GOLDEN[key]
+    assert key not in _KPP_REPLAY_GOLDEN_085
     assert digest != before
     assert digest == after
 
@@ -1717,26 +1820,30 @@ def test_column_local_replay_changed_only_by_1dmix075(key):
     """Captures with dry model levels below partial-depth columns: the column-local replay differs from the
     pre-1DMIX-071 digest (the 1DMIX-075 change: MITgcm's kbl scan, zeroed bottom/surface `diffus`) and is
     pinned to the digest measured at the 1DMIX-075 edit, or, for the captures built with penetrating
-    shortwave, to the digest measured at the 1DMIX-080 edit (the Jerlov water type; `_KPP_REPLAY_GOLDEN_080`).
-    Digest values are in `_KPP_REPLAY_GOLDEN_075` / `_KPP_REPLAY_GOLDEN_080`."""
+    shortwave, to the digest measured at the 1DMIX-080 edit (the Jerlov water type; `_KPP_REPLAY_GOLDEN_080`),
+    and for global_oce_latlon (shortwave-on column-steps with `hbl` > 200 m) to the digest measured at the
+    1DMIX-085 edit (swfrac.F's 200 m cut-off; `_KPP_REPLAY_GOLDEN_085`).
+    Digest values are in `_KPP_REPLAY_GOLDEN_075` / `_KPP_REPLAY_GOLDEN_080` / `_KPP_REPLAY_GOLDEN_085`."""
     before, after = _KPP_REPLAY_GOLDEN_075[key]
     digest, _out = _kpp_replay_digest(*key, tracer_point_inputs=False)
     assert digest != before
-    if key in _KPP_REPLAY_GOLDEN_080:
-        assert _KPP_REPLAY_GOLDEN_080[key][0] == after
-        assert digest != after
-        after = _KPP_REPLAY_GOLDEN_080[key][1]
+    for later in (_KPP_REPLAY_GOLDEN_080, _KPP_REPLAY_GOLDEN_085):
+        if key in later:
+            assert later[key][0] == after
+            assert digest != after
+            after = later[key][1]
     assert digest == after
 
 
 def test_tracer_point_replay_changes_multi_column_results_but_not_the_cold_start_step():
     """Default mode differs from the column-local digest on the multi-column captures with velocity
     (seaice_obcs) and is identical to the column-local replay where velocities are all zero (latlon step 0,
-    cold start; since 1DMIX-080 both are the post-1DMIX-080 digest, before that the post-1DMIX-075 one)."""
+    cold start; since 1DMIX-085 both are the post-1DMIX-085 digest, from 1DMIX-080 to 1DMIX-085 the post-1DMIX-080
+    one, before that the post-1DMIX-075 one)."""
     d_new, _ = _kpp_replay_digest('seaice_obcs_1dmix034', 0, 4)
     assert d_new != _KPP_REPLAY_GOLDEN_080[('seaice_obcs_1dmix034', 0, 4)][1]
     d0, _ = _kpp_replay_digest('global_oce_latlon_720', 0, 0)
-    assert d0 == _KPP_REPLAY_GOLDEN_080[('global_oce_latlon_720', 0, 0)][1]
+    assert d0 == _KPP_REPLAY_GOLDEN_085[('global_oce_latlon_720', 0, 0)][1]
 
 
 @pytest.mark.parametrize('flag', ['estimate_uref', 'smooth_dvsq', 'smooth_dens', 'smooth_visc', 'smooth_diff'])

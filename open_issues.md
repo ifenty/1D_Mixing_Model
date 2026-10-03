@@ -203,30 +203,6 @@ Use MITgcm's threshold and floor with the column's top-cell thickness.
 
 Acceptance: a weak-wind test (`tau` below threshold, two top-cell thicknesses) reproduces `SQRT(p5*phepsi*drF(1))`. Scenarios are bit-identical, or each change is counted.
 
-## UNRESOLVED: the port's `swfrac` has no 200 m cut-off
-
-**Date Identified**: 2026-10-02T21:47:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-085
-**Anchors**: `Vertical_Mixing_Models/KPP/kpp_shortwave.py::swfrac`
-
-### Issue or research question
-MITgcm's `swfrac.F` (line 99) sets the shortwave fraction to exactly zero below 200 m. The port's `swfrac` has no such cut-off, so it returns a tiny non-zero fraction where MITgcm has an exact zero.
-
-### Evidence
-FABLE_FINDS.md §A10 (library review, 2026-10-02; the owner directed acceptance as correct). The port file was re-read on 2026-10-02 and has no cut-off. The effect has not been measured.
-
-### Scientific or engineering impact
-This matters for bit-identity, for exact-zero tests below 200 m, and possibly for `bfsfc` in deep boundary layers. Measured after 1DMIX-080 (water type IA): on global_oce_latlon (first 5 steps) the remaining port-versus-MITgcm differences sit in the 19 ocean column-steps (6 columns) with `hbl` > 200 m, 11 of them with a nonzero `bfsfc` difference (max 5.63e-14), `ghat` max_abs 1.2e-6; at a column with `hbl` 223.7 m the port's `bfsfc` differs by exactly `bosol*swfrac_IA(hbl)` (Richard, 1DMIX-080). It is a candidate contributor to 1DMIX-078 and to the exact-zero `ghat` cells in 1DMIX-076.
-
-### Proposed action and acceptance
-Add the cut-off exactly as `swfrac.F` line 99 has it, including the comparison's direction and the depth's sign convention. Resolve it with or after 1DMIX-080.
-
-Acceptance:
-- a test shows an exact 0 just below 200 m and the unchanged value above;
-- the KPP replays are re-measured, with each changed cell counted;
-- no tolerance is widened.
-
 ## UNRESOLVED: GGL90 `sqrt_two = np.sqrt(2.0)` is not MITgcm's truncated `SQRTTWO` literal
 
 **Date Identified**: 2026-10-02T21:47:00Z
@@ -1182,6 +1158,8 @@ The 11k_1D and 1D_10 captures were built with `KPPuseSWfrac3D=1`: it is in the c
 - **Bob:** MITgcm's `bfsfc_final` on 11k_1D equals that branch, evaluated at MITgcm's `hbl`, bit for bit at all 11,000 steps.
 - **Richard:** found the same independently on 11,000 of 11,000 steps, and 10 of 10 on 1D_10, including steps he chose (777, 2350, 5003, 9999). The analytic IA formula matches only 61 of 11,000. With the branch patched into a scratch replay at the trial level (`:494-496`) and the `hbl` level (`:691-697`, `:830-833`), both captures agree to roundoff: 11k_1D `hbl` max 8.9e-16 m, 0 cells above 1%, `ghat` max_abs 0; 1D_10 `hbl` max 0. Scratch: devel-loop/loop_state/scratch/a325d9f09d6c933c3/swfrac3d_*.txt.
 
+After 1DMIX-085 (2026-10-03), the port's `swfrac(d, "IA")` equals MITgcm's captured `swatt` at every wet interface, including the exact zeros below 200 m. So the port can form the 3-D field with its own `swfrac`, as `ini_forcing.F` does. In the branch, the interpolated value at `hbl` is not cut at 200 m: the cut-off acts on the precomputed field, not on the interpolation. This is from reading the source (Bob, 1DMIX-085), not yet measured.
+
 ### Scientific or engineering impact
 This is the whole remaining residual on the two single-column KPP captures after 1DMIX-080: 11k_1D has 85 / 88 cells above 1%, `hbl` max 10.15 m, `ghat` max_abs 30.87, and one exact-zero-class cell at t=2350.
 
@@ -1235,3 +1213,50 @@ Free-running scenario runs with penetrating shortwave on get a different non-loc
 Port `KPPfrac` and its use in the non-local term, or refuse penetrating shortwave in the free-running driver until it is ported.
 
 Acceptance: a test with penetration on matches a hand-traced `kpp_calc.F` / `kpp_transport_t.F` value, and scenarios with penetration off are bit-identical.
+
+## UNRESOLVED: global_oce_latlon column (26,3) diverges in `hbl` over steps 8-76, starting from the replay's `dbloc` input
+
+**Date Identified**: 2026-10-03T09:12:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-132
+**Anchors**: `MITgcm_to_Python_port_verification/scripts/run_kpp_from_netcdf_input.py`; `Vertical_Mixing_Models/KPP/kpp_scheme_specific.py::diagnose_bl_depth`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
+
+### Issue or research question
+After 1DMIX-080 and 1DMIX-085, the only global_oce_latlon column with an `hbl` difference above 2.8e-9 m over all 720 steps is (i, j) = (26, 3). It is a partial-depth column: 11 of 15 levels wet, `hbl` about 26 m, with the scan stopping at the 85 m level. 47 column-steps, at steps 8-76, differ by more than 1e-6 m, up to 9.12e-3 m. This column carries the latlon mixing maxima (`visc_az` 1.75e-7, `diff_kz` 1.95e-7) and the `bfsfc` maximum (7.6e-13). It is outside the tests' 5-step window.
+
+### Evidence
+1DMIX-085:
+- **Bob** located the column; it is byte-identical before and after 1DMIX-085.
+- **Richard** characterised it from the capture and one replay (devel-loop/loop_state/scratch/aa9fdff1b3e693b29/findings.md). The first difference is at step 8, in the `dbloc` the replay passes at 85 and 170 m: 6.6099e-4 against 6.6967e-4. `dVsq` and `shear_sq` are equal. The difference flows into `Ritop`, Rib(85 m), `hbl` and `bfsfc`. It is not related to shortwave.
+
+### Scientific or engineering impact
+This is the last known non-roundoff `hbl` difference on global_oce_latlon. It could be a replay-input difference (how `dbloc` is formed or fed for a partial-depth column) or a port difference upstream of `bldepth`.
+
+### Proposed action and acceptance
+Reduce (26,3) at step 8 to a single-column witness. Trace how MITgcm forms `dbloc` at 85 and 170 m (`kpp_calc.F`, the EOS call and masks for partial-depth cells) and how the replay forms what it passes. Find the first differing quantity.
+
+Acceptance:
+- the cause is identified with file and line on both sides;
+- the port or replay is corrected to match, or the difference is documented as a capture limitation;
+- the 720-step latlon figures are re-measured.
+
+## UNRESOLVED: at the 290 m trial level, MITgcm's captured `bulk_ri` is exactly 0 in 185 global_oce_latlon column-steps where the port's is nonzero
+
+**Date Identified**: 2026-10-03T09:12:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-133
+**Anchors**: `Vertical_Mixing_Models/KPP/kpp_scheme_specific.py::diagnose_bl_depth`; `MITgcm_to_Python_port_verification/scripts/parse_mitgcm_split.py`
+
+### Issue or research question
+In global_oce_latlon's first 5 steps, MITgcm's captured `bulk_ri` at the 290 m trial level is exactly 0 in 185 of 11,075 column-steps; the port's value there is nonzero. This was so before and after 1DMIX-085. It is unknown whether MITgcm actually computes 0 there (a mask or loop bound in `bldepth`, for example a level below the bottom or a scan that stops early) or whether the capture writes 0 for a value it never computed.
+
+### Evidence
+1DMIX-085: Bob's and Richard's measurements (cr1_remeasure.txt; Richard's round-1 findings). The 290 m Rib bit-equality figure (85.2%) excludes these 185 column-steps.
+
+### Scientific or engineering impact
+If MITgcm computes 0, the port differs in `bldepth`'s scan for those columns. If it is a capture artifact, the comparison statistic should exclude them by rule rather than by note.
+
+### Proposed action and acceptance
+Characterise the 185 column-steps: depth, wet levels, `kbl`, and whether 290 m is below `hbl` or the bottom. Read where `kpp_routines.F` sets or skips Rib at a level, and where the instrumentation writes `bulk_ri`.
+
+Acceptance: the cause is identified with file and line, and the port is corrected or the statistic excludes them by a documented rule.
