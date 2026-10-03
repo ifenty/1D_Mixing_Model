@@ -1341,3 +1341,35 @@ A reviewer verdict that silently never enters the record. The coordinator either
 
 ### Expected Effect
 No reviewer or implementer verdict is lost silently.
+
+---
+
+## 🔴 PROPOSED: a process-evidence script committed mid-iteration enters the active issue's documentation inventory
+
+**Date Identified**: 2026-10-03  05:40
+**Status**: Proposed
+**UUID**: TEAM-INVENTORY-ASSESSMENT-SCRIPTS-001
+**Category**: process_interference
+**Severity**: Low
+**Assessment**: devel-loop/self-improvement/assessments/2026-10-03-native-stop-missed/assessment.md
+**Anchors**: tools/esx/project.py; tools/esx/doc_inventory.py
+
+### Issue
+In 1DMIX-080, Arch committed a process-evidence directory mid-iteration (e719055). It contained `assessment.md` and a Python timing script, `time_reference_check.py`. The Markdown file was not inventoried, but the `.py` file was. It therefore appeared in the issue's documentation plan as a changed target, and the implementer had to give it a judgment (`reviewed_unchanged`). The reviewer then spent a spot-check on it.
+
+### Evidence
+1DMIX-080 correction round 1:
+- Bob's report: "your commit e719055 added … time_reference_check.py after the issue baseline, so it now appears in 1DMIX-080's documentation inventory";
+- Richard's round-1 report: "time_reference_check.py … reviewed_unchanged is correct … not part of this change".
+
+### Potential Impact
+Small per occurrence: one judgment and one spot-check. But any process evidence written as code during an iteration widens the reviewed set with files unrelated to the issue.
+
+### Proposed Fix
+Treat `devel-loop/self-improvement/**` as administrative for the documentation inventory, as Markdown there already is. Also, in ARCHITECT.md, have Arch commit process evidence between iterations or store it as data rather than `.py`.
+
+### Acceptance Criteria
+A `.py` file under `devel-loop/self-improvement/assessments/` added during an iteration does not appear in that iteration's documentation inventory.
+
+### Expected Effect
+Process bookkeeping no longer adds work to an implementer's documentation plan.

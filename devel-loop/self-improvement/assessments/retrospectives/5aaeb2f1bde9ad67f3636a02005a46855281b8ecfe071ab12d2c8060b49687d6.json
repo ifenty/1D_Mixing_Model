@@ -1,0 +1,447 @@
+{
+  "retrospective": {
+    "accounting": {
+      "path": "devel-loop/loop_state/accounting/c1654ab049ea0ae2539ea8cc88b0e33ba053ad81476dcfd334460fd5f610086a.json",
+      "sha256": "c1654ab049ea0ae2539ea8cc88b0e33ba053ad81476dcfd334460fd5f610086a"
+    },
+    "carry_forward": [
+      "If a native stop does not appear in dispatch_log.jsonl after the host reports the agent finished, rebuild the event from its transcript and replay it through hooks.py subagent-stop; do not wait on status."
+    ],
+    "closes_timestamp": "2026-10-03T03:50:41.019805+00:00",
+    "confirmations": [
+      {
+        "category": "verification_gap",
+        "summary": "The 1.6.3 implementer brief now requires tools/esx/audit.py after the last edit; Bob ran it and reported PASS verbatim in both rounds, and no map problem reached review.",
+        "evidence": "bob-brief-1DMIX-080.txt '# Evidence' section; Bob footers round 0 and 1: audit PASS"
+      },
+      {
+        "category": "evidence_integrity",
+        "summary": "The 1.6.3 on-arrival footer reference check ran on every recorded native stop and found no broken reference (Bob r0/r1, Richard r1, Richard r0 via replay).",
+        "evidence": "dispatch_log.jsonl rows for a5630e0a20dd632a9 and a325d9f09d6c933c3 all status completed with no reference error"
+      },
+      {
+        "category": "independent_review",
+        "summary": "Distinct reviewer questions with the reviewer's own HEAD-versus-candidate replays reproduced every figure, caught the one miscount, and went beyond the implementer by patching KPPuseSWfrac3D into a scratch replay to prove the remaining residual's cause.",
+        "evidence": "Richard round 0 report: own replays reproduce all figures and digests; swfrac3d_replay.txt brings 11k_1D and 1D_10 to roundoff"
+      }
+    ],
+    "id": "1DMIX-080",
+    "iteration": 1,
+    "measured": {
+      "billing_status": "provider_reported_not_invoice_reconciled",
+      "coordinator": {
+        "provider_reported_usd": null,
+        "self_reported_minutes": 50.0,
+        "self_reported_usd": null,
+        "tool_measured_minutes": 10.4
+      },
+      "coordinator_coverage": "recorded",
+      "cost_scope": "cost_usd and span-based figures describe dispatched agents; coordinator cost is recorded separately: Arch self-reported 50 min, cost unknown (coordinator.self_reported; not added to cost_usd)",
+      "cost_usd": {
+        "bob": 0.0,
+        "richard": 0.0
+      },
+      "dispatches": {
+        "bob": 2,
+        "richard": 2
+      },
+      "rounds": {
+        "bob": 2,
+        "richard": 2
+      },
+      "span_minutes": 101,
+      "unknown_cost_event_ids": [
+        "786816dbb81049048544ff19031dc524",
+        "0d31f0019be24e64b20bc10001c6b10e",
+        "f64e70e44b5848589d72cff7866658e8",
+        "94608592181b49d49344c2d22cc594a1"
+      ]
+    },
+    "no_problem_reason": "",
+    "problems": [
+      {
+        "category": "evidence_integrity",
+        "summary": "Richard's native SubagentStop record never reached dispatch_log.jsonl and his inflight marker stayed, so status kept saying 'richard running' after he had finished; nothing reported the missing record.",
+        "evidence": "dispatch_log.jsonl tail had no richard row after his completion notification; replaying the event through hooks.py subagent-stop recorded it (completed, REJECT) in 3.27 s; reference_errors alone timed 9.6 s cold against the 15 s hook limit",
+        "minutes_lost": 12
+      },
+      {
+        "category": "figure_misstatement",
+        "summary": "The implementer wrote '11 column-steps with hbl > 200 m' where 11 was the count of deep column-steps whose bfsfc differs; there are 19 deep column-steps. It cost one correction round.",
+        "evidence": "Richard round 0 REJECT must_fix; Bob round 1 deep_count.txt: 19 ocean column-steps (6 columns), 11 with nonzero bfsfc difference; three passages corrected",
+        "minutes_lost": 15
+      },
+      {
+        "category": "process_interference",
+        "summary": "Arch's mid-iteration commit of a process-evidence Python script put it into the issue's documentation inventory, adding a judgment for Bob and a spot-check for Richard.",
+        "evidence": "commit e719055 time_reference_check.py; Bob round-1 report and Richard round-1 report both name it as reviewed_unchanged and not part of the change",
+        "minutes_lost": 3
+      }
+    ],
+    "schema_version": 3,
+    "solutions": [
+      {
+        "problem": 0,
+        "action": "filed",
+        "issue": "TEAM-NATIVE-STOP-MISSED-001"
+      },
+      {
+        "problem": 1,
+        "action": "fixed",
+        "reference": "fcf1297",
+        "reason": "The independent reviewer recounted from the capture and the replay, the implementer re-measured and corrected all three passages in round 1, and the reviewer confirmed the corrected counts before closeout."
+      },
+      {
+        "problem": 2,
+        "action": "filed",
+        "issue": "TEAM-INVENTORY-ASSESSMENT-SCRIPTS-001"
+      }
+    ],
+    "timestamp": "2026-10-03T05:33:38Z"
+  },
+  "accounting": {
+    "billing_status": "provider_reported_not_invoice_reconciled",
+    "by_phase": {
+      "closeout": {
+        "effort_seconds": 35.097541093826294,
+        "elapsed_seconds": 35.097541093826294,
+        "events": 3
+      },
+      "orientation": {
+        "effort_seconds": 0.8661472797393799,
+        "elapsed_seconds": 0.8661472797393799,
+        "events": 11
+      },
+      "verification": {
+        "effort_seconds": 887.5881459712982,
+        "elapsed_seconds": 887.5881459712982,
+        "events": 8
+      }
+    },
+    "by_role": {
+      "bob": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 2,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      },
+      "richard": {
+        "dispatches": 2,
+        "reported_usd": 0.0,
+        "rounds": 2,
+        "seconds": 0.0,
+        "tool_calls": 0,
+        "unknown_cost_events": 2,
+        "unknown_tool_call_events": 2,
+        "usage": {}
+      }
+    },
+    "child_elapsed_seconds": 0,
+    "components": [
+      {
+        "event_id": "786816dbb81049048544ff19031dc524",
+        "kind": "unmetered_native",
+        "parent_event_id": "786816dbb81049048544ff19031dc524",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "0d31f0019be24e64b20bc10001c6b10e",
+        "kind": "unmetered_native",
+        "parent_event_id": "0d31f0019be24e64b20bc10001c6b10e",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "f64e70e44b5848589d72cff7866658e8",
+        "kind": "unmetered_native",
+        "parent_event_id": "f64e70e44b5848589d72cff7866658e8",
+        "reported_usd": null,
+        "role": "bob",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      },
+      {
+        "event_id": "94608592181b49d49344c2d22cc594a1",
+        "kind": "unmetered_native",
+        "parent_event_id": "94608592181b49d49344c2d22cc594a1",
+        "reported_usd": null,
+        "role": "richard",
+        "source": "devel-loop/loop_state/dispatch_log.jsonl"
+      }
+    ],
+    "coordinator": {
+      "coverage": "recorded",
+      "included_in_reported_usd": "no",
+      "provider_reported_usd": null,
+      "self_reported": {
+        "minutes": 50.0,
+        "records": [
+          {
+            "minutes": 50.0,
+            "phase": "coordination",
+            "record_id": "75ac462632c54462a83a73cf6da52544",
+            "recorded_at": "2026-10-03T05:33:36.769855+00:00",
+            "source": "Arch estimate from session wall-clock 03:50-05:35 UTC less time waiting on Bob and Richard; USD not observable",
+            "usd": null
+          }
+        ],
+        "records_without_usd": 1,
+        "usd": null
+      },
+      "tool_measured": {
+        "basis": "wall time of gate commands run as arch; excludes interactive session time",
+        "effort_seconds": 625.1493079662323,
+        "elapsed_seconds": 625.1493079662323,
+        "events": 12
+      }
+    },
+    "coordinator_coverage": "recorded",
+    "end": "2026-10-03T05:32:09.229482+00:00",
+    "issue_id": "1DMIX-080",
+    "missing_timing_event_ids": [
+      "786816dbb81049048544ff19031dc524",
+      "0d31f0019be24e64b20bc10001c6b10e",
+      "f64e70e44b5848589d72cff7866658e8",
+      "94608592181b49d49344c2d22cc594a1"
+    ],
+    "outside_child_intervals_seconds": 6088.209676980972,
+    "phase_events": [
+      {
+        "event_id": "f9ca419dbfcf46f8a3d2b76cc8facc23",
+        "finished_at": "2026-10-03T03:50:46.315559+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.13532399301766418,
+        "started_at": "2026-10-03T03:50:46.180232+00:00"
+      },
+      {
+        "event_id": "58e4a57646d148a0b2a8cefd94b1522c",
+        "finished_at": "2026-10-03T03:50:59.516794+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.14175369599252008,
+        "started_at": "2026-10-03T03:50:59.375036+00:00"
+      },
+      {
+        "event_id": "d9cebddf0d66470a978e85ba08a076d8",
+        "finished_at": "2026-10-03T03:51:52.499212+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.06248404798679985,
+        "started_at": "2026-10-03T03:51:52.436727+00:00"
+      },
+      {
+        "event_id": "19416e7408d94c72bd152e07ece88bf5",
+        "finished_at": "2026-10-03T04:36:27.309868+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "a5630e0a20dd632a9",
+        "seconds": 85.95012611299171,
+        "started_at": "2026-10-03T04:35:01.359743+00:00"
+      },
+      {
+        "event_id": "4568b7a5c9354706ab8f8ed83d72ee05",
+        "finished_at": "2026-10-03T04:36:55.512400+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.06766331600374542,
+        "started_at": "2026-10-03T04:36:55.444734+00:00"
+      },
+      {
+        "event_id": "6f949dc186c54053b992e22f9343010d",
+        "finished_at": "2026-10-03T04:39:03.766712+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.040535890992032364,
+        "started_at": "2026-10-03T04:39:03.726170+00:00"
+      },
+      {
+        "event_id": "99536128490c49ea8b9a8e6e2b262472",
+        "finished_at": "2026-10-03T04:40:07.146878+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 5.194175890006591,
+        "started_at": "2026-10-03T04:40:01.952700+00:00"
+      },
+      {
+        "event_id": "2e576dba04ca45b9ad889d5e43387c71",
+        "finished_at": "2026-10-03T04:40:50.233707+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.03620750899426639,
+        "started_at": "2026-10-03T04:40:50.197496+00:00"
+      },
+      {
+        "event_id": "0a9a194808f844ae9be92aaba4503d4a",
+        "finished_at": "2026-10-03T04:51:20.379689+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "a325d9f09d6c933c3",
+        "seconds": 90.70379675697768,
+        "started_at": "2026-10-03T04:49:49.675887+00:00"
+      },
+      {
+        "event_id": "62ea95d893474438b5035ad2f48bc17f",
+        "finished_at": "2026-10-03T05:04:03.272210+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.17704806799883954,
+        "started_at": "2026-10-03T05:04:03.095158+00:00"
+      },
+      {
+        "event_id": "8193e18a15df498bae19fd250f685549",
+        "finished_at": "2026-10-03T05:11:04.518574+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "a5630e0a20dd632a9",
+        "seconds": 61.00949183199555,
+        "started_at": "2026-10-03T05:10:03.509076+00:00"
+      },
+      {
+        "event_id": "963ba235c2bc4ceba05de3a705437732",
+        "finished_at": "2026-10-03T05:11:26.067856+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "bob",
+        "seconds": 0.06844218200421892,
+        "started_at": "2026-10-03T05:11:25.999412+00:00"
+      },
+      {
+        "event_id": "ac87cfd6d66e40aab6e09482b8d13f60",
+        "finished_at": "2026-10-03T05:12:32.136499+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.05369576200610027,
+        "started_at": "2026-10-03T05:12:32.082800+00:00"
+      },
+      {
+        "event_id": "2ffb1d0d46fa4f95b74349ca40875c60",
+        "finished_at": "2026-10-03T05:12:39.822957+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 5.295374051987892,
+        "started_at": "2026-10-03T05:12:34.527584+00:00"
+      },
+      {
+        "event_id": "0cc192c725f3412ba06ea74f479de0cf",
+        "finished_at": "2026-10-03T05:15:52.230575+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "a325d9f09d6c933c3",
+        "seconds": 60.280970930005424,
+        "started_at": "2026-10-03T05:14:51.949600+00:00"
+      },
+      {
+        "event_id": "d58d56a92ae24c1f9f0e263d7959cd7e",
+        "finished_at": "2026-10-03T05:16:06.431758+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "richard",
+        "seconds": 0.04626665904652327,
+        "started_at": "2026-10-03T05:16:06.385489+00:00"
+      },
+      {
+        "event_id": "8f3f4882f63d4db7a0d2d00cc415d7d8",
+        "finished_at": "2026-10-03T05:18:22.975838+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "orientation",
+        "reason": null,
+        "role": "arch",
+        "seconds": 0.03669190703658387,
+        "started_at": "2026-10-03T05:18:22.939143+00:00"
+      },
+      {
+        "event_id": "01a802cbaa2044bf88128aae9ea8c7a2",
+        "finished_at": "2026-10-03T05:18:31.812041+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 6.016220023971982,
+        "started_at": "2026-10-03T05:18:25.795815+00:00"
+      },
+      {
+        "event_id": "9eb8364847d44dfbb879852ec7e57178",
+        "finished_at": "2026-10-03T05:28:54.542845+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "verification",
+        "reason": null,
+        "role": "arch",
+        "seconds": 573.1379739060067,
+        "started_at": "2026-10-03T05:19:21.404876+00:00"
+      },
+      {
+        "event_id": "816cb3234b9c4203ab485a44e78960e0",
+        "finished_at": "2026-10-03T05:29:45.528938+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 9.579991456121206e-06,
+        "started_at": "2026-10-03T05:29:45.528920+00:00"
+      },
+      {
+        "event_id": "4a77d72f62b5436ab81784b503776b19",
+        "finished_at": "2026-10-03T05:30:04.316120+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 5.44721007195767,
+        "started_at": "2026-10-03T05:29:58.868912+00:00"
+      },
+      {
+        "event_id": "df32b8e6b8564046b22d535975745eed",
+        "finished_at": "2026-10-03T05:32:09.230895+00:00",
+        "issue_id": "1DMIX-080",
+        "phase": "closeout",
+        "reason": null,
+        "role": "arch",
+        "seconds": 29.651725461997557,
+        "started_at": "2026-10-03T05:31:39.579167+00:00"
+      }
+    ],
+    "reported_usd": 0,
+    "schema_version": 2,
+    "span_seconds": 6088.209676980972,
+    "start": "2026-10-03T03:50:41.019805+00:00",
+    "unknown_cost_event_ids": [
+      "786816dbb81049048544ff19031dc524",
+      "0d31f0019be24e64b20bc10001c6b10e",
+      "f64e70e44b5848589d72cff7866658e8",
+      "94608592181b49d49344c2d22cc594a1"
+    ]
+  }
+}
