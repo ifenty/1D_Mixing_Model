@@ -24,6 +24,25 @@ Positive. Preserve the evidence and the scientific bounds of the conclusion.
 <Commit SHA or noncommit reason; iteration history/evidence references; related blockers>
 ```
 
+## RESOLVED: `esx/project_profile.md` excluded multi-column configurations while the suite replays multi-column captures
+
+**Date Identified**: 2026-10-02T21:47:00Z
+**Date Resolved**: 2026-10-03T03:30:00Z
+**Status**: Resolved
+**UUID**: 1DMIX-127
+
+### Issue
+The project profile listed "3-D or multi-column configurations" as out of scope, while the suite replays multi-column MITgcm captures (global_oce_latlon, global_ocean_90x40x15, lab_sea, seaice_obcs) column by column. Source: FABLE_FINDS.md §D11 (library review, 2026-10-02).
+
+### Resolution and justification
+Owner decision, 2026-10-03: "You can bring multi-column captures into the scientific contract for special cases of testing multi-column configurations." `esx/project_profile.md` now keeps multi-column configurations as a modelled system (horizontal transport, coupling between columns) out of scope. It brings into scope, as a special case, multi-column captures used to test the port, with each wet column replayed independently as a 1-D column. Horizontal coupling present in a capture (KPP smoothing, 1DMIX-093; tile and halo layout, 1DMIX-092) is stated as a property of the reference, not implemented. The grid-topology line now says a multi-column capture is replayed column by column with no exchange between columns.
+
+### Verification and remaining bounds
+A contract text change only; no code, test or capture changed. The profile now matches what the replay harnesses do. Whether any particular capture's horizontal coupling affects the compared columns remains open in 1DMIX-092 and 1DMIX-093.
+
+### Traceability
+`esx/project_profile.md` (scope and grid-topology lines); open issues 1DMIX-092, 1DMIX-093.
+
 ## RESOLVED: the momentum-leak witness guarded one spelling of the violation; a quantity-level guard now covers all three demonstrated routes
 
 **Date Identified**: 2026-09-28T23:55:00Z
