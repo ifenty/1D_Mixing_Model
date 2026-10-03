@@ -1325,6 +1325,8 @@ The cause is not established. The SubagentStop hook in `.claude/settings.json` h
 - the replay `python3 tools/esx/hooks.py subagent-stop < event.json` recorded it: real 3.27 s;
 - `reference_errors` timed alone took 9.6 s real.
 
+Second occurrence, 1DMIX-085 (2026-10-03 06:35Z): Bob (a0ad1ce9dc686f842) finished, the host delivered his hand-back and completion notification, and no row for him reached the log. His inflight marker remained. Replaying the event recorded it (`completed`) in 3.06 s real. That weakens the timeout explanation: the hook may not have fired for his stop at all. In the same minutes the log gained four rows with an empty `agent_type`, `missing runtime identity`, agent ids not dispatched by Arch, transcripts that do not exist on disk, and 35–46-character messages such as "Delivering 1DMIX-085 report to Arch" and "Sealing documentation plan docplan_filled.json". These look like host-side helper agents that summarise a running subagent's progress, and their SubagentStop events reach the hook. Also, the subagents now return their report through a hand-back tool call. The final plain assistant text in Bob's transcript was a 65-character progress line, not the footer; `capture` still found the footer when replayed.
+
 ### Potential Impact
 A reviewer verdict that silently never enters the record. The coordinator either waits on a stop that already happened, or acts on the report without a recorded completion, which the final packet then refuses. One check added to the hook's critical path moved a fast hook close to its kill limit.
 
