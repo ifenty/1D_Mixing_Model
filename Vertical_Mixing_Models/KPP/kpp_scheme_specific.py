@@ -148,6 +148,11 @@ def diagnose_bl_depth(
         # Buoyancy forcing felt at this depth: bo is the non-penetrating (turbulent)
         # part, bosol*(1-swfrac(z)) is the fraction of shortwave already absorbed
         # above this depth (and thus already contributing to local buoyancy forcing).
+        # MITgcm (kpp_routines.F:505-511) evaluates SWFRAC here with fact=hbf at zgrid(kl),
+        # i.e. at depth -hbf*zgrid(kl); the port passes -zgrid[kl] (no hbf factor), which is
+        # the same number only for hbf = 1 (MITgcm's default, kpp_readparms.F:116, and the
+        # value in every capture). The water type is MITgcm's hard-coded IA by default
+        # (KPPParameters.jerlov_water_type, swfrac.F line 92; 1DMIX-080).
         if config.shortwave_heating and config.select_penetrating_sw >= 1:
             frac_absorbed = 1.0 - swfrac(-zgrid[kl], config.jerlov_water_type)[0]
             bfsfc = bo + bosol * frac_absorbed

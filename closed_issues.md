@@ -24,6 +24,102 @@ Positive. Preserve the evidence and the scientific bounds of the conclusion.
 <Commit SHA or noncommit reason; iteration history/evidence references; related blockers>
 ```
 
+## RESOLVED: KPP Jerlov water type defaulted to `"IB"`; MITgcm hard-codes type IA — the port now uses IA
+
+**Date Identified**: 2026-10-02T21:47:00Z
+**Date Resolved**: 2026-10-03T05:17:00Z
+**Status**: Resolved
+**UUID**: 1DMIX-080
+
+### Issue
+`KPPParameters.jerlov_water_type`, `kpp_default_parameters.yaml` and `swfrac(depth_m, water_type=...)` defaulted to type IB. MITgcm hard-codes type IA (`model/src/swfrac.F` line 92, `jwtype=2`; no namelist entry, so no capture carries it). Source: FABLE_FINDS.md §A2 (library review, 2026-10-02).
+
+### Resolution and justification
+The default is IA in all three places, with comments citing `swfrac.F` line 92. Bob and then Richard each read stock `swfrac.F` (MITgcm d861cd501) and confirmed it, each with their own evidence:
+- `jwtype=2` at :92 and :94, on both `ALLOW_CAL` branches;
+- the `DATA rfac/a1/a2` tables at :74-76 equal `JERLOV_TABLE` digit for digit, and the formula at :102-103 has the same operation order;
+- nothing else in MITgcm selects a water type;
+- the port's three call sites match `kpp_routines.F` :508, :703 and :839 in depth, sign and units, with `hbf=1`, which every capture uses.
+
+The port's IA `swfrac` equals MITgcm's own runtime SWFRAC output (the captured `swatt`) bit for bit above 200 m.
+
+### Verification and remaining bounds
+Old versus new on real replays, as measured by Bob and reproduced by Richard on his own `git archive` of HEAD versus the candidate:
+
+| Capture | Cells above 1% (`visc_az` / `diff_kz_s`) | `ghat` max_abs | `hbl` max (m) |
+| --- | --- | --- | --- |
+| global_oce_latlon, first 5 steps | 62 / 1,136 → 0 / 0 | 116 → 1.2e-6 | 3.09 → 1.9e-7 |
+| lab_sea, 999 steps | 2,941 / 9,943 → 0 / 0 | 285.8 → 1.5e-9 | 52.9 → 3.6e-9 |
+| lab_sea_6mo, first 100 steps | 24 / 189 → 0 / 0 | 89.5 → 5.2e-10 | 21.71 → 9.7e-11 |
+| seaice_obcs | 110 / 131 → 0 / 0 | 99.5 → 5.7e-14 | 0.21 → 3.6e-15 |
+| 11k_1D | 130 / 152 → 85 / 88 | 1321.7 → 30.87 | 20.28 → 10.15 |
+
+- **Exact-zero `ghat` cells** (port 0, MITgcm nonzero): 0 on every capture.
+- **The library's 2,000-step 11k_1D figure** (`hbl` max 0.0429 → 0.00423 m) reproduced from a kept script.
+- **Unchanged:** 90x40x15 (no penetrating shortwave); all six scenarios with both schemes and GGL90, bit-identical. Shortwave penetration is off in every scenario.
+- **Tests:** about 40 bounds tightened, each to an existing convention with the measured figure beside it; none widened. Richard checked the tightest for roundoff safety, including the exact `swatt` equality across three `exp` implementations and the 4-ulp decimal test (measured 2.15 ulp).
+- **Remaining:**
+  - 11k_1D and 1D_10 keep a residual. They were built with `KPPuseSWfrac3D=1`, an MITgcm branch the port does not implement. Richard's scratch replay with that branch brought both to roundoff (1DMIX-129).
+  - The global_oce_latlon remainder sits in 19 ocean column-steps (6 columns) with `hbl` > 200 m, 11 of them with a nonzero `bfsfc` difference (max 5.63e-14). That is the missing 200 m cut-off, 1DMIX-085.
+  - latlon and lab_sea_6mo were measured on the tests' windows: the first 5 of 720 steps and the first 100 of 4,368.
+- **Checks:** full suite 310 passed, 3 skipped (pre-existing, 1DMIX-010). Review: round 0 REJECT, one must-fix (the deep-column count); round 1 APPROVE_WITH_FIXES with no must-fix.
+
+### Traceability
+`Vertical_Mixing_Models/KPP/kpp_parameters.py::KPPParameters`; `Vertical_Mixing_Models/KPP/kpp_shortwave.py::swfrac`; `Vertical_Mixing_Models/KPP/kpp_default_parameters.yaml`; `Vertical_Mixing_Models/tests/test_kpp_jerlov_water_type.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/KPP_port_validation/KPP_VALIDATION_RESULTS.md` (1DMIX-080 section). Related: 1DMIX-076 and 1DMIX-078 (resolved by this change), 1DMIX-085, 1DMIX-129, 1DMIX-130, 1DMIX-131.
+
+## RESOLVED: the port's shortwave surface buoyancy forcing (`bfsfc`) differed from MITgcm's — caused by the Jerlov water type, fixed by 1DMIX-080
+
+**Date Identified**: 2026-10-02T22:50:00Z
+**Date Resolved**: 2026-10-03T05:17:00Z
+**Status**: Resolved
+**UUID**: 1DMIX-078
+
+### Issue
+After 1DMIX-075, the port's `bfsfc` differed systematically from MITgcm's captured `bfsfc_final` (latlon median 3.25e-9). With MITgcm's value substituted, the mixing coefficients agreed to 1e-13. The shortwave fraction was the suspect.
+
+### Resolution and justification
+The cause was the water type: the port used Jerlov IB where MITgcm hard-codes IA (`swfrac.F:92` against `kpp_parameters.py`). Fixed under 1DMIX-080.
+
+### Verification and remaining bounds
+Measured by Bob, reproduced by Richard, 1DMIX-080:
+- **global_oce_latlon (first 5 steps):**
+  - port `bfsfc` equals `bfsfc_final` in 11,477 of 11,575 column-steps;
+  - median difference 3.25e-9 → 0, maximum 6.74e-9 → 5.63e-14, sign mismatches 355 → 0;
+  - mixing residuals 62 / 1,136 cells → 0 / 0.
+- **lab_sea_6mo:** equal in 14,990 of 15,000 column-steps, with a maximum difference of 6.6e-24.
+- **Remaining:**
+  - 19 latlon column-steps with `hbl` > 200 m, 11 of them with a nonzero difference (max 5.63e-14). That is the missing 200 m cut-off, 1DMIX-085.
+  - 87 other column-steps differ by at most 7.7e-22.
+
+### Traceability
+1DMIX-080 closed entry and its evidence; 1DMIX-085.
+
+## RESOLVED: residual KPP differences after tracer-point inputs (exact-zero `ghat`, one `hbl` column, global_oce_latlon) — explained and removed by the Jerlov water type fix (1DMIX-080)
+
+**Date Identified**: 2026-10-02T20:35:00Z
+**Date Resolved**: 2026-10-03T05:17:00Z
+**Status**: Resolved
+**UUID**: 1DMIX-076
+
+### Issue
+Three KPP differences remained after 1DMIX-071 and 1DMIX-075:
+- exact-zero `ghat` cells: seaice_obcs 8, global_oce_latlon 2, lab_sea_6mo 2, lab_sea 999-step 127 and 11k_1D 13;
+- one lab_sea_6mo `hbl` column (t=90, i=17, j=6): 66.71 m in MITgcm against 45.00 m in the port;
+- global_oce_latlon residuals: `hbl` max 3.09 m, `ghat` max 116, and 62 / 1,136 mixing cells above 1%.
+
+### Resolution and justification
+All three came from the port's Jerlov water type (IB where MITgcm hard-codes IA, `swfrac.F:92`), fixed under 1DMIX-080.
+
+### Verification and remaining bounds
+Measured by Bob, reproduced by Richard, 1DMIX-080:
+- **Exact-zero `ghat` cells:** 0 on seaice_obcs, latlon, lab_sea_6mo and lab_sea, and on 11k_1D for the original 13.
+- **The `hbl` column:** the lab_sea_6mo t=90 (17,6) column now matches.
+- **global_oce_latlon:** `hbl` 3.09 → 1.9e-7 m, `ghat` 116 → 1.2e-6, 0 / 0 cells. The remainder is at `hbl` > 200 m (1DMIX-085).
+- **Remaining:** 11k_1D has one new cell (t=2350) where MITgcm's `ghat` is 0 and the port's is not. It is attributed to the unimplemented `KPPuseSWfrac3D` branch (1DMIX-129); Richard's scratch replay with that branch removes it.
+
+### Traceability
+1DMIX-080 closed entry and its evidence; 1DMIX-085; 1DMIX-129.
+
 ## RESOLVED: `esx/project_profile.md` excluded multi-column configurations while the suite replays multi-column captures
 
 **Date Identified**: 2026-10-02T21:47:00Z

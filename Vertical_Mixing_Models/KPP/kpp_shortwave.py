@@ -5,11 +5,20 @@ selectPenetratingSW is active.
 
 swfrac(z) is the fraction of shortwave radiation that has NOT yet been
 absorbed at depth z (positive, meters below surface): swfrac(0) = 1.
+
+Water type (1DMIX-080): MITgcm hard-codes Jerlov type IA -- `jwtype=2` in
+model/src/swfrac.F (lines 92 and 94, both branches of `#ifdef ALLOW_CAL`;
+header line 23 "Parameter jwtype is hardcoded to 2 for time being"). No
+namelist parameter sets it, so no MITgcm capture records it; the port's
+default is therefore "IA" here and in `KPPParameters.jerlov_water_type`.
+The 200 m cut-off of swfrac.F:99-100 (fraction exactly 0 below 200 m) is not
+reproduced yet (open issue 1DMIX-085).
 """
 
 import numpy as np
 
-# R, D1 [m], D2 [m] per Jerlov water type (Paulson & Simpson, 1977).
+# R, D1 [m], D2 [m] per Jerlov water type (Paulson & Simpson, 1977); equal, digit
+# for digit, to swfrac.F's `DATA rfac / a1 / a2` (lines 71-76; jwtype 1..5 = I, IA, IB, II, III).
 JERLOV_TABLE = {
     "I":   (0.58, 0.35, 23.0),
     "IA":  (0.62, 0.60, 20.0),
@@ -19,16 +28,22 @@ JERLOV_TABLE = {
 }
 
 
-def swfrac(depth_m, water_type: str = "IB"):
+def swfrac(depth_m, water_type: str = "IA"):
     """
     Fraction of shortwave irradiance remaining at depth `depth_m` (>= 0).
+
+    MITgcm swfrac.F:102-103, `rfac*exp(facz/a1) + (1-rfac)*exp(facz/a2)` with
+    `facz = -depth_m` (MITgcm's `fact*swdk`, the negative distance from the
+    surface); identical operation order, bit-identical to MITgcm's own SWFRAC
+    output above 200 m for type IA (1DMIX-080).
 
     Parameters
     ----------
     depth_m : array_like
         Positive depth(s) below the surface [m].
     water_type : str
-        One of JERLOV_TABLE keys ("I", "IA", "IB", "II", "III").
+        One of JERLOV_TABLE keys ("I", "IA", "IB", "II", "III"). Default "IA",
+        MITgcm's hard-coded type (swfrac.F line 92/94, `jwtype=2`).
 
     Returns
     -------

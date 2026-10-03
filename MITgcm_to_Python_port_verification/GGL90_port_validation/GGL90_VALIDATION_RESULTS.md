@@ -584,7 +584,8 @@ exercise and this port, not open action items:
   real floating-ice-shelf capture.
 - **The Rib/Ricr-style threshold sensitivity that was credited with several KPP
   discrepancies (1DMIX-071 showed much of the multi-column KPP `hbl` tail to be a
-  replay-input effect instead; a smaller real tail remains) has no direct GGL90 analogue.** GGL90 has no hard
+  replay-input effect instead, and 1DMIX-080 showed most of the rest to be KPP's Jerlov
+  water type; no remaining KPP figure is attributed to it by measurement) has no direct GGL90 analogue.** GGL90 has no hard
   Richardson-number threshold anywhere in its own formulas; its
   discrepancies are instead governed by the mechanisms in this document
   (the TKE buoyancy-term distinction, the `isomip` `kSrf` boundary

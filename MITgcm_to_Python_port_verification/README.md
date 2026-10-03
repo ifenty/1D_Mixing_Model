@@ -78,12 +78,12 @@ result and causal mechanism behind any real discrepancy.
 
 | Experiment | Scheme | Status |
 |---|---|---|
-| `1D_ocean_ice_column`, 10 timesteps | KPP | Excellent agreement — max `hbl` diff 1.3 cm. |
-| `1D_ocean_ice_column`, 11,000 timesteps | KPP | This project's best KPP agreement; a small `hbl` tail from the Rib/Ricr threshold-sensitivity mechanism. |
-| `lab_sea`, 999 timesteps (41 days) | KPP | First multi-column, real-bathymetry KPP capture; sub-centimetre typical `hbl` agreement (max 0.029 m over the first 20 steps with tracer-point inputs, 1DMIX-071). |
-| `lab_sea`, 6-month run | KPP | Longest KPP temporal duration tested (first 100 of 4368 steps replayed); with MITgcm's tracer-point inputs the `hbl` tail is one column above 5 m (21.7 m max; 71 columns and 40.7 m with the former column-local replay, 1DMIX-071). |
-| `seaice_obcs` | KPP | Only salt-plume capture; the haline surface-buoyancy term is implemented and matches. |
-| `global_oce_latlon`, 720 timesteps | KPP | Only multi-tile, seasonally-complete capture; agreement measurably tightened by this port's `wscale`-clamp default. |
+| `1D_ocean_ice_column`, 10 timesteps | KPP | Excellent agreement — max `hbl` diff 1.4 mm (1.3 cm before the Jerlov water-type fix, 1DMIX-080); built with `KPPuseSWfrac3D`, a branch the port does not implement. |
+| `1D_ocean_ice_column`, 11,000 timesteps | KPP | Longest single-column KPP run; `hbl` median 2.7e-6 m, one of 11,000 steps above 5 m (10.15 m max) after the Jerlov water-type fix (1DMIX-080; was 20.28 m, then read as Rib/Ricr threshold sensitivity). Built with `KPPuseSWfrac3D`, a branch the port does not implement: the measured candidate for the rest. |
+| `lab_sea`, 999 timesteps (41 days) | KPP | First multi-column, real-bathymetry KPP capture; agrees with MITgcm to roundoff over all 999 steps (`hbl` max 3.6e-9 m, no mixing cell above 1%) since the Jerlov water-type fix (1DMIX-080). |
+| `lab_sea`, 6-month run | KPP | Longest KPP temporal duration tested (first 100 of 4368 steps replayed); agrees with MITgcm to roundoff (`hbl` max 9.7e-11 m) since the Jerlov water-type fix (1DMIX-080; 21.7 m max before it, 40.7 m with the former column-local replay, 1DMIX-071). |
+| `seaice_obcs` | KPP | Only salt-plume capture; the haline surface-buoyancy term is implemented and matches; all fields agree with MITgcm to roundoff since 1DMIX-080. |
+| `global_oce_latlon`, 720 timesteps | KPP | Only multi-tile, seasonally-complete capture; agreement measurably tightened by this port's `wscale`-clamp default, and to roundoff by the Jerlov water-type fix (1DMIX-080; first 5 steps `hbl` max 1.9e-7 m, was 3.09 m; the largest remaining differences are the `swfrac` 200 m cut-off, 1DMIX-085). |
 | 6 idealized scenarios, standalone Fortran driver | KPP | 5 of 6 match to floating-point roundoff; `combined_storm`'s residual is explained by the same `wscale` mechanism. |
 | `vermix`, 20 timesteps | GGL90 | Baseline single-column capture; every field agrees well within this project's 1% clean bar (max rel. error 0.07%-0.31%). |
 | `1D_ocean_ice_column`, 11,000 timesteps (`mxlMaxFlag=3`) | GGL90 | This project's cleanest GGL90 experiment; exact to floating-point roundoff. |

@@ -106,7 +106,9 @@ kpp_write_state: false     # Diagnostic output flag (no-op in this port)
 # ========== Shortwave penetration ==========
 shortwave_heating: false   # Treat Qsw as a separate penetrating flux (Paulson & Simpson 1977)
 select_penetrating_sw: 0   # 0 = off, >=1 = on
-jerlov_water_type: "IB"    # One of I, IA, IB, II, III
+# Jerlov water type: IA is MITgcm's hard-coded value (model/src/swfrac.F line 92,
+# jwtype=2, "hardcoded to 2 for time being"; no namelist entry). Was IB before 1DMIX-080.
+jerlov_water_type: "IA"    # One of I, IA, IB, II, III
 use_sw_frac_3d: false      # Spatially varying water type -- NOT IMPLEMENTED, must stay false
 
 # ========== Salt plume ==========

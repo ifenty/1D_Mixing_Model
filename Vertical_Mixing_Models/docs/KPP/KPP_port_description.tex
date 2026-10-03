@@ -43,7 +43,7 @@ The Python port implements the KPP boundary layer parameterization for a 1D ocea
     \item Diffusivity assembly (interior + boundary layer)
     \item Enhancement at boundary layer interface
     \item Stratification and shear diagnostics
-    \item Shortwave penetration (single Jerlov water type)
+    \item Shortwave penetration (single Jerlov water type; default IA, MITgcm's hard-coded \verb|jwtype=2|, \verb|swfrac.F| line 92, 1DMIX-080)
 \end{itemize}
 
 \textbf{Excluded from the 1D port:}
@@ -52,7 +52,7 @@ The Python port implements the KPP boundary layer parameterization for a 1D ocea
     \item Horizontal smoothing of buoyancy gradients (requires 2D/3D data)
     \item Double diffusion parameterization (not critical for 1D validation)
     \item Salt plume parameterization
-    \item Multiple Jerlov water types (simplified to single type)
+    \item Spatially varying water type (\verb|KPPuseSWfrac3D|; MITgcm itself uses one hard-coded type, IA)
     \item 3D-specific features (requires horizontal neighbors)
 \end{itemize}
 

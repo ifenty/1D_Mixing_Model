@@ -25,7 +25,9 @@ multi-column case. Since 1DMIX-071 the replay feeds the port MITgcm's tracer-poi
 `shsq`/`dVsq`/smoothed `dbloc` (rebuilt from the neighbouring captured columns), and the multi-column
 `lab_sea` bounds below were re-measured and tightened on that basis: the `hbl` tail that 1DMIX-019
 attributed to Rib/Ricr threshold sensitivity was largely a replay-input effect (see the comments in the
-`lab_sea` tests and `KPP_port_validation/KPP_VALIDATION_RESULTS.md`).
+`lab_sea` tests and `KPP_port_validation/KPP_VALIDATION_RESULTS.md`). Since 1DMIX-080 the port uses MITgcm's
+hard-coded Jerlov water type IA (`swfrac.F` line 92) instead of IB; the remaining `lab_sea` differences were that,
+and both experiments' bounds were tightened again (figures in the tests).
 """
 
 import sys
@@ -74,7 +76,10 @@ def test_1d_ocean_ice_column_hbl(result_1d):
     python_ds, mitgcm_ds = result_1d
     nt = python_ds.sizes['time']
     diff = np.abs(python_ds['hbl'].values - mitgcm_ds['hbl'].values[:nt])
-    assert np.max(diff) < 0.02, f"max hbl diff {np.max(diff):.4f} m exceeds 0.02 m"
+    # 1DMIX-080 (2026-10-03): with MITgcm's hard-coded Jerlov type IA (swfrac.F line 92) instead of IB, max
+    # 0.0129 -> 1.38e-3 m. Bound tightened 0.02 -> 0.005 (the lab_sea hbl convention below). The remainder is
+    # this capture's KPPuseSWfrac3D = 1 branch (MITgcm interpolates SWFrac3D), which the port does not implement.
+    assert np.max(diff) < 0.005, f"max hbl diff {np.max(diff):.4f} m exceeds 0.005 m"
 
 
 def test_1d_ocean_ice_column_visc_az(result_1d):
@@ -85,7 +90,9 @@ def test_1d_ocean_ice_column_visc_az(result_1d):
     active = mitgcm_visc > 1e-6
     rel_err = np.abs(python_visc[active] - mitgcm_visc[active]) / mitgcm_visc[active]
     assert np.median(rel_err) < 0.001, f"median visc_az rel err {np.median(rel_err):.4%} regressed"
-    assert np.max(rel_err) < 0.02, f"max visc_az rel err {np.max(rel_err):.4%} regressed"
+    # 1DMIX-080 (2026-10-03, Jerlov type IA): max rel err 4.8e-3 -> 4.5e-4; bound tightened 0.02 -> 0.001
+    # (this test's median convention).
+    assert np.max(rel_err) < 0.001, f"max visc_az rel err {np.max(rel_err):.4%} regressed"
 
 
 # ========================================================================
@@ -130,7 +137,11 @@ def test_lab_sea_hbl_ocean_columns(result_labsea):
     # 20-step sample measures median 7.3e-4 m, max 0.029 m, no column above 1 m (column-local replay:
     # median 3.4e-3 m, max 26.4 m, 2 columns above 5 m) -- the tail was a replay-input artifact. Bounds
     # tightened (were median < 0.5, fraction > 5 m < 0.02): to 0.005 and 0.001.
-    assert np.median(diff_ocean) < 0.005, f"median hbl diff {np.median(diff_ocean):.4f} m regressed"
+    # 1DMIX-080 (2026-10-03): the rest was the port's former Jerlov water type IB (MITgcm hard-codes IA,
+    # swfrac.F line 92): median 7.3e-4 -> 0 m, max 0.0287 -> 2.4e-12 m (full 999 steps: median 5.4e-4 -> 0,
+    # max 52.90 -> 3.6e-9 m). Median bound tightened 0.005 -> 5e-4 (the 90x40x15 convention of
+    # test_kpp_mitgcm_validation_extended.py); measured 0.
+    assert np.median(diff_ocean) < 5e-4, f"median hbl diff {np.median(diff_ocean):.4f} m regressed"
     assert np.mean(diff_ocean > 5.0) < 0.001, "fraction of columns exceeding the former 1DMIX-019 tail is back"
 
 
@@ -144,4 +155,6 @@ def test_lab_sea_visc_az_median(result_labsea):
     # Full run's measured median is exactly 0.0; allow headroom for sampling.
     assert np.median(abs_err) < 1e-5, f"median visc_az abs err {np.median(abs_err):.2e} regressed"
     # 1DMIX-071: p99 3.7e-5 with tracer-point inputs (1.6e-3 column-local); bound tightened from 0.01 to 1e-3.
-    assert np.percentile(abs_err, 99) < 1e-3, f"p99 visc_az abs err {np.percentile(abs_err, 99):.2e} regressed"
+    # 1DMIX-080 (2026-10-03, Jerlov type IA, MITgcm's hard-coded value): p99 3.8e-5 -> 0, max 6.0e-5 -> 2.3e-15;
+    # bound tightened 1e-3 -> 1e-5 (this test's median convention).
+    assert np.percentile(abs_err, 99) < 1e-5, f"p99 visc_az abs err {np.percentile(abs_err, 99):.2e} regressed"

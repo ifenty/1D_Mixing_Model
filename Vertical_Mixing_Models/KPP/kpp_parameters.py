@@ -176,7 +176,11 @@ class KPPParameters:
     # 0.959 (m^2/s) at its worst cells -- previously mis-attributed entirely
     # to the unrelated Rib/Ricr threshold-sensitivity tail (1DMIX-019).
     # Setting this flag True instead (the real, unmodified MITgcm behaviour)
-    # cuts those same worst-case disagreements to 3.09 m / 0.096 / 0.110 --
+    # cuts those same worst-case disagreements to 3.09 m / 0.096 / 0.110
+    # (both sides measured 2026-09-28 under 1DMIX-057, before 1DMIX-080, with
+    # the then-default Jerlov water type IB; with IA and True the same capture
+    # now measures 1.9e-7 m / 4.8e-8 / 1.4e-7, 2026-10-03; the False side was
+    # not re-measured under IA) --
     # a 3.5x-11x improvement in fidelity to the real Fortran oracle this
     # project exists to validate against, on a real (not idealized-scenario)
     # capture. The other 3 real captures this project regression-tests
@@ -196,7 +200,11 @@ class KPPParameters:
     # ========== Shortwave penetration (SHORTWAVE_HEATING / selectPenetratingSW) ==========
     shortwave_heating: bool = False  # Whether Qsw is treated as a separate penetrating flux
     select_penetrating_sw: int = 0  # 0 = off, >=1 = on (mirrors MITgcm selectPenetratingSW)
-    jerlov_water_type: str = "IB"  # One of "I", "IA", "IB", "II", "III" (see shortwave.py)
+    # Jerlov water type for swfrac (kpp_shortwave.py). Default "IA" = MITgcm's
+    # hard-coded type: model/src/swfrac.F line 92 (and 94), `jwtype=2`
+    # ("Parameter jwtype is hardcoded to 2 for time being"); no namelist entry,
+    # so no capture carries it. Was "IB" (jwtype 3) before 1DMIX-080.
+    jerlov_water_type: str = "IA"  # One of "I", "IA", "IB", "II", "III"
     use_sw_frac_3d: bool = False  # KPPuseSWfrac3D: spatially varying water type (not implemented)
 
     # ========== Salt plume (ALLOW_SALT_PLUME) ==========

@@ -135,6 +135,45 @@ validation.
 
 ## Mechanisms that explain the tail below
 
+**The Jerlov water type (1DMIX-080), now reproduced; read this before the older figures below.** MITgcm's
+shortwave-penetration fraction `model/src/swfrac.F` hard-codes Jerlov water type IA (`jwtype=2`, line 92 and 94: "hardcoded to 2
+for time being"; no namelist entry, so no capture records it). The port defaulted to type IB. Every capture built with
+penetrating shortwave (`selectPenetratingSW >= 1`: all except `global_ocean_90x40x15`) therefore had a different surface
+buoyancy forcing `bfsfc` at every level of the boundary-layer search. The port's IA coefficients and formula are MITgcm's
+bit for bit: it reproduces the SWFRAC output MITgcm writes into every capture (`swatt`, MITgcm's `SWFrac3D`) exactly at
+every interface above 200 m. With the default changed to IA (cells above 1% relative error / max_abs; `hbl` max in m;
+the port's `bfsfc` against MITgcm's `bfsfc_final`; evidence `devel-loop/loop_state/bob-1DMIX-080-evidence.md`, which
+is local and git-ignored):
+
+| Capture / window | `visc_az` before -> after | `diff_kz_s` before -> after | `ghat` max_abs | `hbl` max | `bfsfc` median / max |
+|---|---|---|---|---|---|
+| `global_oce_latlon` (first 5 steps) | 62 / 0.0770 -> 0 / 4.8e-8 | 1,136 / 0.0945 -> 0 / 1.4e-7 | 115.97 -> 1.2e-6 | 3.09 -> 1.9e-7 | 3.25e-9 / 6.7e-9 -> 0 / 5.6e-14 |
+| `lab_sea` 999 steps (all) | 2,941 / 0.0302 -> 0 / 2.3e-12 | 9,943 / 0.0743 -> 0 / 3.9e-12 | 285.8 -> 1.5e-9 | 52.90 -> 3.6e-9 | 2.7e-11 / 9.2e-10 -> 0 / 8.9e-21 |
+| `lab_sea` first 20 steps | 4 / 6.0e-5 -> 0 / 2.3e-15 | 37 / 1.6e-4 -> 0 / 5.2e-15 | 0.847 -> 3.2e-12 | 0.0287 -> 2.4e-12 | 4.2e-11 / 5.2e-10 -> 0 / 6.6e-24 |
+| `lab_sea_6mo` first 100 steps | 24 / 0.0233 -> 0 / 4.6e-14 | 189 / 0.0525 -> 0 / 1.0e-13 | 89.49 -> 5.2e-10 | 21.71 -> 9.7e-11 | 3.4e-11 / 5.2e-10 -> 0 / 6.6e-24 |
+| `seaice_obcs` (5 steps) | 110 / 3.1e-4 -> 0 / 3.5e-18 | 131 / 3.1e-4 -> 0 / 1.3e-17 | 99.48 -> 5.7e-14 | 0.2065 -> 3.6e-15 | 1.0e-10 / 3.8e-10 -> 0 / 8.3e-25 |
+| `11k_1D` (11,000 steps) | 130 / 7.60e-3 -> 85 / 3.49e-3 | 152 / 0.0173 -> 88 / 3.36e-3 | 1321.7 -> 30.87 | 20.28 -> 10.15 | 1.9e-12 / 1.0e-9 -> 2.0e-12 / 3.4e-9 |
+| `1D_10` (10 steps) | 0 / 8.2e-6 -> 0 / 9.0e-7 | 0 / 1.6e-5 -> 0 / 2.6e-6 | 0.1295 -> 3.6e-3 | 0.0129 -> 1.4e-3 | 8.2e-12 / 9.3e-12 -> 6.0e-13 / 4.5e-12 |
+| `global_ocean_90x40x15` (no penetrating shortwave) | 7 / 0.0050 unchanged | 27 / 0.0050 unchanged | unchanged | unchanged | bit-equal, unchanged |
+
+Cells where the port's `ghat` is exactly 0 and MITgcm's is not (open issue 1DMIX-076): `global_oce_latlon` 2 -> 0,
+`seaice_obcs` 8 -> 0, `lab_sea_6mo` 2 -> 0, `lab_sea` 999 steps 127 -> 0, `11k_1D` 13 -> 0 (the reverse class: 0 everywhere
+except one new `11k_1D` cell). On the four captures whose MITgcm runs call SWFRAC the port now agrees with MITgcm to
+roundoff, and the port's `bfsfc` equals MITgcm's `bfsfc_final` except at a few column-steps; the largest remaining
+differences (`global_oce_latlon`, `bfsfc` 5.6e-14, `ghat` 1.2e-6) sit in the 19 ocean column-steps (6 distinct columns) whose
+`hbl` is deeper than 200 m in both MITgcm and the port, 11 of which have a nonzero `bfsfc` difference; there `swfrac.F:99`
+sets the fraction to exactly 0 and the port does not (open issue 1DMIX-085). The other 87 column-steps whose `bfsfc` differs
+do so by at most 7.7e-22. The two single-column
+captures (`11k_1D`, `1D_10`) were built with `KPPuseSWfrac3D = 1`: MITgcm then interpolates its precomputed SWFrac3D
+(`kpp_routines.F:491-497`, `:690-698`, `:829-834`) instead of calling SWFRAC, a branch the port does not implement.
+MITgcm's `bfsfc_final` on `11k_1D` equals that branch, re-evaluated at MITgcm's `hbl` from the captured inputs, bit for bit
+at all 11,000 steps; this is the measured candidate for those two captures' remaining difference. The library figure
+that prompted the issue (first 2,000 `11k_1D` steps, `hbl` median 2.2e-5 -> 1.6e-6 m, max 4.3e-2 -> 4.2e-3 m) is
+reproduced exactly (2.22e-5 -> 1.57e-6, 0.0429 -> 0.00423). The six idealized scenarios do not use penetrating shortwave
+and are bit-identical. **Consequently the residual figures and the "not root-caused" / threshold-sensitivity readings in
+the sections below that predate 1DMIX-080 are superseded for every capture except `global_ocean_90x40x15` (unchanged)
+and the two `KPPuseSWfrac3D` single-column captures.**
+
 **Which input does what (Richard's 1DMIX-071 review, ablation: reconstructed `shsq`+`dVsq` only, `dbloc` left
 unsmoothed, against the full tracer-point replay).** The `dVsq` reconstruction drives `hbl` (the `hbl`
 statistics are identical with and without the `dbloc` smoothing: e.g. `90x40` max 0.3915 m, `lab_sea_1000`
@@ -166,7 +205,10 @@ keyword-only `depth_below` / `cell_thickness_below` of `KPPDriver.compute_mixing
 model depth) and the replay passes them. Measured through the real replay (cells above 1% relative error, `visc_az` /
 `diff_kz_s`; the full old-versus-new table is in `devel-loop/loop_state/bob-1DMIX-075-evidence.md`):
 
-| Capture / window | Before 1DMIX-075 | After |
+(The "After" column is the post-1DMIX-075, pre-1DMIX-080 state; 1DMIX-080, above, superseded it for every row except
+`global_ocean_90x40x15`.)
+
+| Capture / window | Before 1DMIX-075 | After 1DMIX-075 |
 |---|---|---|
 | `global_ocean_90x40x15` (10 steps) | 456 / 520, max_abs 0.0481 / 0.0521 | 7 / 27, max_abs 0.0050 |
 | `global_oce_latlon` (first 5 steps) | 306 / 1,461, max_abs 0.0957 / 0.110 | 62 / 1,136, max_abs 0.0770 / 0.0945 |
@@ -216,7 +258,11 @@ level — the underlying physics computation is correct; only the hard
 threshold near an already-tiny margin amplifies the residual. This is an
 inherent property of any finite-precision implementation of a
 hard-thresholded diagnostic, not a fixable defect in the search algorithm or
-the underlying formulas.
+the underlying formulas. **1DMIX-080:** no capture's measured tail now needs this mechanism. After 1DMIX-071 removed the
+replay-input part, the remaining `hbl` tails credited to it (`11k_1D` 20.28 m, `lab_sea_6mo` 21.7 m, `lab_sea` 999 steps
+52.9 m, `global_oce_latlon` 3.09 m) were the Jerlov water type: they fall to roundoff, or for `11k_1D` to 10.15 m, whose
+measured candidate is the unported KPPuseSWfrac3D branch (above). The mechanism is real in principle but is not the
+measured cause of any figure in this document.
 
 **The `wscale` lookup-table clamp (`keep_mitgcm_bugs`).**
 `Vertical_Mixing_Models/KPP/kpp_routines.py::wscale` computes the turbulent
@@ -242,6 +288,9 @@ cause of the largest discrepancy in the idealized-scenario comparison below,
 and of a substantial part of the `global_oce_latlon` capture's own tail.
 
 ## `1D_ocean_ice_column`, 10 timesteps — the fastest smoke test
+
+*1DMIX-080 (Jerlov type IA, see "Mechanisms"): the figures below predate it; now `hbl` max 1.38e-3 m (was 0.0129),
+`visc_az` max relative error 4.5e-4 (was 4.8e-3). This capture uses `KPPuseSWfrac3D = 1`, not implemented by the port.*
 
 A single-column, sea-ice-coupled MITgcm configuration, 23 levels, one
 column — the fastest end-to-end regression test for the whole KPP replay
@@ -271,6 +320,12 @@ never end up selected as the final `hbl`, so the difference never
 propagates to the output.
 
 ## `1D_ocean_ice_column`, 11,000 timesteps — the longest single-column run
+
+*1DMIX-080 (Jerlov type IA, see "Mechanisms"): the figures and the threshold-sensitivity attribution below predate it.
+Now `hbl` median 2.74e-6 m (was 2.85e-5), max 10.15 m (was 20.28), 1 timestep above 5 m (was 10); `visc_az` / `diff_kz`
+85 / 88 cells above 1% (were 130 / 152), max_abs 3.49e-3 / 3.36e-3; `ghat` max_abs 30.87 (was 1321.7), no exact-zero
+cells (were 13). The remaining difference's measured candidate is this capture's `KPPuseSWfrac3D = 1` branch, which the
+port does not implement.*
 
 The same sea-ice-coupled configuration extended to 11,000 timesteps — the
 longest continuous single-column duration validated anywhere in this
@@ -335,6 +390,11 @@ sections' Rib/Ricr and `ghat` attributions therefore stand.
 
 ## `lab_sea`, 999 timesteps (41 days) — the first multi-column real-ocean grid
 
+*1DMIX-080 (Jerlov type IA, see "Mechanisms"): the figures below predate it. Over all 999 steps (149,850 ocean
+column-steps) the port now agrees with MITgcm to roundoff: 0 cells above 1% in any field, `hbl` max 3.6e-9 m,
+`visc_az` / `diff_kz` / `ghat` max_abs 2.3e-12 / 3.9e-12 / 1.5e-9, `bfsfc` equal to `bfsfc_final` in 149,686 column-steps
+(max difference 8.9e-21).*
+
 MITgcm's real Lab Sea configuration: a 20×16 spherical grid with real
 bathymetry and sea ice — the first capture in this project with more than
 one water column, and the first requiring correct land/seafloor masking.
@@ -369,6 +429,10 @@ column-timesteps, 34,200 active cells): `hbl` median `7.3e-4 m`, max `0.029 m` (
 was largely the replay-input effect; the full 999-step recomputation was not repeated.
 
 ## `lab_sea`, 6-month run (4368 timesteps, first 100 subsampled) — the longest temporal duration
+
+*1DMIX-080 (Jerlov type IA, see "Mechanisms"): the figures and residual readings below predate it, including the
+hbl-21.7 m column (t=90, i=17, j=6), which now agrees exactly. First 100 steps: 0 cells above 1% in any field, `hbl` max
+9.7e-11 m, `ghat` max_abs 5.2e-10, no exact-zero `ghat` cells (were 2).*
 
 The same Lab Sea grid run for a full 6 months instead of 41 days — this
 project's longest real-multi-column temporal duration, testing whether the
@@ -463,6 +527,10 @@ replay-input artifacts; the residual is the single hbl-21.7 m column above.
 
 ## `seaice_obcs` — the only salt-plume capture
 
+*1DMIX-080 (Jerlov type IA, see "Mechanisms"): the figures and the not-root-caused residuals below (the 110 / 131
+mixing cells, the 8 exact-zero `ghat` cells) predate it and were the water type. Now 0 cells above 1% in any field,
+`hbl` max 3.6e-15 m, `ghat` max_abs 5.7e-14, no exact-zero `ghat` cells.*
+
 Sea ice, open boundary conditions, and — uniquely among every KPP
 experiment tested here — `useSALT_PLUME=.TRUE.`, MITgcm's haline-convection
 parameterization under sea ice: brine rejected during ice formation sinks
@@ -550,6 +618,15 @@ remains is the not-yet-explained exact-zero behaviour of the shape-function eval
 this capture: its replay is bit-identical before and after, so the 8 cells stay.)
 
 ## `global_oce_latlon` — a real global, multi-tile, seasonally-complete capture
+
+*1DMIX-080 (Jerlov type IA, see "Mechanisms"): the residual figures below (`hbl` max 3.09 m, 62 / 1,136 mixing cells,
+`ghat` 115.97 and its stable/unstable flip, the `bfsfc` difference of open issue 1DMIX-078) predate it and were the
+water type. First 5 steps now: 0 cells above 1% in any field, `hbl` max 1.9e-7 m, `visc_az` / `diff_kz` / `ghat` max_abs
+4.8e-8 / 1.4e-7 / 1.2e-6, `bfsfc` sign mismatches 355 -> 0; the largest of these sit in the 19 ocean column-steps
+(6 distinct columns) with `hbl` > 200 m in both models, 11 of which have a nonzero `bfsfc` difference (the `swfrac.F:99`
+cut-off, open issue 1DMIX-085). The `keep_mitgcm_bugs` figures below (33.9 m -> 3.09 m and so on) are a separate,
+historical A/B measured 2026-09-28 under 1DMIX-057, before 1DMIX-080, with the then-default Jerlov type IB; they stand as
+measured then, and the `False` side was not re-measured under IA.*
 
 A real global-bathymetry, spherical-polar, 4-tile (2×2, 90×40×15) KPP
 configuration run for a full 360-day periodic-forcing cycle (720
@@ -889,8 +966,10 @@ exercise and this port, not open action items:
   divergence from MITgcm's real output under extreme forcing.
 - **The Rib/Ricr hard threshold means no `hbl` agreement bound can be made
   arbitrarily tight** (1DMIX-071: much of the multi-column `hbl` tail once credited to it was the
-  replay-input effect; what remains of this tail is the single-column `11k_1D` capture --
-  20.28 m maximum, 10 of 11,000 timesteps above 5 m -- and the single hbl-21.7 m `lab_sea` 6-month column). Because `hbl` is defined by a threshold crossing, any
+  replay-input effect; 1DMIX-080: the rest was the Jerlov water type -- `lab_sea`, `lab_sea_6mo`, `seaice_obcs` and
+  `global_oce_latlon` now agree to within 2e-7 m, and the single-column `11k_1D` maximum fell from 20.28 m to 10.15 m,
+  1 of 11,000 timesteps above 5 m, with the unported KPPuseSWfrac3D branch as its measured candidate; no remaining
+  figure is attributed to this mechanism by measurement). Because `hbl` is defined by a threshold crossing, any
   two independent floating-point implementations of the same physics will
   occasionally disagree about which side of the threshold a marginal level
   falls on, producing an occasional large `hbl` disagreement even when the

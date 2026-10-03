@@ -45,30 +45,6 @@ A silent-ignore of a physics switch. With `True`, MITgcm sums four separate squa
 ### Proposed action and acceptance
 Decide between rejecting `calc_mean_vert_shear=True` with a ValueError (the project profile's unsupported-input rule) and supporting it through an optional precomputed-shear input like the KPP one from 1DMIX-071. Acceptance: `True` either raises with a clear message or is implemented and tested against a MITgcm capture built with calcMeanVertShear=1; default behaviour is bit-identical.
 
-## UNRESOLVED: residual KPP differences after tracer-point inputs: `ghat` exactly zero where MITgcm is nonzero, one `hbl` column, and global_oce_latlon
-
-**Date Identified**: 2026-10-02T20:35:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-076
-**Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation.py`
-
-### Issue or research question
-Three KPP differences remain that are neither replay-input artifacts (1DMIX-071) nor the boundary-layer bottom handling fixed in 1DMIX-075:
-- The port returns `ghat` exactly 0 in a few cells where MITgcm is nonzero: 8 cells in seaice_obcs, 2 in global_oce_latlon (first 5 steps), 2 in the lab_sea 6-month window (first 100 steps), 127 in the lab_sea 999-step capture and 13 in 11k_1D.
-- One lab_sea 6-month column-timestep (t=90, i=17, j=6) has `hbl` 66.71 m in MITgcm against 45.00 m in the port.
-- global_oce_latlon (built with no smoothing), first 5 steps: `hbl` max 3.09 m, `ghat` max 116 with 9 cells above 1%, and 62 `visc_az` and 1,136 `diff_kz_s` cells above 1%.
-
-### Evidence
-Bob 1DMIX-071 Phase 2 re-measurement, reproduced by Richard in both replay modes. Bob 1DMIX-075 Phase 2 (devel-loop/loop_state/bob-1DMIX-075-evidence.md, unit P2-6) measured what that fix changed: of the exact-zero `ghat` cells it explained 1 of 3 in global_oce_latlon and none in seaice_obcs or lab_sea 6-month; it explained 244 of 306 `visc_az` and 325 of 1,461 `diff_kz_s` latlon cells; the `hbl` column and the latlon `hbl` and `ghat` figures did not change, because `hbl` is computed before the changed code.
-
-Related findings filed 2026-10-02: the global_oce_latlon KPP capture is a constructed build with `KPP_GHAT` and smoothing undefined (1DMIX-116); the Jerlov default (1DMIX-080) and `swfrac` cut-off (1DMIX-085) bear on `hbl` and `ghat`.
-
-### Scientific or engineering impact
-These are now the leading KPP port-versus-MITgcm differences on multi-column captures. The exact-zero `ghat` cells suggest a gate or index-offset difference rather than a tolerance effect.
-
-### Proposed action and acceptance
-Take one exact-zero `ghat` cell and the single `hbl` column as single-column witnesses and trace each to the diverging line on both sides. Decide whether global_oce_latlon shares a cause with either. Acceptance: each of the three is explained with file and line, and fixed in the port or documented as a capture limitation, with the affected bounds tightened where a fix lands.
-
 ## UNRESOLVED: GGL90 `tke_after` disagrees with MITgcm at the first two wet levels under the ice shelf (isomip)
 
 **Date Identified**: 2026-10-02T20:35:00Z
@@ -88,27 +64,6 @@ A real difference in the ice-shelf surface boundary treatment of TKE (the kSrf l
 ### Proposed action and acceptance
 Reduce one sub-ice-shelf column to a single-column witness and compare the TKE surface boundary condition and its first interior levels in `ggl90_calc.F` (kSrf handling, SHELFICE friction velocity) with the port. Acceptance: the mechanism is identified with file and line on both sides, and the port is corrected to match MITgcm or the difference is documented with its cause.
 
-## UNRESOLVED: the port's shortwave surface buoyancy forcing (`bfsfc`) differs from MITgcm's, leaving the remaining KPP mixing residuals
-
-**Date Identified**: 2026-10-02T22:50:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-078
-**Anchors**: `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`; `Vertical_Mixing_Models/KPP/kpp_routines.py`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
-
-### Issue or research question
-After 1DMIX-075 a few KPP cells still differ from MITgcm, and some moved slightly further away. Richard's review traced them to the surface buoyancy forcing `bfsfc`: the port's value differs systematically from MITgcm's captured `bfsfc_final` (median about 5e-9), in shallow and full-depth columns alike. The shortwave part is the suspect (the fraction of shortwave absorbed above the boundary layer, `swfrac`).
-
-### Evidence
-Richard, 1DMIX-075 review (devel-loop/loop_state/scratch/aef4cdd3c224c88b0/pop_bfsfc_latlon.txt, pop_bfsfc_labsea6mo.txt): with MITgcm's `bfsfc_final` substituted into the port, `visc_az`, `diff_kz` and `ghat` agree to 1e-13 on every hbl-equal global_oce_latlon column-step (wet levels 2 to 15) and to 1e-12 on lab_sea 6-month; without the substitution the same cells differ by up to 0.077 / 0.0945.
-
-Candidate causes filed 2026-10-02 from FABLE_FINDS.md: the port's Jerlov water type default IB where MITgcm hard-codes IA (1DMIX-080, measured to reduce the 11k_1D `hbl` maximum tenfold) and the missing 200 m `swfrac` cut-off (1DMIX-085). Resolve or re-measure this issue after them.
-
-### Scientific or engineering impact
-This is now the leading cause of the remaining KPP mixing-coefficient residuals on global_oce_latlon (62 `visc_az` and 1,136 `diff_kz_s` cells above 1% in the first 5 steps) and lab_sea. It may also explain part of 1DMIX-076.
-
-### Proposed action and acceptance
-Compare the port's `bfsfc` computation with MITgcm's (`kpp_routines.F` bldepth and blmix, `swfrac` and its water-type coefficients, the depth at which the shortwave fraction is evaluated) on a single-column witness, and find the first differing quantity. Acceptance: the cause is identified with file and line on both sides; the port is corrected to match, the captured `bfsfc_final` is reproduced to roundoff, and the latlon and lab_sea residuals are re-measured without widening any tolerance.
-
 ## UNRESOLVED: the stored `combined_storm` KPP standalone data predates 1DMIX-075, and two documents state its agreement without that qualification
 
 **Date Identified**: 2026-10-02T22:50:00Z
@@ -127,37 +82,6 @@ Declared external inputs no longer correspond to the port that the scenario runs
 
 ### Proposed action and acceptance
 Regenerate the `combined_storm` KPP standalone datasets (Python run and Fortran driver, built in Docker) with the current port, record their provenance and hashes, and re-run the comparison on the new trajectory. Add the qualifying clause to the two documents until then, replace the stale line pointer with a symbol name, and make the summary report's 1DMIX-075 text survive regeneration. Acceptance: the declared datasets match the current port's `combined_storm` run, the comparison passes on them, and no document states the agreement more broadly than the evidence.
-
-## UNRESOLVED: KPP Jerlov water type defaults to `"IB"`; MITgcm hard-codes type IA
-
-**Date Identified**: 2026-10-02T21:47:00Z
-**Status**: Unresolved
-**UUID**: 1DMIX-080
-**Anchors**: `Vertical_Mixing_Models/KPP/kpp_parameters.py::KPPParameters`; `Vertical_Mixing_Models/KPP/kpp_shortwave.py::swfrac`; `Vertical_Mixing_Models/KPP/kpp_default_parameters.yaml`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
-
-### Issue or research question
-`KPPParameters.jerlov_water_type` defaults to `"IB"` (`kpp_parameters.py` line 199; `kpp_default_parameters.yaml` line 109), and `swfrac(depth_m, water_type="IB")` has the same default. It is used in `kpp_scheme_specific.py` (lines 152, 272, 333). MITgcm hard-codes type IA: `model/src/swfrac.F` line 92, `jwtype=2`, commented "Parameter jwtype is hardcoded to 2 for time being". There is no namelist entry, so no capture carries the value and the "take every parameter from the capture" rule cannot catch it.
-
-### Evidence
-FABLE_FINDS.md §A2. That file is the record of a library review by Claude (Fable 5.1) and its sub-agents, compiled and re-checked by Claude (Opus 5.5) on 2026-10-02. It checked HEAD 336a85a plus that afternoon's working tree against MITgcm d861cd501. The owner directed on 2026-10-02 that its findings be accepted as correct.
-- **Measurement:** a replay of 2,000 steps of the 11,000-step single-column KPP capture, run with IA instead of IB. The median `hbl` difference fell from 2.2e-5 m to 1.6e-6 m, and the maximum from 4.3e-2 m to 4.2e-3 m.
-- **Who ran it:** a library run, reproduced independently by a second reviewer. The script was not kept. Both defaults were re-read on 2026-10-02.
-- **Detail:** `../MITgcm_porting_wisdom/Porting_MITgcm_to_Standalone_Python/02_pitfalls_and_gotchas.md`.
-
-### Scientific or engineering impact
-This affects every KPP full-model comparison wherever shortwave is non-zero; the effect is measured on one capture only.
-- **1DMIX-078:** this is a direct candidate cause, since the port's `bfsfc` differs from MITgcm's and the shortwave fraction `swfrac` is the suspect.
-- **`hbl` tail:** part of the tail previously attributed to threshold sensitivity may be this.
-- **Priority:** the findings rank it first: a one-line change with a measured tenfold effect.
-
-### Proposed action and acceptance
-Default to `"IA"` in the dataclass, the YAML and `swfrac`, and document that the default is MITgcm's hard-coded value (`swfrac.F` line 92). Re-run every KPP full-model comparison and re-measure 1DMIX-076 and 1DMIX-078 before and after.
-
-Acceptance:
-- the default is IA, with a test that pins it to `swfrac.F`;
-- the 11k_1D `hbl` reduction is reproduced from a kept script;
-- every KPP capture's cells above 1% and max_abs are recorded old versus new, with no tolerance widened and bounds tightened where the figures allow;
-- 1DMIX-078 is updated with what this explains.
 
 ## UNRESOLVED: the convective-adjustment mask compares in-situ densities at each level's own pressure; MITgcm compares at a common reference level (1DMIX-005 was closed wrongly)
 
@@ -293,7 +217,7 @@ MITgcm's `swfrac.F` (line 99) sets the shortwave fraction to exactly zero below 
 FABLE_FINDS.md §A10 (library review, 2026-10-02; the owner directed acceptance as correct). The port file was re-read on 2026-10-02 and has no cut-off. The effect has not been measured.
 
 ### Scientific or engineering impact
-This matters for bit-identity, for exact-zero tests below 200 m, and possibly for `bfsfc` in deep boundary layers. It is a candidate contributor to 1DMIX-078 and to the exact-zero `ghat` cells in 1DMIX-076.
+This matters for bit-identity, for exact-zero tests below 200 m, and possibly for `bfsfc` in deep boundary layers. Measured after 1DMIX-080 (water type IA): on global_oce_latlon (first 5 steps) the remaining port-versus-MITgcm differences sit in the 19 ocean column-steps (6 columns) with `hbl` > 200 m, 11 of them with a nonzero `bfsfc` difference (max 5.63e-14), `ghat` max_abs 1.2e-6; at a column with `hbl` 223.7 m the port's `bfsfc` differs by exactly `bosol*swfrac_IA(hbl)` (Richard, 1DMIX-080). It is a candidate contributor to 1DMIX-078 and to the exact-zero `ghat` cells in 1DMIX-076.
 
 ### Proposed action and acceptance
 Add the cut-off exactly as `swfrac.F` line 99 has it, including the comparison's direction and the depth's sign convention. Resolve it with or after 1DMIX-080.
@@ -1240,3 +1164,74 @@ The instructions do not work as written.
 Update them to the current host and toolchain, or move them to the documentation archive.
 
 Acceptance: the documents describe a procedure that runs on this host, or are archived.
+
+## UNRESOLVED: the port does not implement MITgcm's `KPPuseSWfrac3D` branch, which the 11k_1D and 1D_10 captures use
+
+**Date Identified**: 2026-10-03T05:17:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-129
+**Anchors**: `Vertical_Mixing_Models/KPP/kpp_parameters.py::KPPParameters`; `Vertical_Mixing_Models/KPP/kpp_scheme_specific.py::diagnose_bl_depth`; `MITgcm_to_Python_port_verification/tests/test_kpp_mitgcm_validation_extended.py`
+
+### Issue or research question
+With `KPPuseSWfrac3D` set, MITgcm does not call SWFRAC in `bldepth`. Instead it interpolates the precomputed 3-D shortwave fraction `SWFrac3D` (`kpp_routines.F:491-497`, `:690-698`, `:829-834`). The port only raises a `UserWarning` (`KPPParameters.__post_init__`) when a replay maps `KPPuseSWfrac3D` to `use_sw_frac_3d=True`, and then uses the analytic `swfrac`.
+
+The 11k_1D and 1D_10 captures were built with `KPPuseSWfrac3D=1`: it is in the capture attributes and in `input_validation_11k/data.kpp` line 6. Several places also describe the option wrongly, as a "spatially varying water type": the YAML, the `KPPParameters` comment and warning text, `NETCDF_DATA_FORMAT.md`, `parse_mitgcm_split.py` and the `.tex` "excluded" item. It is an interpolation branch that changes results even with a uniform IA field.
+
+### Evidence
+1DMIX-080:
+- **Bob:** MITgcm's `bfsfc_final` on 11k_1D equals that branch, evaluated at MITgcm's `hbl`, bit for bit at all 11,000 steps.
+- **Richard:** found the same independently on 11,000 of 11,000 steps, and 10 of 10 on 1D_10, including steps he chose (777, 2350, 5003, 9999). The analytic IA formula matches only 61 of 11,000. With the branch patched into a scratch replay at the trial level (`:494-496`) and the `hbl` level (`:691-697`, `:830-833`), both captures agree to roundoff: 11k_1D `hbl` max 8.9e-16 m, 0 cells above 1%, `ghat` max_abs 0; 1D_10 `hbl` max 0. Scratch: devel-loop/loop_state/scratch/a325d9f09d6c933c3/swfrac3d_*.txt.
+
+### Scientific or engineering impact
+This is the whole remaining residual on the two single-column KPP captures after 1DMIX-080: 11k_1D has 85 / 88 cells above 1%, `hbl` max 10.15 m, `ghat` max_abs 30.87, and one exact-zero-class cell at t=2350.
+
+### Proposed action and acceptance
+Implement the branch as MITgcm does: take `SWFrac3D` (or the inputs to compute it) from the capture or the configuration, and interpolate at the trial levels and at `hbl` exactly as `kpp_routines.F` does. Correct the descriptions of the option.
+
+Acceptance:
+- 11k_1D and 1D_10 replay to roundoff;
+- the warning is removed;
+- bounds are tightened to the measured figures;
+- the analytic path is bit-identical when the flag is off.
+
+## UNRESOLVED: the port evaluates `swfrac` at the trial level without MITgcm's `hbf` factor
+
+**Date Identified**: 2026-10-03T05:17:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-130
+**Anchors**: `Vertical_Mixing_Models/KPP/kpp_scheme_specific.py::diagnose_bl_depth`
+
+### Issue or research question
+At the trial-level call, `kpp_routines.F:508` calls SWFRAC with `fact=hbf` on `zgrid(kl)`. The port calls `swfrac(-zgrid[kl])` (`kpp_scheme_specific.py`, around line 157), omitting `hbf`.
+
+### Evidence
+1DMIX-080 (Bob unit 1; Richard question 1). Every capture has `hbf=1`, so no comparison is affected; Bob added a comment at the call site.
+
+### Scientific or engineering impact
+Wrong trial-level shortwave fraction for any configuration with `hbf != 1`.
+
+### Proposed action and acceptance
+Pass `hbf` as `kpp_routines.F:508` does.
+
+Acceptance: a test with `hbf != 1` matches a hand-traced MITgcm value, and every replay with `hbf=1` is bit-identical.
+
+## UNRESOLVED: the shortwave non-local temperature term (`KPPfrac`) is not ported
+
+**Date Identified**: 2026-10-03T05:17:00Z
+**Status**: Unresolved
+**UUID**: 1DMIX-131
+**Anchors**: `Vertical_Mixing_Models/main/unified_driver.py`; `Vertical_Mixing_Models/KPP/kpp_core_driver.py::KPPDriver.compute_mixing`
+
+### Issue or research question
+MITgcm forms `KPPfrac`, the fraction of shortwave absorbed in the boundary layer (`kpp_calc.F:640-668`), and uses it in the non-local temperature transport (`kpp_transport_t.F`). The port has no equivalent.
+
+### Evidence
+1DMIX-080, Bob's finding from source reading. It has not been measured.
+
+### Scientific or engineering impact
+Free-running scenario runs with penetrating shortwave on get a different non-local heat transport. No current scenario turns penetration on, and the replays compare coefficients only (see also 1DMIX-120 and 1DMIX-082).
+
+### Proposed action and acceptance
+Port `KPPfrac` and its use in the non-local term, or refuse penetrating shortwave in the free-running driver until it is ported.
+
+Acceptance: a test with penetration on matches a hand-traced `kpp_calc.F` / `kpp_transport_t.F` value, and scenarios with penetration off are bit-identical.
